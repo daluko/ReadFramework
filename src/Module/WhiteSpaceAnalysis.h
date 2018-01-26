@@ -99,7 +99,7 @@ namespace rdf {
 		bool compute() override;
 		QSharedPointer<WhiteSpaceAnalysisConfig> config() const;
 
-
+		cv::Mat mRnnImg;
 
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
 		QString toString() const override;
@@ -117,22 +117,48 @@ namespace rdf {
 	class DllCoreExport TextComponent {
 
 	public:
+		TextComponent();
 		TextComponent(QSharedPointer<MserBlob> blob);
 
-		void setRnn(TextComponent);
-		TextComponent* rnn() const;
+		void setRnn(QSharedPointer<TextComponent> neighbor);
+		void setLnn(QSharedPointer<TextComponent> neighbor);
+		void setForkMarker(bool isAFork);
 
-		QSharedPointer<MserBlob> mserBlob();
-
+		QSharedPointer<TextComponent> rnn() const;
+		QVector<QSharedPointer<TextComponent>> lnn() const;
+		int lnnRunLength() const;
+		QSharedPointer<MserBlob> mserBlob() const;
 		bool hasRnn() const;
+		bool hasLnn() const;
+		bool isAFork() const;
 
 		void draw(QPainter& p) const;
 
 	private:
-
 		QSharedPointer<MserBlob> mMserBlob;
-		TextComponent* mRnn;
+		QSharedPointer<TextComponent> mRnn;
+		QVector<QSharedPointer<TextComponent>> mLnn;
+		
 		bool mHasRnn;
+		bool mHasLnn;
+		bool mIsAFork;
 	};
 
+	class DllCoreExport TextLineCandidate {
+
+	public:
+		TextLineCandidate();
+		TextLineCandidate(QSharedPointer<TextComponent>);
+		//TextLineCandidate(QVector<QSharedPointer<TextComponent>>);
+
+		void merge(QSharedPointer<TextLineCandidate>);
+		int length() const;
+		QVector<QSharedPointer<TextComponent>> TextComponents() const;
+
+
+	private:
+		void appendAllRnn(const QSharedPointer<TextComponent> tc);
+
+		QVector<QSharedPointer<TextComponent>> mTextComponents;
+	};
 }

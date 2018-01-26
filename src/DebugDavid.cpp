@@ -75,6 +75,10 @@ void WhiteSpaceTest::run() {
 	QString imgPath = Utils::createFilePath(mConfig.outputPath(), "-wsaResults");
 	Image::save(wsaResults, imgPath);
 	qDebug() << "wsaResults debug image added" << imgPath;
+
+	imgPath = Utils::createFilePath(mConfig.outputPath(), "-rnnResults");
+	Image::save(wsa.mRnnImg, imgPath);
+	qDebug() << "rnnResults debug image added" << imgPath;
 }
 
 }

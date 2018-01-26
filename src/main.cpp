@@ -207,9 +207,11 @@ int main(int argc, char** argv) {
 		}
 		// davids section
 		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "david") {
+
 			qDebug() << "loading davids debug code";
 			rdf::WhiteSpaceTest wst(dc);
 			wst.run();
+
 		}
 		// my section
 		else {
@@ -242,7 +244,7 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		dc.setImagePath("C:/read/test/sizes/synthetic-test.png");
 		dc.setImagePath("C:/read/test/d6.5/0056_S_Alzgern_011-01_0056-crop.JPG");
 		dc.setImagePath("C:/read/test/d6.5/eval/P_241_27_012.jpg");
-		dc.setImagePath("E:/data/DA/raw images/1905_Paris_BeauxArts/1905_Paris_BeauxArts_0010.jpg");
+		dc.setImagePath("E:/data/test/HBR2013_training/00465433.tif");
 		//dc.setImagePath("C:/temp/chris/test2.png");
 
 
