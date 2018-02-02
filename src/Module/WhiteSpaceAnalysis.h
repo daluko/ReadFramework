@@ -126,13 +126,15 @@ namespace rdf {
 
 		QSharedPointer<TextComponent> rnn() const;
 		QVector<QSharedPointer<TextComponent>> lnn() const;
+		int bestFitLnnIdx() const;
 		int lnnRunLength() const;
 		QSharedPointer<MserBlob> mserBlob() const;
 		bool hasRnn() const;
 		bool hasLnn() const;
 		bool isAFork() const;
 
-		void draw(QPainter& p) const;
+		void draw(const cv::Mat & img, const QColor& col) const;
+		void drawLnns(QPainter& p);
 
 	private:
 		QSharedPointer<MserBlob> mMserBlob;
@@ -153,6 +155,7 @@ namespace rdf {
 
 		void merge(QSharedPointer<TextLineCandidate>);
 		int length() const;
+		Rect bbox() const;
 		QVector<QSharedPointer<TextComponent>> TextComponents() const;
 
 

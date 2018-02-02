@@ -131,7 +131,9 @@ bool WhiteSpaceAnalysis::compute() {
 	//save a list of final tc used for further processing
 
 	//sort tc according to y_max coordinate for more efficient computation
-	QVector<QSharedPointer<TextComponent>> tcM_y = QVector<QSharedPointer<TextComponent>>(tcM);
+	QVector<QSharedPointer<TextComponent>> tcM_y;
+	tcM_y = QVector<QSharedPointer<TextComponent>>(tcM);
+
 	std::sort(tcM_y.begin(), tcM_y.end(), [](const auto& lhs, const auto& rhs){
 		return lhs->mserBlob()->bbox().top() < rhs->mserBlob()->bbox().top();
 	});
@@ -159,12 +161,10 @@ bool WhiteSpaceAnalysis::compute() {
 					if(foundRnn){
 						if (tcnR.left() < rnn->mserBlob()->bbox().left()) {
 							rnn = tcn;
-							//qDebug() << "rnn is: " << rnn->mserBlob()->bbox().toString();
 						}
 					} else {
 						rnn = tcn;
 						foundRnn = true;
-						//qDebug() << "rnn is: " << rnn->mserBlob()->bbox().toString();
 					}
 				}
 				else if(tcnR.top()>tcR.bottom()){
@@ -181,31 +181,33 @@ bool WhiteSpaceAnalysis::compute() {
 			if (rnn->lnn().size() > 1) {
 				rnn->setForkMarker(true);
 			}
-
-			//if (!rnn->hasLnn()) {
-			//	rnn->setLnn(tc);
-			//}
-			//else {
-
-
-			//	//rnn->setForkMarker(true);
-
-			//	//double lnnR = rnn->lnn()->mserBlob()->bbox().right();
-			//	//double tcR = tc->mserBlob()->bbox().right();
-			//	//if (tcR > lnnR) {
-			//	//	rnn->setLnn(tc);
-			//	//}
-			//}
 		}
 	}
 
 	//create initial text line candidates
 	QVector<QSharedPointer<TextLineCandidate>> tlcM;
-	for (QSharedPointer<TextComponent> tc : tcM_y) {
+	for (auto tc : tcM_y) {
 		if (!tc->hasLnn()){
 			//create text line candidates
-			QSharedPointer<TextLineCandidate> tlc = QSharedPointer<TextLineCandidate>(new TextLineCandidate(tc));
+			QSharedPointer<TextLineCandidate> tlc;
+			tlc = QSharedPointer<TextLineCandidate>(new TextLineCandidate(tc));
 			tlcM.append(tlc);
+		}
+	}
+	
+	QVector<QSharedPointer<TextLineCandidate>> tlcM_final;
+	for (auto tlc1 : tlcM) {
+		bool final = true;
+		for (auto tlc2 : tlcM) {
+			if (tlc1 != tlc2) {
+				if (tlc2->bbox().contains(tlc1->bbox())) {
+					final = false;
+					break;
+				}
+			}
+		}
+		if (final) {
+			tlcM_final.append(tlc1);
 		}
 	}
 	
@@ -222,32 +224,33 @@ bool WhiteSpaceAnalysis::compute() {
 	QImage qImg = Image::mat2QImage(img, true);
 	QPainter p(&qImg);
 
-	//for (QSharedPointer<TextComponent> tc : tcM_y) {
-	//	p.setPen(ColorManager::randColor());
-	//	tc->mserBlob()->draw(p);
-
-	//	if (tc->hasRnn()) {
-	//		QPoint point1 = tc->mserBlob()->center().toQPoint();
-	//		QPoint point2 = tc->rnn()->mserBlob()->center().toQPoint();
-	//		//p.drawLine(QPoint(0, 0), point2);
-	//		p.drawLine(point1, point2);
-	//	}
-
-	//}
-
-	for (QSharedPointer<TextLineCandidate> tlc : tlcM) {
-		
-		Rect tlcBox;
+	for (QSharedPointer<TextLineCandidate> tlc : tlcM_final) {
 
 		for (QSharedPointer<TextComponent> tc : tlc->TextComponents()) {
-			if (!tlcBox.isNull()) {
-				tlcBox = tlcBox.joined(tc->mserBlob()->bbox());
-			} else{
-				tlcBox = tc->mserBlob()->bbox();
+			
+			//p.setPen(ColorManager::lightGray(1.0));
+			//tc->mserBlob()->draw(p);
+
+			if (!tc->hasRnn()) {
+				//p.setPen(ColorManager::red(1.0));
+				//tc->mserBlob()->draw(p);
+			} 
+			
+			if (!tc->hasLnn()) {
+				//p.setPen(ColorManager::blue(1.0));
+				//tc->mserBlob()->draw(p);
 			}
 			
-			p.setPen(ColorManager::darkGray(1.0));
-			tc->mserBlob()->draw(p);
+			if (tc->isAFork()) {
+				p.setPen(ColorManager::darkGray(1.0));			
+				tc->mserBlob()->draw(p);
+
+				//for (auto b : tc->lnn()) {
+				//	p.setPen(ColorManager::randColor());
+				//	//b->mserBlob()->draw(p);
+				//	b->drawLnns(p);
+				//}
+			}
 
 			if (tc->hasRnn()) {
 				p.setPen(ColorManager::red(1.0));
@@ -258,7 +261,7 @@ bool WhiteSpaceAnalysis::compute() {
 		}
 
 		p.setPen(ColorManager::blue(1.0));
-		p.drawRect(tlcBox.toQRect());
+		p.drawRect(tlc->bbox().toQRect());
 	}
 
 	mRnnImg = Image::qImage2Mat(qImg);
@@ -388,25 +391,93 @@ QVector<QSharedPointer<TextComponent>> TextComponent::lnn() const{
 	return mLnn;
 }
 
+int TextComponent::bestFitLnnIdx() const {
+	
+	if (mHasLnn) {
+
+		if (!mIsAFork) {
+			return 0; //index of first (only) element
+		}
+		else {
+			int maxRl = -1;
+			int maxRlIdx = -1;
+			for (int idx = 0; idx < mLnn.size(); ++idx) {
+				int rl = mLnn.at(idx)->lnnRunLength();
+				if (rl > maxRl) {
+					maxRl = rl;
+					maxRlIdx = idx;
+				}
+			}
+			if (maxRl == -1) {
+				qWarning() << "Couldn't find bestFitLnn Index!";
+			}
+			return maxRlIdx;
+		}
+	}
+	else {
+		return -1;
+	}
+}
+
 int TextComponent::lnnRunLength() const{
 
-	int lnnNum = 0;
+	int lnnNum = 1;
 
 	if (hasLnn()) {
 		lnnNum += 1;
 		
-		int maxLnnRL = 0;
+		int maxLnnRL = -1;
 		for(auto tc:lnn()){
 			int lnnRL = tc->lnnRunLength();
 			if (lnnRL > maxLnnRL) {
 				maxLnnRL = lnnRL;
 			}
 		}
-
 		lnnNum += maxLnnRL;
 	}
 
 	return lnnNum;
+}
+
+void TextComponent::draw(const cv::Mat & img, const QColor& col) const {
+
+	QImage qImg = Image::mat2QImage(img, true);
+
+	QPainter p(&qImg);
+	p.setPen(ColorManager::blue());
+}
+
+void TextComponent::drawLnns(QPainter &p){
+	
+	QColor col = p.pen().color();
+
+	int lnnNum = 1;
+	int maxLnnRL = -1;
+	QSharedPointer<TextComponent> best_lnn;
+
+	if (mHasLnn) {
+		for (auto b : mLnn) {
+
+			int lnnRL = b->lnnRunLength();
+			if (lnnRL > maxLnnRL) {
+				maxLnnRL = lnnRL;
+				best_lnn = b;
+			}
+		}
+		
+		p.setPen(ColorManager::red(1.0));
+		QPoint point1 = mserBlob()->center().toQPoint();
+		QPoint point2 = best_lnn->mserBlob()->center().toQPoint();
+		p.drawLine(point1, point2);
+
+		col.setAlpha(60);
+		p.setPen(col);
+
+		best_lnn->mMserBlob->draw(p);
+		best_lnn->drawLnns(p);
+
+		lnnNum += maxLnnRL;
+	}
 }
 
 QSharedPointer<MserBlob> TextComponent::mserBlob() const{
@@ -425,8 +496,7 @@ bool TextComponent::isAFork() const{
 	return mIsAFork;
 }
 
-void TextComponent::draw(QPainter & p) const{
-}
+// TextLineCandidate --------------------------------------------------------------------
 
 TextLineCandidate::TextLineCandidate(){
 }
@@ -435,7 +505,7 @@ TextLineCandidate::TextLineCandidate(QSharedPointer<TextComponent> tc){
 	mTextComponents.append(tc);
 
 	if (tc->hasRnn()) {
-		appendAllRnn(tc->rnn());
+		appendAllRnn(tc);
 	}
 }
 
@@ -446,33 +516,79 @@ int TextLineCandidate::length() const{
 	return mTextComponents.size();
 }
 
+Rect TextLineCandidate::bbox() const {
+
+	Rect bbox;
+
+	for (QSharedPointer<TextComponent> tc : mTextComponents) {
+		if (!bbox.isNull()) {
+			bbox = bbox.joined(tc->mserBlob()->bbox());
+		}
+		else {
+			bbox = tc->mserBlob()->bbox();
+		}
+	}
+
+	return bbox;
+}
+
 QVector<QSharedPointer<TextComponent>> TextLineCandidate::TextComponents() const{
 	return mTextComponents;
 }
 
 void TextLineCandidate::appendAllRnn(const QSharedPointer<TextComponent> tc){
-	mTextComponents.append(tc);
 
-	if (tc->hasRnn()) {
-		if (tc->rnn()->lnn().size() > 1) {
-			if(!tc->rnn()->isAFork()){
-				qDebug() << "Found a fork that is not a fork ";
-			}
+	QSharedPointer<TextComponent> next = tc->rnn();
 
-			int maxRl = 0;
-			QSharedPointer<TextComponent> maxTc;
-			for (auto ll : tc->rnn()->lnn()) {
-				if (ll->lnnRunLength() > maxRl) {
-					maxTc = ll;
-				}
-			}
+	//mTextComponents.append(next);
+	//if (next->hasRnn()) {
+	//	appendAllRnn(next);
+	//}
 
-			if (maxTc == tc) {
-				appendAllRnn(tc->rnn());
+	if(next->hasLnn()){
+		if (!next->isAFork()) {
+			mTextComponents.append(next);
+
+			if (next->hasRnn()) {
+				appendAllRnn(next);
 			}
 		}
+		else if(next->isAFork()) {
 
+			if (next->bestFitLnnIdx() != -1) {
+				QSharedPointer<TextComponent> bestFitLnn = next->lnn().at(next->bestFitLnnIdx());
+				if (tc->mserBlob() == bestFitLnn->mserBlob()) {
+					mTextComponents.append(next);
+					if (next->hasRnn()) {
+						appendAllRnn(next);
+					}
+				}
+			} else {
+				qWarning() << "Found a fork without bestFitLnn!";
+			}
+
+
+			//int maxRl = -1;
+			//QSharedPointer<TextComponent> maxTc;
+			//for (auto ll : next->lnn()) {
+			//	if (ll->lnnRunLength() > maxRl) {
+			//		maxTc = ll;
+			//	}
+			//}
+
+			//if (maxTc->mserBlob() == tc->mserBlob()) {	//continue appending rnns if tlc has longest lnn run on this fork
+			//	mTextComponents.append(next);
+
+			//	if (next->hasRnn()) {
+			//		appendAllRnn(next);
+			//	}
+			//}
+		}
+	}	
+	else {
+		qWarning() << "Something went wrong! Found rnn text component without lnn.";
 	}
+
 }
 
 }
