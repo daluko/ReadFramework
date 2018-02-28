@@ -35,11 +35,14 @@
 #include "Image.h"
 #include "SuperPixel.h"
 #include "WhiteSpaceAnalysis.h"
+#include "PageParser.h"
+#include "Elements.h"
 
 #include "SuperPixelScaleSpace.h"
 #include "ScaleFactory.h"
 
 #include <QImage>
+#include <QFileInfo>
 
 #include <opencv2/imgproc.hpp>
 
@@ -70,15 +73,45 @@ void WhiteSpaceTest::run() {
 
 	WhiteSpaceAnalysis wsa(imgCv);
 	wsa.compute();
-	cv::Mat wsaResults = wsa.draw(imgCv);
 
-	QString imgPath = Utils::createFilePath(mConfig.outputPath(), "-wsaResults");
-	Image::save(wsaResults, imgPath);
-	qDebug() << "wsaResults debug image added" << imgPath;
-
-	imgPath = Utils::createFilePath(mConfig.outputPath(), "-rnnResults");
+	QString imgPath =  Utils::createFilePath(mConfig.outputPath(), "- wsa_debug");
 	Image::save(wsa.mRnnImg, imgPath);
 	qDebug() << "rnnResults debug image added" << imgPath;
+
+	//-------------------------xml text lines
+	QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.imagePath());
+	xmlPath = Utils::createFilePath(xmlPath, "-wsa_results");
+	rdf::PageXmlParser parser;
+	bool xml_found = parser.read(xmlPath);
+
+	// set xml header info
+	QSharedPointer<PageElement> xmlPage = parser.page();
+	xmlPage->setCreator(QString("CVL"));
+	xmlPage->setImageSize(QSize(qImg.size()));
+	xmlPage->setImageFileName(QFileInfo(xmlPath).fileName());
+
+	//add results to xml
+	xmlPage->rootRegion()->removeAllChildren();
+	for (auto tr : wsa.textLines()) {
+		xmlPage->rootRegion()->addChild(tr);
+	}
+
+	//write xml file	
+	parser.write(xmlPath, xmlPage);
+
+
+	////-------------------------xml text blocks
+	//xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.outputPath());
+	////xmlPath = imgPath = Utils::createFilePath(xmlPath, "-");
+	//xml_found = parser.read(xmlPath);
+
+	////add results to xml
+	//xmlPage->rootRegion()->removeAllChildren();
+	//for (auto tr : wsa.textBlocks()) {
+	//	xmlPage->rootRegion()->addChild(tr);
+	//}
+
+	//parser.write(xmlPath, xmlPage);
 }
 
 }
