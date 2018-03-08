@@ -101,17 +101,17 @@ void WhiteSpaceTest::run() {
 
 
 	////-------------------------xml text blocks
-	//xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.outputPath());
-	////xmlPath = imgPath = Utils::createFilePath(xmlPath, "-");
-	//xml_found = parser.read(xmlPath);
+	xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.outputPath());
+	xmlPath = Utils::createFilePath(xmlPath, "-wsa_results_block");
+	xml_found = parser.read(xmlPath);
 
-	////add results to xml
-	//xmlPage->rootRegion()->removeAllChildren();
-	//for (auto tr : wsa.textBlocks()) {
-	//	xmlPage->rootRegion()->addChild(tr);
-	//}
+	//add results to xml
+	xmlPage->rootRegion()->removeAllChildren();
+	for (auto tr : wsa.textBlocks()) {
+		xmlPage->rootRegion()->addChild(tr);
+	}
 
-	//parser.write(xmlPath, xmlPage);
+	parser.write(xmlPath, xmlPage);
 }
 
 }

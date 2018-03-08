@@ -96,7 +96,7 @@ WhiteSpaceAnalysis::WhiteSpaceAnalysis(const cv::Mat& img) {
 	//ScaleFactory::instance().init(img.size());
 
 	mConfig = QSharedPointer<WhiteSpaceAnalysisConfig>::create();
-	mConfig->loadSettings();
+mConfig->loadSettings();
 }
 
 bool WhiteSpaceAnalysis::isEmpty() const {
@@ -134,97 +134,52 @@ bool WhiteSpaceAnalysis::compute() {
 	computeInitialTLC();	//create initial text line candidates
 
 	//compute white space for each tlc
-	for (auto tlc :  mTlcM) {
+	for (auto tlc : mTlcM) {
 		tlc->computeWhiteSpaces(mImg.cols);
 	}
 
-	findBCR();		//mark between column rectangles (ws), no surrounded by text components
+	findBCR();		//mark between column rectangles (ws), not surrounded by text components
 	splitTLC();		//split the tlc according to the bcr and create a list of the remaining ws
-
 	groupWS();		//form runs of white spaces
-	
-	updateBCR();	//check if bcr are wider than the ws of their neighboring tlc
 
+	updateBCR();	//check if bcr are wider than the ws of their neighboring tlc
 	while (updateSegmentation()) {
 		updateBCR();
 	}
 
+	////remove leading or trailing within column candidates
+	//bool updated = false;
+	//for (auto wsr : mWsrM) {
+	//	if (trimWSR(wsr))
+	//		updated = true;
+	//}
+
+	//if (updated) {
+	//	updateBCR();
+	//	while (updateSegmentation()) {
+	//		updateBCR();
+	//	}
+	//}
+
+	//TODO check if sorting is necessary
 	//sort text lines according to y coordinate
 	std::sort(mTlcM.begin(), mTlcM.end(), [](const auto& lhs, const auto& rhs) {
 		return lhs->bbox().bottom() < rhs->bbox().bottom();
 	});
 
-	//convert tlc to text regions
-	for (auto tlc : mTlcM) {
-		QSharedPointer<rdf::TextRegion> textRegion(new rdf::TextRegion());
-		textRegion->setPolygon(rdf::Polygon::fromRect(tlc->bbox()));
-		textRegion->setId(textRegion->id().remove("{").remove("}"));	// remove parentheses to please Aletheia and avoid errors
-		textRegion->setType(rdf::Region::type_text_line);
+	convertTLC();	//convert tlc to textRegion objects
 
-		mTextLines.append(textRegion);
+	TextBlockFormation tbf(mTextLines);
+	if (!tbf.compute()) {
+		qWarning() << "White space analysis: Could not compute text blocks!";
+		return false;
 	}
 
-	////Compute below and above nearest neighbors for tlc
-	//QVector<QVector<int>> bnnIndices(mTlcM.length());
-	//QVector<int> annCount(mTlcM.length(), 0);
+	mTextBlocks = tbf.textBlocks();
 
-	//for (int i = 0; i < mTlcM.length(); ++i) {
-	//	Rect r1 = mTlcM.at(i)->bbox();
-	//	Rect bnn1;
-
-	//	for (int j = i+1; j < mTlcM.length(); ++j) {
-	//		Rect r2 = mTlcM.at(j)->bbox();
-
-	//		//check for x overlap of tlc
-	//		if (r1.left() <= r2.right() && r2.left() <= r1.right()) {
-	//			if (bnn1.isNull()) {
-	//				bnnIndices[i] = QVector<int>(1, j);
-	//				annCount[j] = annCount[j]+1;
-	//				bnn1 = r2;
-	//			}
-	//			else {
-	//				//check for y overlap with previously found bnn
-	//				if (bnn1.top() <= r2.bottom() && r2.top() <= bnn1.bottom()) {
-	//					bnnIndices[i] << j;
-	//					annCount[j] = annCount[j] + 1;
-	//				}
-	//				else {
-	//					break;
-	//				}
-	//			}
-	//		}
-	//	}
+	//for (int i = 0; i < mTlcM.length(); ++i){
+	//	qInfo() << i << ": bbox = " << mTlcM.at(i)->bbox().toString() << " | annCount= " << annCount[i] << " | bnnIndices= " << bnnIndices[i];
 	//}
-
-	////form text blocks by grouping text (line) regions
-	//for (int i = 0; i < mTextLines.length(); ++i) {
-
-	//	if (annCount.at(i) != 1) {
-	//		QSharedPointer<rdf::TextRegion> textRegion(new rdf::TextRegion());
-
-	//		textRegion->addChild(mTextLines[i]);
-
-	//		if (bnnIndices.at(i).length() == 1) {
-	//			appendTextLines(i, bnnIndices, annCount, textRegion);
-	//		}
-
-	//		mTextBlocks.append(textRegion);
-	//	}
-
-	//	if (bnnIndices.at(i).length() > 1) {
-	//		for (int idx : bnnIndices.at(i)) {
-	//			QSharedPointer<rdf::TextRegion> textRegion(new rdf::TextRegion());
-	//			textRegion->addChild(mTextLines[idx]);
-	//			
-	//			if (bnnIndices.at(idx).length() == 1) {
-	//				appendTextLines(idx, bnnIndices, annCount, textRegion);
-	//			}
-	//			
-	//			mTextBlocks.append(textRegion);
-	//		}
-	//	}
-	//}
-
 
 	// draw debug image-------------------------------------------------------------------
 	//QImage qImg1 = Image::mat2QImage(img, true);
@@ -293,15 +248,15 @@ bool WhiteSpaceAnalysis::compute() {
 		QString maxGap = QString::number(tlc->maxGap());
 		p.drawText(tlc->bbox().toQRect(), Qt::AlignCenter, maxGap);
 
-		for (auto tc : tlc->textComponents()) {
-			p.setPen(ColorManager::lightGray(1.0));
-			p.drawRect(tc->mserBlob()->bbox().toQRect());
-		}
+		//for (auto tc : tlc->textComponents()) {
+		//	p.setPen(ColorManager::lightGray(1.0));
+		//	p.drawRect(tc->mserBlob()->bbox().toQRect());
+		//}
 
-		for (auto ws : tlc->whiteSpaces()) {
-			p.setPen(ColorManager::white(1.0));
-			p.drawRect(ws->bbox().toQRect());
-		}
+		//for (auto ws : tlc->whiteSpaces()) {
+		//	p.setPen(ColorManager::white(1.0));
+		//	p.drawRect(ws->bbox().toQRect());
+		//}
 	}
 
 	for (auto wsr : mWsrM) {
@@ -322,6 +277,7 @@ bool WhiteSpaceAnalysis::compute() {
 	}
 
 	mRnnImg = Image::qImage2Mat(qImg);
+
 	//mRnnImg = sp.draw(img);
 	//if (img.rows > 2000) {
 	//	// if you stumble upon this line:
@@ -429,28 +385,10 @@ void WhiteSpaceAnalysis::computeInitialTLC(){
 
 	//sort text lines according to y coordinate
 	std::sort(mTlcM.begin(), mTlcM.end(), [](const auto& lhs, const auto& rhs) {
-		return lhs->bbox().top() < rhs->bbox().top();
+		return lhs->bbox().bottom() < rhs->bbox().bottom();
 	});
 
-	//remove nested text line  candidates
-	QVector<QSharedPointer<TextLineCandidate>> tlcM_final;
-	for (auto tlc1 : mTlcM) {
-		bool final = true;
-		for (auto tlc2 : mTlcM) {
-			if (tlc1 != tlc2) {
-				if (tlc2->bbox().contains(tlc1->bbox())) {
-					final = false;
-					break;
-				}
-			}
-		}
-		if (final) {
-			//tlc1->computeWhiteSpaces(mImg.cols);
-			tlcM_final.append(tlc1);
-		}
-	}
-
-	mTlcM = tlcM_final;
+	refineTLC();
 }
 
 void WhiteSpaceAnalysis::findBCR(){
@@ -477,9 +415,9 @@ void WhiteSpaceAnalysis::findBCR(){
 									Rect ir(ws1B.left(), ws2B.top(), ws1B.width(), 1);
 									if (ws2B.intersects(ir)) {
 										ws2->setHasANN(true);
-										ws1->setBnn(ws2);
+										ws1->addBnn(ws2);
 										bottomIsIsolated = false;
-										//break; //look at white spaces below in morder to determine bnn
+										//break; //look at white spaces below in order to determine all bnn
 									}
 								}
 							}
@@ -521,7 +459,8 @@ void WhiteSpaceAnalysis::findBCR(){
 void WhiteSpaceAnalysis::splitTLC(){
 
 	//TODO refactor this process for efficiency
-
+	//TODO order of mTlcM should be kept 
+	//TODO check validity of split tlc (location, size, etc.)
 	QVector<QSharedPointer<TextLineCandidate>> tlcM_tmp;
 
 	//split text lines according to bcr and compute maxGaps
@@ -567,7 +506,7 @@ void WhiteSpaceAnalysis::splitTLC(){
 					tlc_tmp->setWhiteSpaces(tlc_ws.mid(previousWS_idx + 1, ws_rl));
 				}
 				else {
-					//qWarning() << "Trying to split tlc but resulting tlc has no ws!";
+					////qWarning() << "Trying to split tlc but resulting tlc has no ws!";
 					tlc_tmp->setWhiteSpaces(QVector<QSharedPointer<WhiteSpace>>());
 					//TODO create white space vector object in tlc constructor and skip this step
 				}
@@ -585,7 +524,7 @@ void WhiteSpaceAnalysis::splitTLC(){
 					maxGap = gap;
 			}
 
-						//add last text line
+			//add last text line
 			if (i == tlc_ws.length() - 1) {
 
 				QSharedPointer<TextLineCandidate> tlc_tmp(new TextLineCandidate());
@@ -597,7 +536,7 @@ void WhiteSpaceAnalysis::splitTLC(){
 					tlc_tmp->setWhiteSpaces(tlc_ws.mid(previousWS_idx + 1, ws_rl));
 				}
 				else {
-					qWarning() << "Trying to split tlc but resulting tlc has no ws!";
+					//qWarning() << "Trying to split tlc but resulting tlc has no ws!";
 					tlc_tmp->setWhiteSpaces(QVector<QSharedPointer<WhiteSpace>>());
 					//TODO create white space vector object in tlc constructor and skip this step
 				}
@@ -661,9 +600,8 @@ bool WhiteSpaceAnalysis::updateSegmentation() {
 	auto wsrM = mWsrM;
 	
 	for (auto wsr : wsrM) {
-		int bcr_count = 0;
 
-		//TODO consider updating bcr_count whenever changing a wsr
+		int bcr_count = 0;
 		auto wsM = wsr->whiteSpaces();
 		for (auto ws : wsM) {
 			if (ws->isBCR())
@@ -671,112 +609,211 @@ bool WhiteSpaceAnalysis::updateSegmentation() {
 		}
 
 		//delete wsr
-		if (bcr_count == 0) {
+		if (bcr_count == 0 || wsM.length()==1) {
+			
+			//DEBUG 
+			int idx = mWsrM.indexOf(wsr);
+			if (idx == -1)
+				int test = 1;
 
-			auto fbnn = wsM.at(0)->bnn();
-			if (fbnn.length() > 1) {
-				fbnn.removeAt(fbnn.indexOf(wsM.at(1)));
-			}
-
-			for (int i = 0; i < wsM.length(); i++) {
-				auto ws = wsM.at(i);
-				
-				//if there ís more than one bnn remove the following ws from the bnn list
-				//the current ws should be deleted if all except for one bnn have been removed
-				if (ws->bnn().length() > 1){
-					if (wsM.length() > i + 1) {
-						ws->bnn().removeAt(ws->bnn().indexOf(wsM.at(i + 1)));
-					}
-				}
-
-				//wsr remove ws ins wsr with not more than one bnn
-				//and merge tlc for each removed ws
-				if (ws->bnn().length() <= 1) {
-
-					//merge tlc
-					int tlc1 = -1;
-					int tlc2 = -1;
-					for (int j = 0; j < mTlcM.length(); j++) {
-						Rect wsB = ws->bbox();
-						Rect tlcB = mTlcM.at(j)->bbox();
-						if (wsB.top() >= tlcB.top() && wsB.bottom() <= tlcB.bottom()) {
-						//if (mTlcM.at(j)->bbox().intersects(ws->bbox())) {
-							if (wsB.left() == tlcB.right()) {
-								tlc1 = j;
-							}
-							if (wsB.right() == tlcB.left()) {
-								tlc2 = j;
-							}
-						}
-
-					}
-
-					auto merge_tlc = mTlcM.at(tlc1);
-					auto tc_tmp = merge_tlc->textComponents();
-					tc_tmp.append(mTlcM.at(tlc2)->textComponents());
-					merge_tlc->setTextComponents(tc_tmp);
-
-					auto ws_tmp = mTlcM.at(tlc1)->whiteSpaces();
-					ws_tmp.append(ws);
-					ws_tmp.append(mTlcM.at(tlc2)->whiteSpaces());
-					merge_tlc->setWhiteSpaces(ws_tmp);
-
-					double maxGap = std::max(mTlcM.at(tlc1)->maxGap(), mTlcM.at(tlc2)->maxGap());
-					maxGap = std::max(maxGap, ws->bbox().width());
-					merge_tlc->setMaxGap(maxGap);
-
-					mTlcM.replace(tlc1, merge_tlc);
-					mTlcM.remove(tlc2);
-
-					mWsM.removeAt(mWsM.indexOf(ws));	//remove ws
-				}
-			}
-
-			updated = true;
-			mWsrM.removeAt(mWsrM.indexOf(wsr));	//remove wsr
-			continue;
+			if (deleteWSR(wsr)) {
+				updated = true;
+				continue;
+			}		
 		}
 
-		//use this to shorten the wsr, should only be done once at the end
-		//if (wsM.size() > 1) {
-		//	if (!wsM.last()->isBCR()) {
-		//		mWsM.remove(mWsM.indexOf(wsM.last()));
-
-		//		auto bnn = wsM.at(wsM.length() - 2)->bnn();
-		//		bnn.removeAll(wsM.last());
-
-		//		wsM.removeAt(wsM.length() - 1);
-		//	}
-
-		//	if (!wsM.at(0)->isBCR()) {
-		//		mWsM.remove(mWsM.indexOf(wsM.at(0)));
-		//		wsM.at(1)->setHasANN(true);
-		//		wsM.removeAt(0);
-		//	}
-		//}
+		if (trimWSR(wsr))
+			updated = true;
 	}
 
 	return updated;
 }
 
-void WhiteSpaceAnalysis::appendTextLines(int idx, QVector<QVector<int>> bnnIndices, QVector<int> annCount, QSharedPointer<rdf::TextRegion> textRegion){
-
-	bool addBnn = true;
-	int nextIdx = bnnIndices.at(idx)[0];
-	while (addBnn) {
-
-		if ((annCount.at(nextIdx) > 1)) {
-			addBnn = false;
-			break;
+bool WhiteSpaceAnalysis::deleteWS(QSharedPointer<WhiteSpace> ws) {
+	
+	//find tlc neighboring ws and merge them
+	int tlcIdx1 = -1;
+	int tlcIdx2 = -1;
+	for (int j = 0; j < mTlcM.length(); j++) {
+		Rect wsB = ws->bbox();
+		Rect tlcB = mTlcM.at(j)->bbox();
+		if (wsB.top() >= tlcB.top() && wsB.bottom() <= tlcB.bottom()) {
+			//if (mTlcM.at(j)->bbox().intersects(ws->bbox())) {
+			if (wsB.left() == tlcB.right()) {
+				tlcIdx1 = j;
+			}
+			if (wsB.right() == tlcB.left()) {
+				tlcIdx2 = j;
+			}
 		}
-
-		textRegion->addChild(mTextLines[nextIdx]);
-		if (bnnIndices.at(nextIdx).length() != 1) {
-			addBnn = false;
-			break;
-		}
-		nextIdx = bnnIndices.at(nextIdx)[0];
 	}
+
+	if (tlcIdx1 == -1 || tlcIdx2 == -1) {
+		//TODO check why this happens
+		qWarning() << "White space analysis: Failed to delete WS!";
+		return false;
+	}
+
+	auto tlc1 = mTlcM.at(tlcIdx1);
+	auto tlc2 = mTlcM.at(tlcIdx2);
+
+	if (!tlc1->merge(tlc2, ws))
+		return false;
+
+	if (tlc1->bbox().bottom() > tlc1->bbox().bottom()) {
+		mTlcM.replace(tlcIdx1, tlc1);
+		mTlcM.remove(tlcIdx2);
+	}
+	else {
+		mTlcM.replace(tlcIdx2, tlc1);
+		mTlcM.remove(tlcIdx1);
+	}
+
+	mWsM.removeAt(mWsM.indexOf(ws));	//remove ws
+
+	return true;
+}
+
+bool WhiteSpaceAnalysis::deleteWSR(QSharedPointer<WhiteSpaceRun> wsr) {
+	
+	auto wsM = wsr->whiteSpaces();
+	bool updated = false;
+
+	for (int i = 0; i < wsM.length(); i++) {
+		auto ws = wsM.at(i);
+
+		if (mWsM.indexOf(wsM.at(i)) == -1) {
+			continue; // nothin to do, ws already deleted
+		}
+
+		//remove ws in wsr with one or less bnn and merge tlc for each removed ws
+		if (ws->bnn().length() <= 1) {
+			if (ws->bnn().length() == 1 && (i+1) > wsM.length()) {
+				continue;	//ws is still contained in another wsr
+			}
+
+			if (deleteWS(ws))
+				updated = true;
+		}
+
+		//if there ís more than one bnn remove the following ws from the bnn list
+		//the current ws should then be deleted if all except for one bnn have been removed
+		if (ws->bnn().length() > 1) {
+			if (wsM.length() > i + 1) {
+				//TODO check if this works
+				qInfo() << "bnn list length = " << ws->bnn().length() << " before removing";
+				ws->bnn().removeAt(ws->bnn().indexOf(wsM.at(i + 1)));
+				qInfo() << "bnn list length = " << ws->bnn().length() << " after removing";
+			}
+		}
+	}
+
+	//updated = true;
+	mWsrM.removeAt(mWsrM.indexOf(wsr));	//remove wsr
+
+	return updated;
+}
+
+bool WhiteSpaceAnalysis::trimWSR(QSharedPointer<WhiteSpaceRun> wsr){
+
+	auto wsM = wsr->whiteSpaces();
+	bool updated = false;
+
+	//use this to shorten the wsr
+	if (wsM.size() > 1 && !wsM.last()->isBCR()) {
+
+		auto bnn = wsM.at(wsM.length() - 2)->bnn();
+		bnn.removeAll(wsM.last());
+		wsM.at(wsM.length() - 2)->setBnn(bnn);
+
+		if (mWsM.indexOf(wsM.last()) != -1) {
+			deleteWS(wsM.last()); //TODO nothin to do, ws already deleted -> check why this is happening
+		}
+		//deleteWS(wsM.last());
+
+		wsM.removeAt(wsM.length() - 1);
+		updated = true;
+	}
+
+	if (wsM.size() > 1 && !wsM.at(0)->isBCR()) {
+		wsM.at(1)->setHasANN(false);
+		
+		if (mWsM.indexOf(wsM.at(0)) != -1) {
+			deleteWS(wsM.at(0)); // nothin to do, ws already deleted
+		}
+		//deleteWS(wsM.at(0));
+
+		wsM.removeAt(0);
+		updated = true;
+	}
+
+	if (updated) {
+		wsr->setWhiteSpaces(wsM);
+	}	
+
+	return updated;
+}
+
+void WhiteSpaceAnalysis::convertTLC() {
+	//convert tlc to text regions
+	for (auto tlc : mTlcM) {
+		QSharedPointer<rdf::TextRegion> textRegion(new rdf::TextRegion());
+		textRegion->setPolygon(rdf::Polygon::fromRect(tlc->bbox()));
+		textRegion->setId(textRegion->id().remove("{").remove("}"));	// remove parentheses to please Aletheia and avoid errors
+		textRegion->setType(rdf::Region::type_text_line);
+
+		mTextLines.append(textRegion);
+	}
+}
+
+void WhiteSpaceAnalysis::refineTLC() {
+	
+	//remove nested/overlapping text line  candidates
+	//merge text lines with large y overlap that are very close to each other
+	QVector<QSharedPointer<TextLineCandidate>> tlcM_final;
+	for (auto tlc1 : mTlcM) {
+		bool final = true;
+
+		for (auto tlc2 : mTlcM) {
+			if (tlc1 != tlc2) {
+				Rect b1 = tlc1->bbox();
+				Rect b2 = tlc2->bbox();
+
+				//merge nested or overlapping tlc
+				if (b1.area() < b2.area()) {
+					if (b1.intersects(b2)) {
+						double overlapArea = (b1.intersected(b2)).area();
+						if ((overlapArea / b1.area()) > double(0.75)) {
+							final = false;
+							break;
+						}
+					}
+
+					double xOverlap = std::min(b1.right(), b2.right()) - std::max(b1.left(), b2.left());
+					double yOverlap = std::min(b1.bottom(), b2.bottom()) - std::max(b1.top(), b2.top());
+					if (xOverlap > -5 && yOverlap > 0) {
+						double relYoverlap = yOverlap / std::min(b1.height(), b2.height());
+						double relHeight = b1.height() / b2.height();
+						if (relYoverlap > 0.75 && relHeight < 1.5) {
+							final = false;
+							tlc2->merge(tlc1);
+							//mTlcM.replace(mTlcM.indexOf(tlc2), merge_tlc);
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		if (tlc1->textComponents().length() < 5) {
+			continue;
+		}
+		if (final) {
+			tlcM_final.append(tlc1);
+		}
+	}
+
+	mTlcM = tlcM_final;
 }
 
 QVector<QSharedPointer<TextRegion>> WhiteSpaceAnalysis::textLines(){
@@ -1003,7 +1040,45 @@ TextLineCandidate::TextLineCandidate(QSharedPointer<TextComponent> tc){
 	}
 }
 
-void TextLineCandidate::merge(QSharedPointer<TextLineCandidate>){
+bool TextLineCandidate::merge(QSharedPointer<TextLineCandidate> tlc, QSharedPointer<WhiteSpace> ws){
+
+	//TODO if needed to exchange tlc try handing over this and call merge again
+	
+	double ws_width = 0;
+	if (!ws.isNull()) {
+		ws_width = ws->bbox().width();
+	}
+	
+	if(bbox().left() < tlc->bbox().left()){
+		
+		mTextComponents.append(tlc->textComponents());
+		if (!ws.isNull())
+			mWhiteSpaces.append(ws);
+		mWhiteSpaces.append(tlc->whiteSpaces());
+		mMaxGap = std::max(mMaxGap, tlc->maxGap());
+		mMaxGap = std::max(mMaxGap, std::max(ws_width, tlc->maxGap()));
+	}
+	else {
+		if (tlc->bbox().left() < bbox().left()) {
+			auto tc_tmp = tlc->textComponents();
+			tc_tmp.append(mTextComponents);
+			mTextComponents = tc_tmp;
+
+			auto ws_tmp = tlc->whiteSpaces();
+			if (!ws.isNull())
+				ws_tmp.append(ws);
+			ws_tmp.append(mWhiteSpaces);
+			mWhiteSpaces = ws_tmp;
+
+			mMaxGap = std::max(mMaxGap, std::max(ws_width, tlc->maxGap()));
+		}
+		else {
+			qWarning() << "White space analysis: Failed to merge tlc because they seem to be overlapping";
+			return false;
+		}
+	}
+	
+	return true;
 }
 
 int TextLineCandidate::length() const{
@@ -1162,22 +1237,28 @@ bool WhiteSpace::isBCR() const{
 bool WhiteSpace::isWCC() const{
 	return mIsWCC;
 }
+
 bool WhiteSpace::hasANN() const
 {
 	return mHasANN;
 }
+
 void WhiteSpace::setHasANN(bool HasANN){
 	mHasANN = HasANN;
 }
+
 QVector<QSharedPointer<WhiteSpace>> WhiteSpace::bnn(){
 	return mBnn;
 }
-void WhiteSpace::setBnn(const QSharedPointer<WhiteSpace> ws){
+
+void WhiteSpace::addBnn(const QSharedPointer<WhiteSpace> ws){
 	mBnn.append(ws);
 }
 
+void WhiteSpace::setBnn(const QVector<QSharedPointer<WhiteSpace>> bnn){
+	mBnn = bnn;
+}
 
-// WhiteSpaceRun --------------------------------------------------------------------
 WhiteSpaceRun::WhiteSpaceRun(){
 
 }
@@ -1208,6 +1289,140 @@ void WhiteSpaceRun::appendAllBnn(const QSharedPointer<WhiteSpace> ws){
 
 QVector<QSharedPointer<WhiteSpace>> WhiteSpaceRun::whiteSpaces(){
 	return mWhiteSpaces;
+}
+
+void WhiteSpaceRun::setWhiteSpaces(QVector<QSharedPointer<WhiteSpace>> whiteSpaces){
+	mWhiteSpaces = whiteSpaces;
+}
+
+// TextBlockFormation --------------------------------------------------------------------
+TextBlockFormation::TextBlockFormation(){
+}
+
+TextBlockFormation::TextBlockFormation(QVector<QSharedPointer<TextRegion>> textLines){
+	mTextLines = textLines;
+}
+
+bool TextBlockFormation::compute(){
+
+	if (mTextLines.isEmpty())
+		return false;
+	
+	computeAdjacency();
+	formTextBlocks();
+
+	return true;
+}
+
+void TextBlockFormation::computeAdjacency(){
+
+	//Compute below and above nearest neighbors for tlc
+	bnnIndices = QVector<QVector<int>>(mTextLines.length());
+	annCount = QVector<int>(mTextLines.length(), 0);
+
+	for (int i = 0; i < mTextLines.length(); ++i) {
+		Rect r1 = Rect::fromPoints(mTextLines.at(i)->polygon().toPoints());
+		Rect bnn1;
+
+		for (int j = i + 1; j < mTextLines.length(); ++j) {
+			Rect r2 = Rect::fromPoints(mTextLines.at(j)->polygon().toPoints());
+
+			//check for x overlap of tlc
+			if (r1.left() <= r2.right() && r2.left() <= r1.right()) {
+				if (bnn1.isNull()) {
+					bnnIndices[i] = QVector<int>(1, j);
+					annCount[j] = annCount[j] + 1;
+					bnn1 = r2;
+				}
+				else {
+					//check for y overlap with previously found bnn
+					double overlap = std::min(bnn1.bottom(), r2.bottom()) - std::max(bnn1.top(), r2.top());
+					double relOverlap = overlap / std::min(bnn1.height(), r2.height());
+					if (overlap > 0 && relOverlap > 0.5) {
+						//if (bnn1.top() <= r2.bottom() && r2.top() <= bnn1.bottom()) {
+						bnnIndices[i] << j;
+						annCount[j] = annCount[j] + 1;
+					}
+					else {
+						break;
+					}
+				}
+			}
+		}
+	}
+}
+
+void TextBlockFormation::formTextBlocks(){
+
+	//form text blocks by grouping text (line) regions
+	for (int i = 0; i < mTextLines.length(); ++i) {
+
+		if (annCount.at(i) != 1) {
+			QSharedPointer<rdf::TextRegion> textRegion(new rdf::TextRegion());
+
+			textRegion->addChild(mTextLines[i]);
+
+			if (bnnIndices.at(i).length() == 1) {
+				appendTextLines(i, textRegion);
+			}
+
+			mTextBlocks.append(textRegion);
+		}
+
+		if (bnnIndices.at(i).length() > 1) {
+			for (int idx : bnnIndices.at(i)) {
+				if (annCount[idx] == 1) {
+					QSharedPointer<rdf::TextRegion> textRegion(new rdf::TextRegion());
+					textRegion->addChild(mTextLines[idx]);
+
+					if (bnnIndices.at(idx).length() == 1) {
+						appendTextLines(idx, textRegion);
+					}
+
+					mTextBlocks.append(textRegion);
+				}
+			}
+		}
+	}
+
+	// compute bbox of text blocks and set region type
+	for (auto tb : mTextBlocks) {
+		Rect bb;
+		for (auto c : tb->children()) {
+			if (bb.isNull()) {
+				bb = Rect::fromPoints(c->polygon().toPoints());
+			}
+			else {
+				Rect cbb = Rect::fromPoints(c->polygon().toPoints());
+				bb = bb.joined(cbb);
+			}
+		}
+
+		tb->setPolygon(rdf::Polygon::fromRect(bb));
+		tb->setId(tb->id().remove("{").remove("}"));	// remove parentheses to please Aletheia and avoid errors
+		tb->setType(rdf::Region::type_text_region);
+	}
+}
+
+void TextBlockFormation::appendTextLines(int idx, QSharedPointer<rdf::TextRegion> textRegion) {
+
+	int nextIdx = bnnIndices.at(idx)[0];
+	while (true) {
+
+		if ((annCount.at(nextIdx) > 1)) {
+			break;
+		}
+
+		textRegion->addChild(mTextLines[nextIdx]);
+		if (bnnIndices.at(nextIdx).length() != 1) {
+			break;
+		}
+		nextIdx = bnnIndices.at(nextIdx)[0];
+	}
+}
+
+QVector<QSharedPointer<TextRegion>> TextBlockFormation::textBlocks(){
+	return mTextBlocks;
 }
 
 }

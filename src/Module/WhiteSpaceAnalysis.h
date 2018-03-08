@@ -114,7 +114,8 @@ namespace rdf {
 		void setHasANN(bool HasANN);
 
 		QVector<QSharedPointer<WhiteSpace>> bnn();
-		void setBnn(const QSharedPointer<WhiteSpace> ws);
+		void addBnn(const QSharedPointer<WhiteSpace> ws);
+		void setBnn(const QVector<QSharedPointer<WhiteSpace>> bnn);
 
 	private:
 		Rect mBbox;
@@ -131,7 +132,6 @@ namespace rdf {
 		TextLineCandidate(QSharedPointer<TextComponent>);
 		//TextLineCandidate(QVector<QSharedPointer<TextComponent>>);
 
-		void merge(QSharedPointer<TextLineCandidate>);
 		int length() const;
 		Rect bbox() const;
 
@@ -143,6 +143,7 @@ namespace rdf {
 		double maxGap() const;
 
 		void computeWhiteSpaces(int pageWidth);
+		bool merge(QSharedPointer<TextLineCandidate> tlc, QSharedPointer<WhiteSpace> ws = QSharedPointer<WhiteSpace>());
 
 	private:
 		void appendAllRnn(const QSharedPointer<TextComponent> tc);
@@ -159,10 +160,32 @@ namespace rdf {
 
 		void appendAllBnn(const QSharedPointer<WhiteSpace> tc);
 		QVector<QSharedPointer<WhiteSpace>> whiteSpaces();
+		void setWhiteSpaces(QVector<QSharedPointer<WhiteSpace>>);
 
 	private:
 		QVector<QSharedPointer<WhiteSpace>> mWhiteSpaces;
 		
+	};
+
+	class DllCoreExport TextBlockFormation {
+	public:
+		TextBlockFormation();
+		TextBlockFormation(QVector<QSharedPointer<TextRegion>> textLines);
+
+		bool compute();
+
+		QVector<QSharedPointer<TextRegion>> textBlocks();
+
+	private:
+		void computeAdjacency();
+		void formTextBlocks();
+		void appendTextLines(int idx, QSharedPointer<rdf::TextRegion> textRegion);
+
+		QVector<QVector<int>> bnnIndices;
+		QVector<int> annCount;
+
+		QVector<QSharedPointer<TextRegion>>mTextLines;
+		QVector<QSharedPointer<TextRegion>>mTextBlocks;
 	};
 
 	class DllCoreExport WhiteSpaceAnalysisConfig : public ModuleConfig {
@@ -217,10 +240,11 @@ namespace rdf {
 		void groupWS();
 		void updateBCR();
 		bool updateSegmentation();
-		void appendTextLines(int idx, QVector<QVector<int>> bnnIndices, 
-			QVector<int> annCount, QSharedPointer<rdf::TextRegion> textRegion);
-
-
+		void refineTLC();
+		bool deleteWS(QSharedPointer<WhiteSpace> ws);
+		bool deleteWSR(QSharedPointer<WhiteSpaceRun> wsr);
+		bool trimWSR(QSharedPointer<WhiteSpaceRun> wsr);
+		void convertTLC();
 
 		// input
 		cv::Mat mImg;
@@ -231,7 +255,6 @@ namespace rdf {
 		QVector<QSharedPointer<TextLineCandidate>> mTlcM;
 		QVector<QSharedPointer<WhiteSpace>> mWsM;
 		QVector<QSharedPointer<WhiteSpaceRun>>mWsrM;
-		
 		QVector<QSharedPointer<TextRegion>>mTextLines;
 		QVector<QSharedPointer<TextRegion>>mTextBlocks;
 	};
