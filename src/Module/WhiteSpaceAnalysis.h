@@ -88,7 +88,7 @@ namespace rdf {
 		void draw(const cv::Mat & img, const QColor& col) const;
 		void drawLnns(QPainter& p);
 
-	private:
+	protected:
 		QSharedPointer<MserBlob> mMserBlob;
 		QSharedPointer<TextComponent> mRnn;
 		QVector<QSharedPointer<TextComponent>> mLnn;
@@ -117,7 +117,7 @@ namespace rdf {
 		void addBnn(const QSharedPointer<WhiteSpace> ws);
 		void setBnn(const QVector<QSharedPointer<WhiteSpace>> bnn);
 
-	private:
+	protected:
 		Rect mBbox;
 		bool mIsBCR;
 		bool mIsWCC;
@@ -145,7 +145,7 @@ namespace rdf {
 		void computeWhiteSpaces(int pageWidth);
 		bool merge(QSharedPointer<TextLineCandidate> tlc, QSharedPointer<WhiteSpace> ws = QSharedPointer<WhiteSpace>());
 
-	private:
+	protected:
 		void appendAllRnn(const QSharedPointer<TextComponent> tc);
 
 		QVector<QSharedPointer<TextComponent>> mTextComponents;
@@ -153,39 +153,190 @@ namespace rdf {
 		double mMaxGap = -1;
 	};
 
-	class DllCoreExport WhiteSpaceRun {
+	class DllCoreExport WSRun {
 	public:
-		WhiteSpaceRun();
-		WhiteSpaceRun(QSharedPointer<WhiteSpace> ws);
+		WSRun();
+		WSRun(QSharedPointer<WhiteSpace> ws);
 
 		void appendAllBnn(const QSharedPointer<WhiteSpace> tc);
 		QVector<QSharedPointer<WhiteSpace>> whiteSpaces();
 		void setWhiteSpaces(QVector<QSharedPointer<WhiteSpace>>);
 
-	private:
+	protected:
 		QVector<QSharedPointer<WhiteSpace>> mWhiteSpaces;
 		
+	};
+
+	class DllCoreExport WhiteSpaceRun : public BaseElement {
+	public:
+		WhiteSpaceRun();
+		WhiteSpaceRun(QVector<QSharedPointer<WhiteSpacePixel>> wsSet);
+
+		QVector<QSharedPointer<WhiteSpacePixel>> whiteSpaces();
+		void append(const QVector<QSharedPointer<WhiteSpacePixel>>& wsSet);
+		void add(const QSharedPointer<WhiteSpacePixel>& ws);
+		bool contains(const QSharedPointer<WhiteSpacePixel>& ws) const;
+		void remove(const QSharedPointer<WhiteSpacePixel>& ws);
+		int size() const;
+		Rect boundingBox() const;
+
+	protected:
+		QVector<QSharedPointer<WhiteSpacePixel>> mWhiteSpaces;
+
 	};
 
 	class DllCoreExport TextBlockFormation {
 	public:
 		TextBlockFormation();
-		TextBlockFormation(QVector<QSharedPointer<TextRegion>> textLines);
+		TextBlockFormation(const cv::Mat img, const QVector<QSharedPointer<WSTextLineSet>> textLines);
 
 		bool compute();
+		TextBlockSet textBlockSet();
+		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor());
 
-		QVector<QSharedPointer<TextRegion>> textBlocks();
-
-	private:
+	protected:
 		void computeAdjacency();
 		void formTextBlocks();
-		void appendTextLines(int idx, QSharedPointer<rdf::TextRegion> textRegion);
+		void appendTextLines(int idx, QVector<QSharedPointer<TextLineSet> >& textLines);
+		TextBlock createTextBlock(const QVector<QSharedPointer<TextLineSet> >& textLines);
 
 		QVector<QVector<int>> bnnIndices;
 		QVector<int> annCount;
 
-		QVector<QSharedPointer<TextRegion>>mTextLines;
-		QVector<QSharedPointer<TextRegion>>mTextBlocks;
+		cv::Mat mImg;
+		QVector<QSharedPointer<WSTextLineSet>>mTextLines;
+		TextBlockSet mTextBlockSet;
+	};
+
+	/// <summary>
+	/// Connects pixels in horizontal direction if they have overlapping y coordinates.
+	/// </summary>
+	/// <seealso cref="PixelConnector" />
+	class DllCoreExport RightNNConnector : public PixelConnector {
+
+	public:
+		RightNNConnector();
+		virtual QVector<QSharedPointer<PixelEdge> > connect(const QVector<QSharedPointer<Pixel> >& pixels) const override;
+
+	protected:
+	};
+
+	/// <summary>
+	/// Connects white spaces to their nearest neighbors in vertical direction (above + below).
+	/// </summary>
+	/// <seealso cref="PixelConnector" />
+	class DllCoreExport WSConnector : public PixelConnector {
+
+	public:
+		WSConnector();
+		void setLineSpacing(double lineSpacing);
+		virtual QVector<QSharedPointer<PixelEdge> > connect(const QVector<QSharedPointer<Pixel> >& pixels) const override;
+
+	protected:
+		double mLineSpacing = 0;
+	};
+
+	/// <summary>
+	/// Connects pixels to their nearest neighbor in horizontal and vertical direction.
+	/// </summary>
+	/// <seealso cref="PixelConnector" />
+	class DllCoreExport NNConnector : public PixelConnector {
+
+	public:
+		NNConnector();
+		virtual QVector<QSharedPointer<PixelEdge> > connect(const QVector<QSharedPointer<Pixel> >& pixels) const override;
+
+	protected:
+	};
+
+	class DllCoreExport TextLineHypothisizerConfig : public ModuleConfig {
+
+	public:
+		TextLineHypothisizerConfig();
+
+		virtual QString toString() const override;
+
+		void setMinLineLength(int length);
+		int minLineLength() const;
+
+		void setErrorMultiplier(double multiplier);
+		double errorMultiplier() const;
+
+		QString debugPath() const;
+
+	protected:
+
+		int mMinLineLength = 20;			// minimum text line length when clustering
+		double mErrorMultiplier = 1.2;		// maximal increase of error when merging two lines
+		QString mDebugPath = "E:/data/test/HBR2013_training";
+		void load(const QSettings& settings) override;
+		void save(QSettings& settings) const override;
+	};
+
+	class DllCoreExport TextLineHypothisizer : public Module {
+	public:
+		TextLineHypothisizer(const cv::Mat img, const PixelSet& set = PixelSet());
+		
+		bool isEmpty() const override;
+		bool compute();
+		QSharedPointer<TextLineHypothisizerConfig> config() const;
+
+		QVector<QSharedPointer<TextLine> > textLines() const;
+		QVector<QSharedPointer<WSTextLineSet>> textLineSets() const;
+		void addSeparatorLines(const QVector<Line>& lines);
+
+		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor());
+		cv::Mat drawGraphEdges(const cv::Mat & img, const QColor & col = QColor());
+
+	protected:
+		PixelSet mSet;
+		cv::Mat mImg;
+		QVector<QSharedPointer<WSTextLineSet> > mTextLines;
+		QVector<Line> mStopLines;
+		PixelGraph mPg;
+
+		bool checkInput() const override;
+		QVector<QSharedPointer<WSTextLineSet> > clusterTextLines(const PixelGraph& graph) const;
+		int findSetIndex(const QSharedPointer<Pixel>& pixel, const QVector<QSharedPointer<WSTextLineSet> >& sets) const;
+		bool addPixel(QSharedPointer<WSTextLineSet>& set, const QSharedPointer<Pixel>& pixel) const;
+		bool mergeTextLines(const QSharedPointer<WSTextLineSet>& tls1, const QSharedPointer<WSTextLineSet>& tls2) const;
+		bool processEdge(const QSharedPointer<PixelEdge>& edge, QVector<QSharedPointer<WSTextLineSet>>& textLines) const;
+		void mergeUnstableTextLines(QVector<QSharedPointer<WSTextLineSet> >& textLines) const;
+		void extractWhiteSpaces(QSharedPointer<WSTextLineSet>& textLine) const;
+	};
+
+	class DllCoreExport WhiteSpaceSegmentation : public Module {
+	public:
+		WhiteSpaceSegmentation();
+		WhiteSpaceSegmentation(const cv::Mat img,const QVector<QSharedPointer<WSTextLineSet>>& tlSet);
+
+		bool isEmpty() const override;
+		bool compute();
+
+		QVector<QSharedPointer<WSTextLineSet>> textLineSets() const;
+		QVector<QSharedPointer<WhiteSpacePixel>> bcrSet() const;
+
+		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor());
+		cv::Mat drawSplitTextLines(const cv::Mat& img, const QColor& col = QColor());
+		cv::Mat drawWhiteSpaceRuns(const cv::Mat& img, const QColor& col = QColor());
+
+	protected:
+		cv::Mat  mImg;
+		QVector<QSharedPointer<WSTextLineSet> > mTlsM;
+		QVector<QSharedPointer<WhiteSpacePixel>> mBcrM;
+		QMap<QString, QVector<QSharedPointer<WSTextLineSet>>> mBcrNeighbors;
+		QVector<QSharedPointer<WhiteSpaceRun>> mWsrM;
+
+		bool checkInput() const override;
+		bool splitTextLines();
+		double computeLineSpacing() const;
+		PixelGraph computeSegmentationGraph() const;
+		void removeIsolatedBCR(const PixelGraph pg);
+		void deleteBCR(const QVector<QSharedPointer<WhiteSpacePixel>>& bcrM);
+		void deleteBCR(const QSharedPointer<WhiteSpacePixel>& bcr);
+		bool findWhiteSpaceRuns(const PixelGraph pg);
+		void updateBCRStatus();
+		bool refineWhiteSpaceRuns();
 	};
 
 	class DllCoreExport WhiteSpaceAnalysisConfig : public ModuleConfig {
@@ -210,8 +361,7 @@ namespace rdf {
 		bool mShowResults = true;		// if true, shows result regions in the output image
 		int mMinRectsPerSpace = 15;		// the minimum number of white rectangles in a row required to build a white space
 	};
-
-
+	
 	class DllCoreExport WhiteSpaceAnalysis : public Module {
 
 	public:
@@ -222,16 +372,23 @@ namespace rdf {
 		bool compute() override;
 		QSharedPointer<WhiteSpaceAnalysisConfig> config() const;
 
-		cv::Mat mRnnImg;
 		QVector<QSharedPointer<TextRegion>> textLines();
-		QVector<QSharedPointer<TextRegion>> textBlocks();
+		QSharedPointer<Region> textBlocks();
 
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
 		QString toString() const override;
 
-	private:
+	protected:
 		bool checkInput() const override;
 		SuperPixel computeSuperPixels(const cv::Mat & img);
+
+		bool computeLocalStats(PixelSet & pixels) const;
+		Rect filterPixels(PixelSet& pixels) const;
+		
+		//void computeWhiteSpaceSegmentation(QVector<QSharedPointer<WSTextLineSet>>& textLines);
+		//void convertTextLines();
+
+		cv::Mat drawWhiteSpaces(const cv::Mat& img, const QColor& col = QColor());
 
 		void extractTextComponents();
 		void computeInitialTLC();
@@ -242,20 +399,32 @@ namespace rdf {
 		bool updateSegmentation();
 		void refineTLC();
 		bool deleteWS(QSharedPointer<WhiteSpace> ws);
-		bool deleteWSR(QSharedPointer<WhiteSpaceRun> wsr);
-		bool trimWSR(QSharedPointer<WhiteSpaceRun> wsr);
+		bool deleteWSR(QSharedPointer<WSRun> wsr);
+		bool trimWSR(QSharedPointer<WSRun> wsr);
 		void convertTLC();
+
+		cv::Mat drawTLC(cv::Mat img);
+		cv::Mat drawWS(cv::Mat img);
 
 		// input
 		cv::Mat mImg;
+		int mMinPixelsPerBlock;
 
 		// output
+		QVector<QSharedPointer<WSTextLineSet>> mTextLineHypotheses;
+		QVector<QSharedPointer<WSTextLineSet>> mWSTextLines;
+		QVector<QSharedPointer<WhiteSpacePixel>> bcrSet;
+		QMap<QString, QVector<QSharedPointer<WSTextLineSet>>> mBcrNeighbors;
+
+		QVector<QSharedPointer<TextRegion>>mTextLineRegions;
+
 		QVector<QSharedPointer<MserBlob>> mBlobs;
 		QVector<QSharedPointer<TextComponent>> mTcM;
 		QVector<QSharedPointer<TextLineCandidate>> mTlcM;
 		QVector<QSharedPointer<WhiteSpace>> mWsM;
-		QVector<QSharedPointer<WhiteSpaceRun>>mWsrM;
-		QVector<QSharedPointer<TextRegion>>mTextLines;
-		QVector<QSharedPointer<TextRegion>>mTextBlocks;
+		QVector<QSharedPointer<WSRun>>mWsrM;
+		QVector<QSharedPointer<WhiteSpaceRun>>wsrM;
+		QSharedPointer<Region>mTextBlockRegions;
+		TextBlockSet mTextBlockSet;
 	};
 }

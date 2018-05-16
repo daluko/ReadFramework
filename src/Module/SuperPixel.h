@@ -106,7 +106,8 @@ public:
 
 protected:
 	int mMserMinArea = 25;
-	int mMserMaxArea = 500;
+	int mMserMaxArea = 500;	// original value
+	//int mMserMaxArea = 800; //alternative value
 	int mErosionStep = 4;
 	int mNumErosionLayers = 3;
 

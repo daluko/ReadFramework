@@ -244,9 +244,13 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		dc.setImagePath("C:/read/test/sizes/synthetic-test.png");
 		dc.setImagePath("C:/read/test/d6.5/0056_S_Alzgern_011-01_0056-crop.JPG");
 		dc.setImagePath("C:/read/test/d6.5/eval/P_241_27_012.jpg");
-		dc.setImagePath("E:/data/test/HBR2013_training/00443033.tif");
-		//dc.setImagePath("C:/temp/chris/test2.png");
 
+		//dc.setImagePath("E:/data/test/HBR2013_training/00465433.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/00485679.tif"); 
+		//dc.setImagePath("E:/data/test/HBR2013_training/00456592.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/00451351.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/00443033.tif");
+		dc.setImagePath("E:/data/test/HBR2013_training/00452456.tif");
 
 		qInfo() << dc.imagePath() << "added as image path";
 	}

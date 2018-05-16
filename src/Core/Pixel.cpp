@@ -646,4 +646,42 @@ double LineEdge::statsWeight(const QSharedPointer<Pixel>& pixel) const {
 	return vec * eVec;
 }
 
+// WhiteSpacePixel --------------------------------------------------------------------
+WhiteSpacePixel::WhiteSpacePixel(){
+}
+
+WhiteSpacePixel::WhiteSpacePixel(const Ellipse & ellipse, 
+	const Rect & bbox, const QString & id) : Pixel(ellipse, bbox, id){
+}
+
+bool WhiteSpacePixel::isBCR(){
+	return mIsBCR;
+}
+
+void WhiteSpacePixel::setBCR(const bool isBCR){
+	mIsBCR = isBCR;
+}
+
+// TextRegionPixel --------------------------------------------------------------------
+TextRegionPixel::TextRegionPixel(){
+}
+
+TextRegionPixel::TextRegionPixel(const Ellipse & ellipse, 
+	const Rect & bbox,const QString & id) : Pixel(ellipse, bbox, id) {
+}
+
+TextRegionPixel::TextRegionPixel(double maxGap, const Ellipse& ellipse,
+	const Rect& bbox, const QString& id) : TextRegionPixel(ellipse, bbox, id) {
+
+	mMaxGap = maxGap;
+}
+
+double TextRegionPixel::maxGap(){
+	return mMaxGap;
+}
+
+void TextRegionPixel::setBCR(double maxGap){
+	mMaxGap = maxGap;
+}
+
 }

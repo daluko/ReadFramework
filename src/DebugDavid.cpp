@@ -74,13 +74,9 @@ void WhiteSpaceTest::run() {
 	WhiteSpaceAnalysis wsa(imgCv);
 	wsa.compute();
 
-	QString imgPath =  Utils::createFilePath(mConfig.outputPath(), "- wsa_debug");
-	Image::save(wsa.mRnnImg, imgPath);
-	qDebug() << "rnnResults debug image added" << imgPath;
-
 	//-------------------------xml text lines
-	QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.imagePath());
-	xmlPath = Utils::createFilePath(xmlPath, "-wsa_results");
+	QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.outputPath());
+	xmlPath = Utils::createFilePath(xmlPath, "-wsa_lines");
 	rdf::PageXmlParser parser;
 	bool xml_found = parser.read(xmlPath);
 
@@ -102,14 +98,16 @@ void WhiteSpaceTest::run() {
 
 	////-------------------------xml text blocks
 	xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.outputPath());
-	xmlPath = Utils::createFilePath(xmlPath, "-wsa_results_block");
+	xmlPath = Utils::createFilePath(xmlPath, "-wsa_block");
 	xml_found = parser.read(xmlPath);
 
 	//add results to xml
 	xmlPage->rootRegion()->removeAllChildren();
-	for (auto tr : wsa.textBlocks()) {
-		xmlPage->rootRegion()->addChild(tr);
-	}
+	xmlPage->rootRegion()->addChild(wsa.textBlocks());
+	//for (auto tr : wsa.textBlocks()) {
+	//	xmlPage->rootRegion()->addChild(tr);
+	//}
+	
 
 	parser.write(xmlPath, xmlPage);
 }

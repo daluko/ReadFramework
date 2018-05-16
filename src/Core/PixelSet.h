@@ -276,6 +276,34 @@ protected:
 	void updateLine();
 };
 
+class DllCoreExport WSTextLineSet : public TextLineSet {
+
+public:
+	WSTextLineSet();
+	WSTextLineSet(const QVector<QSharedPointer<Pixel> >& set);
+	WSTextLineSet(const QVector<QSharedPointer<Pixel> >& set, 
+		const QVector<QSharedPointer<WhiteSpacePixel> >& wsSet);
+	
+	bool containsWhiteSpace(const QSharedPointer<WhiteSpacePixel>& wsPixel) const;
+	void setWhiteSpacePixels(const QVector<QSharedPointer<WhiteSpacePixel> >& wsSet);
+	void updateMaxGap(const QVector<QSharedPointer<WhiteSpacePixel>>& wsSet =
+		QVector<QSharedPointer<WhiteSpacePixel>>());
+	void appendWhiteSpaces(const QVector<QSharedPointer<WhiteSpacePixel>>& wsSet);
+	void addWhiteSpace(const QSharedPointer<WhiteSpacePixel>& ws);
+	void mergeWSTextLineSet(const QSharedPointer<WSTextLineSet>& tls);
+	QSharedPointer<TextRegionPixel> convertToPixel() const;
+
+	QVector<QSharedPointer<WhiteSpacePixel> > whiteSpacePixels() const {
+		return mWsSet;
+	};
+	
+	double maxGap() const;
+
+protected:
+	QVector<QSharedPointer<WhiteSpacePixel> > mWsSet;
+	double mMaxGap = 0;
+};
+
 namespace TextLineHelper {
 
 	QVector<QSharedPointer<TextLineSet> > filterLowDensity(const QVector<QSharedPointer<TextLineSet> >& textLines);

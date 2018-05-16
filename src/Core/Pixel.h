@@ -250,6 +250,31 @@ protected:
 	int mPyramidLevel = 0;	// 1.0/std::pow(2, mPyramidLevel) scales back to the pyramid
 };
 
+class DllCoreExport WhiteSpacePixel : public Pixel {
+public:
+	WhiteSpacePixel();
+	WhiteSpacePixel(const Ellipse& ellipse, const Rect& bbox = Rect(), const QString& id = QString());
+
+	bool isBCR();
+	void setBCR(const bool isBCR);
+
+protected:
+	bool mIsBCR = false;	//true if white space is between columns (BC)
+};
+
+class DllCoreExport TextRegionPixel : public Pixel {
+public:
+	TextRegionPixel();
+	TextRegionPixel(const Ellipse& ellipse, const Rect& bbox = Rect(), const QString& id = QString());
+	TextRegionPixel(double maxGap, const Ellipse& ellipse, const Rect& bbox = Rect(), const QString& id = QString());
+
+	double maxGap();
+	void setBCR(double maxGap);
+
+protected:
+	double mMaxGap = 0;
+};
+
 class DllCoreExport PixelEdge : public BaseElement {
 
 public:

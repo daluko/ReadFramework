@@ -1669,4 +1669,75 @@ QVector<QSharedPointer<PixelEdge>> VoronoiPixelConnector::connect(const QVector<
 
 }
 
+// WSTextLineSet --------------------------------------------------------------------
+WSTextLineSet::WSTextLineSet(){
+}
+
+WSTextLineSet::WSTextLineSet(const QVector<QSharedPointer<Pixel>>& set) : TextLineSet(set) {
+}
+
+WSTextLineSet::WSTextLineSet(const QVector<QSharedPointer<Pixel>>& set, 
+	const QVector<QSharedPointer<WhiteSpacePixel>>& wsSet) : TextLineSet(set){
+
+	setWhiteSpacePixels(wsSet);
+}
+
+bool WSTextLineSet::containsWhiteSpace(const QSharedPointer<WhiteSpacePixel>& wsPixel) const{
+	return mWsSet.contains(wsPixel);
+}
+
+void WSTextLineSet::setWhiteSpacePixels(const QVector<QSharedPointer<WhiteSpacePixel>>& wsSet){
+	mWsSet = wsSet;
+	updateMaxGap();
+}
+
+void WSTextLineSet::updateMaxGap(const QVector<QSharedPointer<WhiteSpacePixel>>& wsSet) {
+	
+	if (wsSet.isEmpty()) {
+		for (auto ws : mWsSet) {
+			double tmpGap = ws->bbox().width();
+
+			if (tmpGap > mMaxGap)
+				mMaxGap = tmpGap;
+		}
+	}
+	else {
+		for (auto ws : wsSet) {
+			double tmpGap = ws->bbox().width();
+
+			if (tmpGap > mMaxGap)
+				mMaxGap = tmpGap;
+		}
+	}
+}
+
+void WSTextLineSet::appendWhiteSpaces(const QVector<QSharedPointer<WhiteSpacePixel>>& wsSet) {
+	mWsSet << wsSet;
+	updateMaxGap(wsSet);
+}
+
+void WSTextLineSet::addWhiteSpace(const QSharedPointer<WhiteSpacePixel>& ws) {
+	appendWhiteSpaces(QVector<QSharedPointer<WhiteSpacePixel>>(1, ws));
+}
+
+void WSTextLineSet::mergeWSTextLineSet(const QSharedPointer<WSTextLineSet>& tls) {
+	append(tls->pixels());
+	appendWhiteSpaces(tls->whiteSpacePixels());
+}
+
+QSharedPointer<TextRegionPixel> WSTextLineSet::convertToPixel() const{
+	
+	Rect slr = PixelSet::boundingBox();
+	cv::Point2f tl = slr.topLeft().toCvPoint2f();
+	cv::Point2f tr = slr.topRight().toCvPoint2f();
+	cv::Point2f br = slr.bottomRight().toCvPoint2f();
+	Ellipse ellipse(cv::RotatedRect(tl, tr, br));
+
+	return QSharedPointer<TextRegionPixel>::create(mMaxGap, ellipse);
+}
+
+double WSTextLineSet::maxGap() const{
+	return mMaxGap;
+}
+
 }
