@@ -88,7 +88,7 @@ void WhiteSpaceTest::run() {
 
 	//add results to xml
 	xmlPage->rootRegion()->removeAllChildren();
-	for (auto tr : wsa.textLines()) {
+	for (auto tr : wsa.textLineRegions()) {
 		xmlPage->rootRegion()->addChild(tr);
 	}
 
@@ -103,7 +103,7 @@ void WhiteSpaceTest::run() {
 
 	//add results to xml
 	xmlPage->rootRegion()->removeAllChildren();
-	xmlPage->rootRegion()->addChild(wsa.textBlocks());
+	xmlPage->rootRegion()->addChild(wsa.textBlockRegions());
 	//for (auto tr : wsa.textBlocks()) {
 	//	xmlPage->rootRegion()->addChild(tr);
 	//}

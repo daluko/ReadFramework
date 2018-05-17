@@ -66,107 +66,6 @@ namespace rdf {
 #define mWarning	qWarning().noquote()	<< debugName()
 #define mCritical	qCritical().noquote()	<< debugName()
 
-	class DllCoreExport TextComponent {
-
-	public:
-		TextComponent();
-		TextComponent(QSharedPointer<MserBlob> blob);
-
-		void setRnn(QSharedPointer<TextComponent> neighbor);
-		void setLnn(QSharedPointer<TextComponent> neighbor);
-		QSharedPointer<TextComponent> rnn() const;
-		QVector<QSharedPointer<TextComponent>> lnn() const;
-		QSharedPointer<MserBlob> mserBlob() const;
-		void setForkMarker(bool isAFork);
-		bool isAFork() const;
-
-		int bestFitLnnIdx() const;
-		int lnnRunLength() const;
-		bool hasRnn() const;
-		bool hasLnn() const;
-
-		void draw(const cv::Mat & img, const QColor& col) const;
-		void drawLnns(QPainter& p);
-
-	protected:
-		QSharedPointer<MserBlob> mMserBlob;
-		QSharedPointer<TextComponent> mRnn;
-		QVector<QSharedPointer<TextComponent>> mLnn;
-		
-		bool mHasRnn;
-		bool mHasLnn;
-		bool mIsAFork;
-	};
-
-	class DllCoreExport WhiteSpace {
-
-	public:
-		WhiteSpace();
-		WhiteSpace(Rect r);
-		
-		Rect bbox() const;
-		bool isNull() const;
-		void setIsBCR(bool isBCR);
-		void setIsWCC(bool isWCC);
-		bool isBCR() const;
-		bool isWCC() const;
-		bool hasANN() const;
-		void setHasANN(bool HasANN);
-
-		QVector<QSharedPointer<WhiteSpace>> bnn();
-		void addBnn(const QSharedPointer<WhiteSpace> ws);
-		void setBnn(const QVector<QSharedPointer<WhiteSpace>> bnn);
-
-	protected:
-		Rect mBbox;
-		bool mIsBCR;
-		bool mIsWCC;
-		bool mHasANN;
-		QVector<QSharedPointer<WhiteSpace>> mBnn;
-	};
-
-	class DllCoreExport TextLineCandidate {
-
-	public:
-		TextLineCandidate();
-		TextLineCandidate(QSharedPointer<TextComponent>);
-		//TextLineCandidate(QVector<QSharedPointer<TextComponent>>);
-
-		int length() const;
-		Rect bbox() const;
-
-		QVector<QSharedPointer<TextComponent>> textComponents() const;
-		QVector<QSharedPointer<WhiteSpace>> whiteSpaces() const;
-		void setTextComponents(QVector<QSharedPointer<TextComponent>> textComponents);
-		void setWhiteSpaces(QVector<QSharedPointer<WhiteSpace>> whiteSpaces);
-		void setMaxGap(double maxGap);
-		double maxGap() const;
-
-		void computeWhiteSpaces(int pageWidth);
-		bool merge(QSharedPointer<TextLineCandidate> tlc, QSharedPointer<WhiteSpace> ws = QSharedPointer<WhiteSpace>());
-
-	protected:
-		void appendAllRnn(const QSharedPointer<TextComponent> tc);
-
-		QVector<QSharedPointer<TextComponent>> mTextComponents;
-		QVector<QSharedPointer<WhiteSpace>> mWhiteSpaces;
-		double mMaxGap = -1;
-	};
-
-	class DllCoreExport WSRun {
-	public:
-		WSRun();
-		WSRun(QSharedPointer<WhiteSpace> ws);
-
-		void appendAllBnn(const QSharedPointer<WhiteSpace> tc);
-		QVector<QSharedPointer<WhiteSpace>> whiteSpaces();
-		void setWhiteSpaces(QVector<QSharedPointer<WhiteSpace>>);
-
-	protected:
-		QVector<QSharedPointer<WhiteSpace>> mWhiteSpaces;
-		
-	};
-
 	class DllCoreExport WhiteSpaceRun : public BaseElement {
 	public:
 		WhiteSpaceRun();
@@ -372,8 +271,8 @@ namespace rdf {
 		bool compute() override;
 		QSharedPointer<WhiteSpaceAnalysisConfig> config() const;
 
-		QVector<QSharedPointer<TextRegion>> textLines();
-		QSharedPointer<Region> textBlocks();
+		QVector<QSharedPointer<TextRegion>> textLineRegions();
+		QSharedPointer<Region> textBlockRegions();
 
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
 		QString toString() const override;
@@ -381,30 +280,10 @@ namespace rdf {
 	protected:
 		bool checkInput() const override;
 		SuperPixel computeSuperPixels(const cv::Mat & img);
-
 		bool computeLocalStats(PixelSet & pixels) const;
 		Rect filterPixels(PixelSet& pixels) const;
-		
-		//void computeWhiteSpaceSegmentation(QVector<QSharedPointer<WSTextLineSet>>& textLines);
-		//void convertTextLines();
 
 		cv::Mat drawWhiteSpaces(const cv::Mat& img, const QColor& col = QColor());
-
-		void extractTextComponents();
-		void computeInitialTLC();
-		void findBCR();
-		void splitTLC();
-		void groupWS();
-		void updateBCR();
-		bool updateSegmentation();
-		void refineTLC();
-		bool deleteWS(QSharedPointer<WhiteSpace> ws);
-		bool deleteWSR(QSharedPointer<WSRun> wsr);
-		bool trimWSR(QSharedPointer<WSRun> wsr);
-		void convertTLC();
-
-		cv::Mat drawTLC(cv::Mat img);
-		cv::Mat drawWS(cv::Mat img);
 
 		// input
 		cv::Mat mImg;
@@ -413,17 +292,6 @@ namespace rdf {
 		// output
 		QVector<QSharedPointer<WSTextLineSet>> mTextLineHypotheses;
 		QVector<QSharedPointer<WSTextLineSet>> mWSTextLines;
-		QVector<QSharedPointer<WhiteSpacePixel>> bcrSet;
-		QMap<QString, QVector<QSharedPointer<WSTextLineSet>>> mBcrNeighbors;
-
-		QVector<QSharedPointer<TextRegion>>mTextLineRegions;
-
-		QVector<QSharedPointer<MserBlob>> mBlobs;
-		QVector<QSharedPointer<TextComponent>> mTcM;
-		QVector<QSharedPointer<TextLineCandidate>> mTlcM;
-		QVector<QSharedPointer<WhiteSpace>> mWsM;
-		QVector<QSharedPointer<WSRun>>mWsrM;
-		QVector<QSharedPointer<WhiteSpaceRun>>wsrM;
 		QSharedPointer<Region>mTextBlockRegions;
 		TextBlockSet mTextBlockSet;
 	};
