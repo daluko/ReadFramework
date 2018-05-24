@@ -165,7 +165,7 @@ namespace rdf {
 
 	protected:
 
-		int mMinLineLength = 20;			// minimum text line length when clustering
+		int mMinLineLength = 3;			// minimum text line length when clustering
 		double mErrorMultiplier = 1.2;		// maximal increase of error when merging two lines
 		QString mDebugPath = "E:/data/test/HBR2013_training";
 		void load(const QSettings& settings) override;
@@ -186,6 +186,7 @@ namespace rdf {
 
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor());
 		cv::Mat drawGraphEdges(const cv::Mat & img, const QColor & col = QColor());
+		cv::Mat drawTextLineHypotheses(const cv::Mat& img);
 
 	protected:
 		PixelSet mSet;
@@ -245,11 +246,14 @@ namespace rdf {
 
 		virtual QString toString() const override;
 
-		void setShowResults(bool show);
-		bool ShowResults() const;
-
 		void setMinRectsPerSpace(int minRects);
 		int minRectsPerSpace() const;
+
+		void setDebugDraw(bool show);
+		bool debugDraw() const;
+
+		void setDebugPath(const QString & dp);
+		QString debugPath() const;
 
 
 	protected:
@@ -257,8 +261,9 @@ namespace rdf {
 		void load(const QSettings& settings) override;
 		void save(QSettings& settings) const override;
 
-		bool mShowResults = true;		// if true, shows result regions in the output image
-		int mMinRectsPerSpace = 15;		// the minimum number of white rectangles in a row required to build a white space
+		int mMinRectsPerSpace = 15;		// the minimum number of rectangles in a row required to build a white space
+		bool mDebugDraw = true;
+		QString mDebugPath = "E:/data/test/HBR2013_training";
 	};
 	
 	class DllCoreExport WhiteSpaceAnalysis : public Module {
@@ -271,8 +276,8 @@ namespace rdf {
 		bool compute() override;
 		QSharedPointer<WhiteSpaceAnalysisConfig> config() const;
 
-		QVector<QSharedPointer<TextRegion>> textLineRegions();
-		QSharedPointer<Region> textBlockRegions();
+		QVector<QSharedPointer<TextRegion>> textLineRegions() const;
+		QSharedPointer<Region> textBlockRegions() const;
 
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
 		QString toString() const override;
@@ -281,15 +286,23 @@ namespace rdf {
 		bool checkInput() const override;
 		SuperPixel computeSuperPixels(const cv::Mat & img);
 		bool computeLocalStats(PixelSet & pixels) const;
-		Rect filterPixels(PixelSet& pixels) const;
+		Rect filterPixels(PixelSet& pixels);
 
-		cv::Mat drawWhiteSpaces(const cv::Mat& img, const QColor& col = QColor());
+		void drawDebugImages(const cv::Mat& img);
+		cv::Mat drawWhiteSpaces(const cv::Mat& img);
+		cv::Mat drawFilteredPixels(const cv::Mat& img);
 
 		// input
 		cv::Mat mImg;
 		int mMinPixelsPerBlock;
 
+		//debug
+		Rect filterRect = Rect();
+		QVector<QSharedPointer<Pixel>> removedPixels1;
+		QVector<QSharedPointer<Pixel>> removedPixels2;
+
 		// output
+		PixelSet pSet;
 		QVector<QSharedPointer<WSTextLineSet>> mTextLineHypotheses;
 		QVector<QSharedPointer<WSTextLineSet>> mWSTextLines;
 		QSharedPointer<Region>mTextBlockRegions;

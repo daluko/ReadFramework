@@ -327,6 +327,14 @@ void SuperPixelConfig::setNumErosionLayers(int numLayers) {
 	mNumErosionLayers = numLayers;
 }
 
+void SuperPixelConfig::setMserMinArea(int minArea){
+	mMserMinArea = minArea;
+}
+
+void SuperPixelConfig::setMserMaxArea(int maxArea){
+	mMserMaxArea = maxArea;
+}
+
 /// <summary>
 /// Numbers the erosion layers.
 /// The image is iteratively eroded in order to split

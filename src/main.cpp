@@ -251,6 +251,10 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		//dc.setImagePath("E:/data/test/HBR2013_training/00451351.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00443033.tif");
 		dc.setImagePath("E:/data/test/HBR2013_training/00452456.tif");
+		
+		//dc.setImagePath("E:/data/test/HBR2013_training/00425629.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/00318461.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/00451901.tif");
 
 		qInfo() << dc.imagePath() << "added as image path";
 	}

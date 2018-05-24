@@ -101,6 +101,8 @@ public:
 	int erosionStep() const;
 	
 	void setNumErosionLayers(int numLayers);
+	void setMserMinArea(int minArea);
+	void setMserMaxArea(int maxArea);
 	int numErosionLayers() const;
 
 
