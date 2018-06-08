@@ -407,7 +407,7 @@ QSharedPointer<Pixel> PixelSet::find(const QString & id) const {
 		}
 	}
 
-	qDebug() << id << "exists" << cnt << "times";
+	//qDebug() << id << "exists" << cnt << "times";
 
 	for (const QSharedPointer<Pixel>& px : mSet) {
 

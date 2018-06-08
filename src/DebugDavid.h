@@ -52,14 +52,19 @@ public:
 	WhiteSpaceTest(const DebugConfig& config = DebugConfig());
 
 	void WhiteSpaceTest::run();
-	//void testComponents();
 
 protected:
-	//void testFeatureCollector(const cv::Mat& src) const;
-	//void testTrainer();
-	//void testLineDetector(const cv::Mat& src) const;
+	DebugConfig mConfig;
+};
 
-private:
+class FontClassificationTest {
+
+public:
+	FontClassificationTest(const DebugConfig& config = DebugConfig());
+
+	void FontClassificationTest::run();
+
+protected:
 	DebugConfig mConfig;
 };
 

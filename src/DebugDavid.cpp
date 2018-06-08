@@ -35,8 +35,10 @@
 #include "Image.h"
 #include "SuperPixel.h"
 #include "WhiteSpaceAnalysis.h"
+#include "FontStyleClassification.h"
 #include "PageParser.h"
 #include "Elements.h"
+#include "ElementsHelper.h"
 
 #include "SuperPixelScaleSpace.h"
 #include "ScaleFactory.h"
@@ -110,6 +112,49 @@ void WhiteSpaceTest::run() {
 	
 
 	parser.write(xmlPath, xmlPage);
+}
+
+FontClassificationTest::FontClassificationTest(const DebugConfig & config) {
+	mConfig = config;
+}
+
+void FontClassificationTest::run() {
+
+	qDebug() << "Running font style calssification test...";
+
+	Timer dt;
+
+	QImage qImg(mConfig.imagePath());
+	cv::Mat imgCv = Image::qImage2Mat(qImg);
+
+	if (imgCv.empty()) {
+		qInfo() << mConfig.imagePath() << "NOT loaded...";
+		return;
+	}
+
+	QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.outputPath());
+	rdf::PageXmlParser parser;
+	bool xml_found = parser.read(xmlPath);
+
+	if (!xml_found){
+		qInfo() << xmlPath << "NOT found...";
+		return;
+	}
+
+	QSharedPointer<PageElement> xmlPage = parser.page();
+	QVector<QSharedPointer<TextLine>>textLineRegions;
+
+	QVector<QSharedPointer<Region> > textRegions = RegionManager::filter<Region>(xmlPage->rootRegion(), Region::type_text_line);
+	for (auto tr : textRegions) {
+		textLineRegions << qSharedPointerCast<TextLine>(tr);
+	}
+
+	FontStyleClassification fsc(imgCv, textLineRegions);
+	fsc.compute();
+
+	cv::Mat img_result = fsc.draw(imgCv);
+	QString imgPath = Utils::createFilePath(xmlPath, "_fsc_results", "png");
+	Image::save(img_result, imgPath);
 }
 
 }

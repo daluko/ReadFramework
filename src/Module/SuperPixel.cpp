@@ -188,12 +188,18 @@ bool SuperPixel::compute() {
 		config()->setNumErosionLayers(1);
 	}
 
-	for (int idx = 0; idx < maxFilter; idx += config()->erosionStep()) {
-
-		Timer dti;
-		QSharedPointer<MserContainer> cb = getBlobs(img, idx);
+	if (maxFilter == 0) {
+		QSharedPointer<MserContainer> cb = getBlobs(img, 0);
 		rawBlobs->append(*cb);
-		//qDebug() << cb->size() << "/" << rawBlobs->size() << "collected with kernel size" << 2*idx+1 << "in" << dti;
+	}
+	else {
+		for (int idx = 0; idx < maxFilter; idx += config()->erosionStep()) {
+
+			Timer dti;
+			QSharedPointer<MserContainer> cb = getBlobs(img, idx);
+			rawBlobs->append(*cb);
+			//qDebug() << cb->size() << "/" << rawBlobs->size() << "collected with kernel size" << 2*idx+1 << "in" << dti;
+		}
 	}
 
 	// filter duplicates that occur from different erosion sizes
@@ -345,7 +351,7 @@ void SuperPixelConfig::setMserMaxArea(int maxArea){
 /// <returns></returns>
 int SuperPixelConfig::numErosionLayers() const {
 	
-	return checkParam(mNumErosionLayers, 1, 20, "numErosionLayers");
+	return checkParam(mNumErosionLayers, 0, 20, "numErosionLayers");
 }
 
 void SuperPixelConfig::load(const QSettings & settings) {

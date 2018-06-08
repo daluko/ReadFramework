@@ -62,12 +62,44 @@ namespace rdf {
 		return ModuleConfig::toString();
 	}
 
-	void WhiteSpaceAnalysisConfig::setMinRectsPerSpace(int minRects) {
-		mMinRectsPerSpace = minRects;
+	void WhiteSpaceAnalysisConfig::setNumErosionLayers(int numErosionLayers) {
+		mNumErosionLayers = numErosionLayers;
 	}
 
-	int WhiteSpaceAnalysisConfig::minRectsPerSpace() const {
-		return ModuleConfig::checkParam(mMinRectsPerSpace, 0, INT_MAX, "minRectsPerSpace");
+	int WhiteSpaceAnalysisConfig::numErosionLayers() const {
+		return ModuleConfig::checkParam(mNumErosionLayers, 0, INT_MAX, "numErosionLayers");
+	}
+
+	void WhiteSpaceAnalysisConfig::setMserMinArea(int mserMinArea) {
+		mMserMinArea = mserMinArea;
+	}
+
+	int WhiteSpaceAnalysisConfig::mserMinArea() const {
+		return ModuleConfig::checkParam(mMserMinArea, 0, INT_MAX, "mserMinArea");
+	}
+
+	void WhiteSpaceAnalysisConfig::setMserMaxArea(int mserMaxArea) {
+		mMserMaxArea = mserMaxArea;
+	}
+
+	int WhiteSpaceAnalysisConfig::mserMaxArea() const {
+		return ModuleConfig::checkParam(mMserMaxArea, 0, INT_MAX, "mserMaxArea");
+	}
+
+	void WhiteSpaceAnalysisConfig::setMaxImgSide(int maxImgSide) {
+		mMaxImgSide = maxImgSide;
+	}
+
+	int WhiteSpaceAnalysisConfig::maxImgSide() const {
+		return ModuleConfig::checkParam(mMaxImgSide, 0, INT_MAX, "maxImgSide");
+	}
+
+	void WhiteSpaceAnalysisConfig::setScaleInput(bool scaleInput) {
+		mScaleInput = scaleInput;
+	}
+
+	bool WhiteSpaceAnalysisConfig::scaleInput() const {
+		return mScaleInput;
 	}
 
 	void WhiteSpaceAnalysisConfig::setDebugDraw(bool debugDraw){
@@ -88,14 +120,22 @@ namespace rdf {
 	
 	void WhiteSpaceAnalysisConfig::load(const QSettings & settings) {
 
-		mMinRectsPerSpace = settings.value("minRectsPerSpace", minRectsPerSpace()).toInt();
-		mDebugDraw = settings.value("debugDraw", debugDraw()).toBool();
-		mDebugPath = settings.value("classifierPath", debugPath()).toString();
+		mNumErosionLayers = settings.value("numErosionLayers", numErosionLayers()).toInt();
+		mMserMinArea = settings.value("mserMinArea", mserMinArea()).toInt();
+		mMserMaxArea = settings.value("mserMaxArea", mserMaxArea()).toInt();
+		mMaxImgSide  = settings.value("maxImgSide", maxImgSide()).toInt();
+		mScaleInput  = settings.value("scaleInput", scaleInput()).toBool();
+		mDebugDraw   = settings.value("debugDraw", debugDraw()).toBool();
+		mDebugPath   = settings.value("debugPath", debugPath()).toString();
 	}
 
 	void WhiteSpaceAnalysisConfig::save(QSettings & settings) const {
 
-		settings.setValue("minRectsPerSpace", minRectsPerSpace());
+		settings.setValue("numErosionLayers", numErosionLayers());
+		settings.setValue("mserMinArea", mserMinArea());
+		settings.setValue("mserMaxArea", mserMaxArea());
+		settings.setValue("maxImgSide", maxImgSide());
+		settings.setValue("scaleInput", scaleInput());
 		settings.setValue("debugDraw", debugDraw());
 		settings.setValue("debugPath", debugPath());
 	}
@@ -103,9 +143,7 @@ namespace rdf {
 
 // WhiteSpaceAnalysis --------------------------------------------------------------------
 WhiteSpaceAnalysis::WhiteSpaceAnalysis(const cv::Mat& img) {
-
 	mImg = img;
-	ScaleFactory::instance().init(img.size());
 
 	mConfig = QSharedPointer<WhiteSpaceAnalysisConfig>::create();
 	mConfig->loadSettings();
@@ -118,10 +156,9 @@ bool WhiteSpaceAnalysis::isEmpty() const {
 bool WhiteSpaceAnalysis::compute() {
 	//TODO improve initial set of components used for text line formation 
 	//TODO use asssert() function to check input parameters and results
+	//TODO compute line spacing estimate only one time and for all modules
 
-	qDebug() << "computing white spaces layout analysis...";
-
-	mMinPixelsPerBlock = 3;
+	qInfo()<< "Computing white space layout analysis...";
 
 	if (!checkInput())
 		return false;
@@ -129,8 +166,15 @@ bool WhiteSpaceAnalysis::compute() {
 	cv::Mat inputImg = mImg;
 	Timer dt;
 
-	qDebug() << "scale factor dpi: " << ScaleFactory::scaleFactorDpi();
-	mImg = ScaleFactory::scaled(inputImg);
+	if(config()->scaleInput()){
+		int maxImgSide = config()->maxImgSide();
+		ScaleFactory& sf = ScaleFactory::instance();
+		sf.config()->setMaxImageSide(maxImgSide);
+		sf.init(mImg.size());
+
+		qDebug() << "scale factor dpi: " << ScaleFactory::scaleFactorDpi();
+		mImg = ScaleFactory::scaled(inputImg);
+	}
 
 	SuperPixel sp = computeSuperPixels(mImg);
 
@@ -144,6 +188,7 @@ bool WhiteSpaceAnalysis::compute() {
 		return false;
 	}
 
+	//TODO find other solution and remove
 	//compute stats (needed for line spacing used in clustering/distance computation)
 	if (!computeLocalStats(pSet)){
 		qWarning() << "Could not compute local stats for super pixels!";
@@ -163,6 +208,7 @@ bool WhiteSpaceAnalysis::compute() {
 	}
 
 	auto  textLines = tlh.textLineSets();
+	qInfo() << "Computed text line hypotheses.";
 	qInfo() << "Number of text lines is " << tlh.textLineSets().size();
 
 	mTextLineHypotheses = textLines;
@@ -175,6 +221,7 @@ bool WhiteSpaceAnalysis::compute() {
 		qWarning() << "Could not compute white space segmentation!";
 		return false;
 	}
+	qInfo() << "Finished white space segmentation.";
 
 	//get segmented text lines
 	mWSTextLines = wss.textLineSets();
@@ -182,12 +229,13 @@ bool WhiteSpaceAnalysis::compute() {
 
 	//compute text block formed by previously detected text lines
 	TextBlockFormation tbf(mImg, mWSTextLines);
-	
+
 	if (!tbf.compute()) {
 		qWarning() << "White space analysis: Could not compute text blocks!";
 		return false;
 	}
 	
+	qInfo() << "Finished text block formation.";
 	mTextBlockSet = tbf.textBlockSet();
 	
 	mInfo << "white space layout analysis computed in" << dt;
@@ -197,7 +245,9 @@ bool WhiteSpaceAnalysis::compute() {
 	}
 	
 	// scale back to original coordinates
-	ScaleFactory::scaleInv(mTextBlockSet);
+	if (config()->scaleInput()) {
+		ScaleFactory::scaleInv(mTextBlockSet);
+	}
 	mTextBlockRegions = mTextBlockSet.toTextRegion();
 
 	return true;
@@ -210,9 +260,9 @@ QSharedPointer<WhiteSpaceAnalysisConfig> WhiteSpaceAnalysis::config() const {
 SuperPixel WhiteSpaceAnalysis::computeSuperPixels(const cv::Mat & img){
 
 	//TODO FIX PARAMETERS
-	int numErosionLayers = 2; //must be > 0
-	int mserMinArea = 25;
-	int mserMaxArea = 500;
+	int numErosionLayers = config()->numErosionLayers(); //must be > 0
+	int mserMinArea = config()->mserMinArea();
+	int mserMaxArea = config()->mserMaxArea();
 
 	// compute super pixels
 	SuperPixel sp = SuperPixel(img);
@@ -260,6 +310,7 @@ bool WhiteSpaceAnalysis::computeLocalStats(PixelSet & pixels) const {
 }
 
 Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
+	//TODO find smart/adaptive size filtering constraint
 
 	if (set.isEmpty())
 		return Rect();
@@ -267,13 +318,57 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 	QVector<QString> removeIDs;
 
 	//filter pixels according to size constraints-------------------------------------
-	double ls = set.lineSpacing(0.5);
+	QList<double> heights;
+	QList<double> widths;
+	for (auto p : set.pixels()) {
+		widths << p->bbox().width();
+		heights << p->bbox().height();
+	}
+
+	double q25 = Algorithms::statMoment(widths, 0.1);
+	double q50 = Algorithms::statMoment(widths, 0.5);
+	double q75 = Algorithms::statMoment(widths, 0.9);
+
+	// compute bounds for widths
+	double lbw = std::max(0.0, q50 - (q75 - q25));
+	double ubw = q50 + (q75 - q25);
+
+	q25 = Algorithms::statMoment(heights, 0.1);
+	q50 = Algorithms::statMoment(heights, 0.5);
+	q75 = Algorithms::statMoment(heights, 0.9);
+
+	// compute bounds for heights
+	double lbh = std::max(0.0, q50 - (q75 - q25));
+	double ubh = q50 + (q75 - q25);
+
+	Rect lqfR(0, 0, lbw, lbh);
+	Rect uqfR(0, 0, ubw, ubh);
+	qInfo() << "lower quartile filter rect = " << lqfR.toString();
+	qInfo() << "upper quartile filter rect = " << uqfR.toString();
+
+	QList<double> spacings;
+	for (auto p : set.pixels()) {
+		spacings << p->bbox().height();
+	}
+
+	double ls = Algorithms::statMoment(spacings, 0.5);
+	//double ls = set.lineSpacing(0.5);
 	double hLimit = 2 * ls;
 	double wLimit = 2 * ls;
 
 	Rect lsR(0, 0, wLimit, hLimit);
+	qInfo() << "average height rect = " << lsR.toString();
 	for (auto p : set.pixels()) {
-		if (p->bbox().height() > hLimit || p->bbox().width() > wLimit) {
+		//if (p->bbox().height() > hLimit || p->bbox().width() > wLimit) {
+		//	removeIDs << p->id();
+		//}
+
+		if (p->bbox().height() < lbh || p->bbox().width() < lbw) {
+			removeIDs << p->id();
+			continue;
+		}
+
+		if (p->bbox().height() > ubh || p->bbox().width() > ubw) {
 			removeIDs << p->id();
 		}
 	}
@@ -336,17 +431,13 @@ QSharedPointer<Region> WhiteSpaceAnalysis::textBlockRegions() const {
 cv::Mat WhiteSpaceAnalysis::draw(const cv::Mat & img, const QColor& col) const {
 
 	// draw mser blobs
-	Timer dtf;
 	QImage qImg = Image::mat2QImage(img, true);
 	QPainter painter(&qImg);
-	//p.setPen(col);
 	QColor tmp_col = col;
 	
 	for (auto tb : mTextBlockSet.textBlocks()){
 		tb->draw(painter, TextBlock::DrawFlags() | TextBlock::draw_poly | TextBlock::draw_text_lines);
 	}
-
-	qDebug() << "drawing takes" << dtf;
 
 	return Image::qImage2Mat(qImg);
 }
@@ -357,7 +448,6 @@ void WhiteSpaceAnalysis::drawDebugImages(const cv::Mat & img){
 	QFileInfo info(config()->debugPath());
 	if (info.isDir()) {
 		path = info.absoluteFilePath() + "/debug.png";
-		qDebug() << path;
 	}
 	else {
 		path = "debug.png";
@@ -371,6 +461,7 @@ void WhiteSpaceAnalysis::drawDebugImages(const cv::Mat & img){
 	pSet.draw(painter, PixelSet::draw_pixels);
 	//for (auto p : pSet.pixels()) {
 	//	//p->bbox().draw(painter);
+	//	qDebug() << "pixel size = " << p->size() ;
 	//}
 	painter.end();
 
@@ -1249,9 +1340,16 @@ bool WhiteSpaceSegmentation::splitTextLines(){
 }
 
 double WhiteSpaceSegmentation::computeLineSpacing() const{
+	//QList<double> spacings;
+	//for (auto tl : mTlsM) {
+	//	spacings << tl->lineSpacing();
+	//}
+
 	QList<double> spacings;
 	for (auto tl : mTlsM) {
-		spacings << tl->lineSpacing();
+		for (auto p : tl->pixels()) {
+			spacings << p->bbox().height();
+		}
 	}
 
 	return Algorithms::statMoment(spacings, 0.5);
@@ -1828,6 +1926,7 @@ RightNNConnector::RightNNConnector() : PixelConnector() {
 QVector<QSharedPointer<PixelEdge>> RightNNConnector::connect(const QVector<QSharedPointer<Pixel>>& pixels) const{
 
 	//TODO check parameter choice
+	//TODO check text width estimate computation
 
 	//parameters
 	//double maxHeightRatio = 2.5;
@@ -1848,16 +1947,23 @@ QVector<QSharedPointer<PixelEdge>> RightNNConnector::connect(const QVector<QShar
 	});
 
 	//compute average line spacing -> *0.5 = text width estimate
-	QList<double> spacings;
-	for (const QSharedPointer<Pixel>& px : pixels) {
+	//QList<double> spacings;
+	//for (const QSharedPointer<Pixel>& px : pixels) {
 
-		if (!px->stats()) {
-			qWarning() << "stats is NULL where it should not be...";
-			continue;
-		}
-		spacings << px->stats()->lineSpacing();
+	//	if (!px->stats()) {
+	//		qWarning() << "stats is NULL where it should not be...";
+	//		continue;
+	//	}
+	//	spacings << px->stats()->lineSpacing();
+	//}
+	//textWidthEstimate = (Algorithms::statMoment(spacings, 0.5))*0.5;
+
+	QList<double> spacings;
+	for (auto p : pixels) {
+		spacings << p->bbox().height();
 	}
-	textWidthEstimate = (Algorithms::statMoment(spacings, 0.5))*0.5;
+
+	textWidthEstimate = Algorithms::statMoment(spacings, 0.5);
 
 
 	for (const QSharedPointer<Pixel>& p1 : mPixels) {

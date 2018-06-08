@@ -246,22 +246,40 @@ namespace rdf {
 
 		virtual QString toString() const override;
 
-		void setMinRectsPerSpace(int minRects);
-		int minRectsPerSpace() const;
+		void setNumErosionLayers(int numErosionLayers);
+		int numErosionLayers() const;
+
+		void setMserMinArea(int mserMinArea);
+		int mserMinArea() const;
+
+		void setMserMaxArea(int mserMaxArea);
+		int mserMaxArea() const;
+
+		void setMaxImgSide(int maxImgSide);
+		int maxImgSide() const;
 
 		void setDebugDraw(bool show);
 		bool debugDraw() const;
 
+		void setScaleInput(bool show);
+		bool scaleInput() const;
+
 		void setDebugPath(const QString & dp);
 		QString debugPath() const;
-
 
 	protected:
 
 		void load(const QSettings& settings) override;
 		void save(QSettings& settings) const override;
 
-		int mMinRectsPerSpace = 15;		// the minimum number of rectangles in a row required to build a white space
+		//MSER/super pixel parameters
+		int mNumErosionLayers = 0; //must be > 0
+		int mMserMinArea = 25;
+		int mMserMaxArea = 700;
+		int mMaxImgSide = 1500;
+
+		bool mScaleInput = true;
+
 		bool mDebugDraw = true;
 		QString mDebugPath = "E:/data/test/HBR2013_training";
 	};

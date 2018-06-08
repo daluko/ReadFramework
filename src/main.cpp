@@ -209,8 +209,12 @@ int main(int argc, char** argv) {
 		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "david") {
 
 			qDebug() << "loading davids debug code";
-			rdf::WhiteSpaceTest wst(dc);
-			wst.run();
+			
+			//rdf::WhiteSpaceTest wst(dc);
+			//wst.run();
+
+			rdf::FontClassificationTest fct(dc);
+			fct.run();
 
 		}
 		// my section
@@ -240,17 +244,18 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 
 	if (dc.imagePath().isEmpty()) {
 
-		dc.setImagePath("C:/read/test/sizes/synthetic-test-small.png");
-		dc.setImagePath("C:/read/test/sizes/synthetic-test.png");
-		dc.setImagePath("C:/read/test/d6.5/0056_S_Alzgern_011-01_0056-crop.JPG");
-		dc.setImagePath("C:/read/test/d6.5/eval/P_241_27_012.jpg");
+		//dc.setImagePath("C:/read/test/sizes/synthetic-test-small.png");
+		//dc.setImagePath("C:/read/test/sizes/synthetic-test.png");
+		//dc.setImagePath("C:/read/test/d6.5/0056_S_Alzgern_011-01_0056-crop.JPG");
+		//dc.setImagePath("C:/read/test/d6.5/eval/P_241_27_012.jpg");
 
-		//dc.setImagePath("E:/data/test/HBR2013_training/00465433.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/00485679.tif"); 
-		//dc.setImagePath("E:/data/test/HBR2013_training/00456592.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/00451351.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00443033.tif");
-		dc.setImagePath("E:/data/test/HBR2013_training/00452456.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/00451351.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/00452456.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/00456592.tif");
+		dc.setImagePath("E:/data/test/HBR2013_training/00465433.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/00485679.tif"); 
+		
 		
 		//dc.setImagePath("E:/data/test/HBR2013_training/00425629.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00318461.tif");
