@@ -1754,6 +1754,9 @@ TextBlockFormation::TextBlockFormation(const cv::Mat img, const QVector<QSharedP
 
 bool TextBlockFormation::compute() {
 
+	//TODO improve polygon region output
+	//TODO split text blocks into paragraphs
+
 	if (mTextLines.isEmpty())
 		return false;
 
@@ -1868,19 +1871,140 @@ void TextBlockFormation::appendTextLines(int idx, QVector<QSharedPointer<TextLin
 }
 
 TextBlock TextBlockFormation::createTextBlock(const QVector<QSharedPointer<TextLineSet>>& lines) {
+	
+	//TODO change bounding polygon computation from qt polygon computations to openCV (qt leads to unexpected results)
+	
 	Rect bbox = Rect();
+	QPolygonF poly;
 	PixelSet pSet;
-	for (auto l : lines) {
-		pSet.append(l->pixels());
+	
+	//debug
+	cv::Mat  result3;
+	
+	for(int i = 0; i < lines.length(); i++){
 
-		if (bbox.isNull())
-			bbox = l->boundingBox();
-		else {
-			bbox = bbox.joined(l->boundingBox());
+		auto l1 = lines[i];
+		pSet.append(l1->pixels());
+
+		if (i == 0) {
+			poly = l1->convexHull().polygon();
 		}
+		else if (i > 0) {
+			
+			auto l2 = l1;
+			l1 = lines[i-1];
+
+			PixelSet mergedSet;
+			mergedSet.append(l1->pixels());
+			mergedSet.append(l2->pixels());
+			QPolygonF hull_poly = mergedSet.convexHull().polygon();
+
+			auto poly1 = l1->convexHull().polygon();
+			auto poly2 = l2->convexHull().polygon();
+
+			//compute rect containing min left and right bound the text lines
+			auto rect1 = poly1.boundingRect();
+			auto rect2 = poly2.boundingRect();
+			
+			double top = std::min(rect1.top(), rect2.top());
+			double left = std::max(rect1.left(), rect2.left());
+			double bottom = std::max(rect1.bottom(), rect2.bottom());
+			double right = std::min(rect1.right(), rect2.right());
+
+			Rect rect = Rect(left, top, right - left, bottom - top);
+			QPolygonF rect_poly = Polygon::fromRect(rect).polygon();
+
+			auto cut_poly = hull_poly.intersected(rect_poly);
+			
+			QPolygonF cut_poly1, cut_poly2;
+			cut_poly1 = cut_poly.united(poly1);
+			cut_poly2 = cut_poly.united(poly2);
+			QPolygonF cut_poly_final = cut_poly1.united(cut_poly2);
+
+			//final merged polygon
+			poly = poly.united(cut_poly_final);
+
+			//////////debug images
+
+			//QImage qImg(Image::mat2QImage(mImg));
+			//QPainter painter(&qImg);
+
+			//painter.setPen(ColorManager::lightGray());
+			//painter.drawPolygon(poly1);
+			//painter.drawPolygon(poly2);
+
+			//painter.setPen(ColorManager::blue());
+			//painter.drawPolygon(hull_poly);
+			//
+			//painter.setPen(ColorManager::darkGray());
+			//painter.drawPolygon(rect_poly);
+
+			//painter.setPen(ColorManager::red());
+			//painter.drawPolygon(cut_poly);
+
+			//cv::Mat  result = Image::qImage2Mat(qImg);
+			//painter.end();
+
+			////////////
+
+			//QImage qImg4(Image::mat2QImage(mImg));
+			//painter.begin(&qImg4);
+
+			//painter.setPen(ColorManager::red());
+			//painter.drawPolygon(cut_poly);
+
+			//cv::Mat  result4 = Image::qImage2Mat(qImg4);
+			//painter.end();
+
+			//////////////////
+
+			//QImage qImg1(Image::mat2QImage(mImg));
+			//painter.begin(&qImg1);
+
+			//painter.setPen(ColorManager::blue());
+			//painter.drawPolygon(cut_poly1);
+
+			//cv::Mat  result1 = Image::qImage2Mat(qImg1);
+			//painter.end();
+
+			/////////////////
+
+			//QImage qImg2(Image::mat2QImage(mImg));
+			//painter.begin(&qImg2);
+
+			//painter.setPen(ColorManager::blue());
+			//painter.drawPolygon(cut_poly2);
+
+			//cv::Mat  result2 = Image::qImage2Mat(qImg2);
+			//painter.end();
+
+			//////////////////
+
+			//QImage qImg3(Image::mat2QImage(mImg));
+			//painter.begin(&qImg3);
+
+			//painter.setPen(ColorManager::blue());
+			//painter.drawPolygon(poly);
+
+			//result3 = Image::qImage2Mat(qImg3);
+			//painter.end();
+		}
+		
+		//if (bbox.isNull()) {
+		//	bbox = l->boundingBox();
+		//	poly = l->convexHull();
+		//}
+
+		//else {
+		//	Polygon()
+		//	poly = l->convexHull() poly.toPoints();
+		//	bbox = bbox.joined(l->boundingBox());
+		//}
 	}
 
-	TextBlock tb(Polygon::fromRect(bbox));
+	//poly = pSet.convexHull();
+	TextBlock tb(poly);
+
 	tb.setTextLines(lines);
 	tb.addPixels(pSet);
 
