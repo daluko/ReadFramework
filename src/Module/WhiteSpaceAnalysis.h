@@ -296,6 +296,7 @@ namespace rdf {
 
 		QVector<QSharedPointer<TextRegion>> textLineRegions() const;
 		QSharedPointer<Region> textBlockRegions() const;
+		QVector<QSharedPointer<Region>> evalTextBlockRegions() const;
 
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
 		QString toString() const override;

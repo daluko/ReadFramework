@@ -208,7 +208,7 @@ bool WhiteSpaceAnalysis::compute() {
 	}
 
 	auto  textLines = tlh.textLineSets();
-	qInfo() << "Computed text line hypotheses.";
+	qInfo() << "Finished text line hypotheses.";
 	qInfo() << "Number of text lines is " << tlh.textLineSets().size();
 
 	mTextLineHypotheses = textLines;
@@ -426,6 +426,19 @@ QVector<QSharedPointer<TextRegion>> WhiteSpaceAnalysis::textLineRegions() const{
 
 QSharedPointer<Region> WhiteSpaceAnalysis::textBlockRegions() const {
 	return mTextBlockRegions;
+}
+
+QVector<QSharedPointer<Region>> WhiteSpaceAnalysis::evalTextBlockRegions() const {
+	
+	QVector<QSharedPointer<Region>> evalRegions;
+
+	for (auto tb : mTextBlockRegions->children()) {
+		tb->removeAllChildren();
+		tb->setId("cvl-" + tb->id().remove("{").remove("}"));	//try to please aletheia input
+		evalRegions << tb;
+	}
+	
+	return evalRegions;
 }
 
 cv::Mat WhiteSpaceAnalysis::draw(const cv::Mat & img, const QColor& col) const {
@@ -853,7 +866,9 @@ void TextLineHypothisizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 
 	for (auto ul : unstableLines) {
 		int idx = textLines.indexOf(ul);
-		textLines.remove(idx);
+		
+		if(idx!=-1)
+			textLines.remove(idx);
 	}
 
 	qInfo() << "Merged " << unstableLines.size() << " unstable text lines.";
@@ -1511,7 +1526,6 @@ bool WhiteSpaceSegmentation::findWhiteSpaceRuns(const PixelGraph pg) {
 				//qInfo() << "fR = " << fR.toString();
 				//qInfo() << "sR = " << sR.toString();
 
-
 				if (fR.bottom() < sR.top()) {
 
 					QSharedPointer<WhiteSpaceRun> wsr = QSharedPointer<WhiteSpaceRun>::create();
@@ -1519,23 +1533,30 @@ bool WhiteSpaceSegmentation::findWhiteSpaceRuns(const PixelGraph pg) {
 
 					auto p = bcrEdges[idx]->second();
 					int nextBCR_idx = mBcrM.indexOf(qSharedPointerCast<WhiteSpacePixel>(p));
-					auto ws_tmp1 = mBcrM.at(nextBCR_idx);
 
+					//TODO simplify this section
 					while (true) {
-						auto ws_tmp2 = mBcrM.at(nextBCR_idx);
-						wsr->add(ws_tmp2);
-						int downCount2 = udCount.value(ws_tmp2->id())[1];
+						auto ws_tmp = mBcrM.at(nextBCR_idx);
+						nextBCR_idx = -1;
 
+						wsr->add(ws_tmp);
+						int downCount2 = udCount.value(ws_tmp->id())[1];
+						
 						//trace white space run further
 						if (downCount2 == 1) {
 
-							for (int idx2 : edgeIndices.value(ws_tmp2->id())) {
+							for (int idx2 : edgeIndices.value(ws_tmp->id())) {
 								Rect fR2 = bcrEdges[idx2]->first()->bbox();
 								Rect sR2 = bcrEdges[idx2]->second()->bbox();
 								if (fR2.bottom() < sR2.top()) {
 									auto ws_tmp3 = qSharedPointerCast<WhiteSpacePixel>(bcrEdges[idx2]->second());
 									nextBCR_idx = mBcrM.indexOf(ws_tmp3);
+									continue;
 								}
+							}
+							if (nextBCR_idx == -1) {
+								qWarning() << "Couldn't find next element of white space run.";
+								break;
 							}
 						}
 						else   //reached end of white space run
@@ -1877,6 +1898,12 @@ TextBlock TextBlockFormation::createTextBlock(const QVector<QSharedPointer<TextL
 	Rect bbox = Rect();
 	QPolygonF poly;
 	PixelSet pSet;
+
+	QImage qPolyImg (mImg.size().width, mImg.size().height, QImage::Format_RGB888);
+	qPolyImg.fill(QColor(0, 0, 0));
+	QPainter painter(&qPolyImg);
+	painter.setPen(QColor(255, 255, 255));
+	painter.setBrush(QColor(255, 255, 255));
 	
 	//debug
 	cv::Mat  result3;
@@ -1888,6 +1915,7 @@ TextBlock TextBlockFormation::createTextBlock(const QVector<QSharedPointer<TextL
 
 		if (i == 0) {
 			poly = l1->convexHull().polygon();
+			painter.drawPolygon(poly);
 		}
 		else if (i > 0) {
 			
@@ -1915,92 +1943,34 @@ TextBlock TextBlockFormation::createTextBlock(const QVector<QSharedPointer<TextL
 			QPolygonF rect_poly = Polygon::fromRect(rect).polygon();
 
 			auto cut_poly = hull_poly.intersected(rect_poly);
-			
-			QPolygonF cut_poly1, cut_poly2;
-			cut_poly1 = cut_poly.united(poly1);
-			cut_poly2 = cut_poly.united(poly2);
-			QPolygonF cut_poly_final = cut_poly1.united(cut_poly2);
 
-			//final merged polygon
-			poly = poly.united(cut_poly_final);
+			//QPolygonF cut_poly1, cut_poly2;
+			//cut_poly1 = cut_poly.united(poly1);
+			//cut_poly2 = cut_poly.united(poly2);
+			//QPolygonF cut_poly_final = cut_poly1.united(cut_poly2);
 
-			//////////debug images
+			////final merged polygon
+			//poly = poly.united(cut_poly_final);
 
-			//QImage qImg(Image::mat2QImage(mImg));
-			//QPainter painter(&qImg);
-
-			//painter.setPen(ColorManager::lightGray());
-			//painter.drawPolygon(poly1);
-			//painter.drawPolygon(poly2);
-
-			//painter.setPen(ColorManager::blue());
-			//painter.drawPolygon(hull_poly);
-			//
-			//painter.setPen(ColorManager::darkGray());
-			//painter.drawPolygon(rect_poly);
-
-			//painter.setPen(ColorManager::red());
-			//painter.drawPolygon(cut_poly);
-
-			//cv::Mat  result = Image::qImage2Mat(qImg);
-			//painter.end();
-
-			////////////
-
-			//QImage qImg4(Image::mat2QImage(mImg));
-			//painter.begin(&qImg4);
-
-			//painter.setPen(ColorManager::red());
-			//painter.drawPolygon(cut_poly);
-
-			//cv::Mat  result4 = Image::qImage2Mat(qImg4);
-			//painter.end();
-
-			//////////////////
-
-			//QImage qImg1(Image::mat2QImage(mImg));
-			//painter.begin(&qImg1);
-
-			//painter.setPen(ColorManager::blue());
-			//painter.drawPolygon(cut_poly1);
-
-			//cv::Mat  result1 = Image::qImage2Mat(qImg1);
-			//painter.end();
-
-			/////////////////
-
-			//QImage qImg2(Image::mat2QImage(mImg));
-			//painter.begin(&qImg2);
-
-			//painter.setPen(ColorManager::blue());
-			//painter.drawPolygon(cut_poly2);
-
-			//cv::Mat  result2 = Image::qImage2Mat(qImg2);
-			//painter.end();
-
-			//////////////////
-
-			//QImage qImg3(Image::mat2QImage(mImg));
-			//painter.begin(&qImg3);
-
-			//painter.setPen(ColorManager::blue());
-			//painter.drawPolygon(poly);
-
-			//result3 = Image::qImage2Mat(qImg3);
-			//painter.end();
+			painter.drawPolygon(poly2);
+			painter.drawPolygon(cut_poly);
 		}
-		
-		//if (bbox.isNull()) {
-		//	bbox = l->boundingBox();
-		//	poly = l->convexHull();
-		//}
-
-		//else {
-		//	Polygon()
-		//	poly = l->convexHull() poly.toPoints();
-		//	bbox = bbox.joined(l->boundingBox());
-		//}
 	}
+
+	cv::Mat polyImg = Image::qImage2Mat(qPolyImg);
+	cvtColor(polyImg, polyImg, cv::COLOR_RGB2GRAY);
+
+	std::vector<std::vector<cv::Point>> contours;
+	cv::findContours(polyImg, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+
+	//debug
+	//cv::Mat contour_img = cv::Mat::zeros(mImg.size().height, mImg.size().width, CV_8UC1);
+	//cv::fillPoly(contour_img, contours, 255, 8);
+
+	if (contours.size() > 1)
+		qWarning() << "Found more than one contour element for a single text block. Using only the first one.";
+
+	poly = Polygon::fromCvPoints(contours[0]).polygon();
 
 	//poly = pSet.convexHull();
 	TextBlock tb(poly);
@@ -2307,7 +2277,7 @@ QVector<QSharedPointer<PixelEdge>> WSConnector::connect(const QVector<QSharedPoi
 		}
 	}
 
-	qInfo() << "Found #" << edges.size() << " white space edges";
+	//qInfo() << "Found #" << edges.size() << " white space edges";
 	return edges;
 }
 

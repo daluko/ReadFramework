@@ -60,7 +60,7 @@ WhiteSpaceTest::WhiteSpaceTest(const DebugConfig & config) {
 }
 
 void WhiteSpaceTest::run() {
-	
+
 	qDebug() << "Running White Space Analysis test...";
 	
 	Timer dt;
@@ -72,6 +72,27 @@ void WhiteSpaceTest::run() {
 		qInfo() << mConfig.imagePath() << "loaded...";
 	else
 		qInfo() << mConfig.imagePath() << "NOT loaded...";
+
+
+	//QImage qPolyImg(qImg.size(), QImage::Format_RGB888);
+	////QImage qPolyImg(qImg.size(), QImage::Format_Mono);
+	//qPolyImg.fill(QColor(0, 0, 0));
+
+	//QRect r(0, 0, 100, 100);
+	//QPainter painter(&qPolyImg);
+	//painter.setPen(QColor(255, 255, 255));
+	//painter.setBrush(QColor(255, 255, 255));
+	//painter.drawRect(r);
+
+	//cv::Mat polyImg = Image::qImage2Mat(qPolyImg.convertToFormat(QImage::Format_Mono));
+	//cvtColor(polyImg, polyImg, cv::COLOR_RGB2GRAY);
+
+	//std::vector<std::vector<cv::Point>> contours;
+	//cv::findContours(polyImg, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+
+	////debug 
+	//cv::Mat contour_img = cv::Mat::zeros(imgCv.size().height, imgCv.size().width, CV_8UC1);
+	//cv::fillPoly(contour_img, contours, 255, 8);
 
 	WhiteSpaceAnalysis wsa(imgCv);
 	wsa.compute();
@@ -106,12 +127,20 @@ void WhiteSpaceTest::run() {
 	//add results to xml
 	xmlPage->rootRegion()->removeAllChildren();
 	xmlPage->rootRegion()->addChild(wsa.textBlockRegions());
-	//for (auto tr : wsa.textBlocks()) {
-	//	xmlPage->rootRegion()->addChild(tr);
-	//}
-	
+
 
 	parser.write(xmlPath, xmlPage);
+
+	////-------------------------eval xml text block regions
+	xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.imagePath());
+	xml_found = parser.read(xmlPath);
+	
+	xmlPage->rootRegion()->removeAllChildren();
+	for (auto tr : wsa.evalTextBlockRegions()) {
+		xmlPage->rootRegion()->addChild(tr);
+	}
+	parser.write(xmlPath, xmlPage);
+
 }
 
 FontClassificationTest::FontClassificationTest(const DebugConfig & config) {
