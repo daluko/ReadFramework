@@ -383,6 +383,7 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 	removeIDs.clear();
 
 	//filter overlapping pixels---------------------------------------------------------
+	//TODO remove and/or speed up this process
 	for (auto p1 : set.pixels()) {
 
 		if (removeIDs.contains(p1->id()))
@@ -827,7 +828,6 @@ bool TextLineHypothisizer::processEdge(const QSharedPointer<PixelEdge>& e, QVect
 	}
 	// merge to same text line
 	else if (mergeTextLines(textLines[psIdx1], textLines[psIdx2])) {
-
 		textLines[psIdx2]->append(textLines[psIdx1]->pixels());
 		textLines.remove(psIdx1);
 		updated = true;
@@ -1096,8 +1096,6 @@ bool TextLineHypothisizer::compute(){
 	pg.connect(rnnpc, PixelGraph::sort_edges);
 	
 	mPg = pg; //debug drawing, remove later
-
-	clusterTextLines(pg);
 
 	mTextLines = clusterTextLines(pg);
 	mergeUnstableTextLines(mTextLines);
@@ -1893,8 +1891,6 @@ void TextBlockFormation::appendTextLines(int idx, QVector<QSharedPointer<TextLin
 
 TextBlock TextBlockFormation::createTextBlock(const QVector<QSharedPointer<TextLineSet>>& lines) {
 	
-	//TODO change bounding polygon computation from qt polygon computations to openCV (qt leads to unexpected results)
-	
 	Rect bbox = Rect();
 	QPolygonF poly;
 	PixelSet pSet;
@@ -2091,7 +2087,7 @@ QVector<QSharedPointer<PixelEdge>> RightNNConnector::connect(const QVector<QShar
 			}
 		}
 		
-		//sort neighboring pixels according to their distance
+		//sort neighboring pixels from left to right
 		std::sort(rnn.begin(), rnn.end(), [](const auto& lhs, const auto& rhs) {
 			return lhs->center().x() < rhs->center().x();
 			//return lhs->bbox().left() < rhs->bbox().left();

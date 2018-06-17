@@ -68,4 +68,15 @@ protected:
 	DebugConfig mConfig;
 };
 
+class TextHeightEstimationTest {
+
+public:
+	TextHeightEstimationTest(const DebugConfig& config = DebugConfig());
+
+	void TextHeightEstimationTest::run();
+
+protected:
+	DebugConfig mConfig;
+};
+
 }

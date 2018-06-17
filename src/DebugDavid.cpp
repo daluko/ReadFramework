@@ -36,6 +36,7 @@
 #include "SuperPixel.h"
 #include "WhiteSpaceAnalysis.h"
 #include "FontStyleClassification.h"
+#include "TextHeightEstimation.h"
 #include "PageParser.h"
 #include "Elements.h"
 #include "ElementsHelper.h"
@@ -55,6 +56,32 @@
 
 namespace rdf {
 
+TextHeightEstimationTest::TextHeightEstimationTest(const DebugConfig & config) {
+	mConfig = config;
+}
+
+void TextHeightEstimationTest::run() {
+
+	qDebug() << "Running text height estimation test...";
+
+	Timer dt;
+
+	QImage qImg(mConfig.imagePath());
+	cv::Mat imgCv = Image::qImage2Mat(qImg);
+
+	if (imgCv.empty()) {
+		qInfo() << mConfig.imagePath() << "NOT loaded...";
+		return;
+	}
+
+	TextHeightEstimation the(imgCv);
+	the.compute();
+
+	cv::Mat img_result = the.draw(imgCv);
+	QString imgPath = Utils::createFilePath(mConfig.imagePath(), "_the_results", "png");
+	Image::save(img_result, imgPath);
+}
+	
 WhiteSpaceTest::WhiteSpaceTest(const DebugConfig & config) {
 	mConfig = config;
 }
@@ -72,27 +99,6 @@ void WhiteSpaceTest::run() {
 		qInfo() << mConfig.imagePath() << "loaded...";
 	else
 		qInfo() << mConfig.imagePath() << "NOT loaded...";
-
-
-	//QImage qPolyImg(qImg.size(), QImage::Format_RGB888);
-	////QImage qPolyImg(qImg.size(), QImage::Format_Mono);
-	//qPolyImg.fill(QColor(0, 0, 0));
-
-	//QRect r(0, 0, 100, 100);
-	//QPainter painter(&qPolyImg);
-	//painter.setPen(QColor(255, 255, 255));
-	//painter.setBrush(QColor(255, 255, 255));
-	//painter.drawRect(r);
-
-	//cv::Mat polyImg = Image::qImage2Mat(qPolyImg.convertToFormat(QImage::Format_Mono));
-	//cvtColor(polyImg, polyImg, cv::COLOR_RGB2GRAY);
-
-	//std::vector<std::vector<cv::Point>> contours;
-	//cv::findContours(polyImg, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
-
-	////debug 
-	//cv::Mat contour_img = cv::Mat::zeros(imgCv.size().height, imgCv.size().width, CV_8UC1);
-	//cv::fillPoly(contour_img, contours, 255, 8);
 
 	WhiteSpaceAnalysis wsa(imgCv);
 	wsa.compute();
@@ -115,9 +121,7 @@ void WhiteSpaceTest::run() {
 		xmlPage->rootRegion()->addChild(tr);
 	}
 
-	//write xml file	
 	parser.write(xmlPath, xmlPage);
-
 
 	////-------------------------xml text blocks
 	xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.outputPath());
@@ -127,8 +131,6 @@ void WhiteSpaceTest::run() {
 	//add results to xml
 	xmlPage->rootRegion()->removeAllChildren();
 	xmlPage->rootRegion()->addChild(wsa.textBlockRegions());
-
-
 	parser.write(xmlPath, xmlPage);
 
 	////-------------------------eval xml text block regions
