@@ -120,7 +120,6 @@ void WhiteSpaceTest::run() {
 	for (auto tr : wsa.textLineRegions()) {
 		xmlPage->rootRegion()->addChild(tr);
 	}
-
 	parser.write(xmlPath, xmlPage);
 
 	////-------------------------xml text blocks

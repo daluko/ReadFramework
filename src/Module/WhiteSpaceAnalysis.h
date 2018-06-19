@@ -135,19 +135,6 @@ namespace rdf {
 		double mLineSpacing = 0;
 	};
 
-	/// <summary>
-	/// Connects pixels to their nearest neighbor in horizontal and vertical direction.
-	/// </summary>
-	/// <seealso cref="PixelConnector" />
-	class DllCoreExport NNConnector : public PixelConnector {
-
-	public:
-		NNConnector();
-		virtual QVector<QSharedPointer<PixelEdge> > connect(const QVector<QSharedPointer<Pixel> >& pixels) const override;
-
-	protected:
-	};
-
 	class DllCoreExport TextLineHypothisizerConfig : public ModuleConfig {
 
 	public:
@@ -198,7 +185,7 @@ namespace rdf {
 		bool checkInput() const override;
 		QVector<QSharedPointer<WSTextLineSet> > clusterTextLines(const PixelGraph& graph) const;
 		int findSetIndex(const QSharedPointer<Pixel>& pixel, const QVector<QSharedPointer<WSTextLineSet> >& sets) const;
-		bool addPixel(QSharedPointer<WSTextLineSet>& set, const QSharedPointer<Pixel>& pixel) const;
+		bool addPixel(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<PixelEdge> &e) const;
 		bool mergeTextLines(const QSharedPointer<WSTextLineSet>& tls1, const QSharedPointer<WSTextLineSet>& tls2) const;
 		bool processEdge(const QSharedPointer<PixelEdge>& edge, QVector<QSharedPointer<WSTextLineSet>>& textLines) const;
 		void mergeUnstableTextLines(QVector<QSharedPointer<WSTextLineSet> >& textLines) const;
@@ -275,12 +262,12 @@ namespace rdf {
 		//MSER/super pixel parameters
 		int mNumErosionLayers = 0; //must be > 0
 		int mMserMinArea = 25;
-		int mMserMaxArea = 700;
+		int mMserMaxArea = 500;
 		int mMaxImgSide = 1500;
 
 		bool mScaleInput = true;
 
-		bool mDebugDraw = false;
+		bool mDebugDraw = true;
 		QString mDebugPath = "E:/data/test/HBR2013_training";
 	};
 	

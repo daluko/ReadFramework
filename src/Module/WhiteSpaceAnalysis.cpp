@@ -144,6 +144,7 @@ namespace rdf {
 // WhiteSpaceAnalysis --------------------------------------------------------------------
 WhiteSpaceAnalysis::WhiteSpaceAnalysis(const cv::Mat& img) {
 	mImg = img;
+	mTextBlockRegions = QSharedPointer<Region>::create();
 
 	mConfig = QSharedPointer<WhiteSpaceAnalysisConfig>::create();
 	mConfig->loadSettings();
@@ -166,9 +167,11 @@ bool WhiteSpaceAnalysis::compute() {
 	cv::Mat inputImg = mImg;
 	Timer dt;
 
+	ScaleFactory& sf  = ScaleFactory::instance();
+
 	if(config()->scaleInput()){
 		int maxImgSide = config()->maxImgSide();
-		ScaleFactory& sf = ScaleFactory::instance();
+		sf = ScaleFactory::instance();
 		sf.config()->setMaxImageSide(maxImgSide);
 		sf.init(mImg.size());
 
@@ -243,11 +246,18 @@ bool WhiteSpaceAnalysis::compute() {
 	if(config()->debugDraw()){
 		drawDebugImages(mImg);
 	}
-	
+
 	// scale back to original coordinates
 	if (config()->scaleInput()) {
-		ScaleFactory::scaleInv(mTextBlockSet);
+		int maxImgSide = config()->maxImgSide();
+		sf = ScaleFactory::instance();
+		sf.config()->setMaxImageSide(maxImgSide);
+		sf.init(inputImg.size());
+
+		sf.scaleInv(mTextBlockSet);
+		//ScaleFactory::scaleInv(mTextBlockSet);
 	}
+
 	mTextBlockRegions = mTextBlockSet.toTextRegion();
 
 	return true;
@@ -263,6 +273,9 @@ SuperPixel WhiteSpaceAnalysis::computeSuperPixels(const cv::Mat & img){
 	int numErosionLayers = config()->numErosionLayers(); //must be > 0
 	int mserMinArea = config()->mserMinArea();
 	int mserMaxArea = config()->mserMaxArea();
+
+	//Text Spotter params
+	//MSER ms(10, (int)(0.00002*mser_img.cols*mser_img.rows), (int)(0.05*mser_img.cols*mser_img.rows), 1, 0.7);;
 
 	// compute super pixels
 	SuperPixel sp = SuperPixel(img);
@@ -358,10 +371,8 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 
 	Rect lsR(0, 0, wLimit, hLimit);
 	qInfo() << "average height rect = " << lsR.toString();
+
 	for (auto p : set.pixels()) {
-		//if (p->bbox().height() > hLimit || p->bbox().width() > wLimit) {
-		//	removeIDs << p->id();
-		//}
 
 		if (p->bbox().height() < lbh || p->bbox().width() < lbw) {
 			removeIDs << p->id();
@@ -384,18 +395,34 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 
 	//filter overlapping pixels---------------------------------------------------------
 	//TODO remove and/or speed up this process
-	for (auto p1 : set.pixels()) {
+
+	Timer dt;
+	auto set_ = set.pixels();
+	std::sort(set_.begin(), set_.end(), [](const auto& lhs, const auto& rhs) {
+		return lhs->bbox().top() < rhs->bbox().top();
+	});
+
+	for (auto p1 : set_) {
 
 		if (removeIDs.contains(p1->id()))
 			continue;
 
-		for (auto p2 : set.pixels()) {
+		//for (auto p2 : set_) {
+
+		for (int i = set_.indexOf(p1)+1; i < set_.size(); i++){
+			auto p2 = set_.at(i);
 
 			if (p1 == p2)
 				continue;
 
 			if (removeIDs.contains(p2->id()))
 				continue;
+
+			if (p1->bbox().top() > p2->bbox().top())
+				continue;
+
+			if (p1->bbox().bottom() < p2->bbox().top())
+				break;
 
 			if (p1->bbox().contains(p2->bbox())) {
 				removeIDs << p1->id();
@@ -410,14 +437,19 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 		set.remove(set.find(id));
 	}
 
+	qDebug() << "Removing overlapping pixles takes: " << dt;
+
 	return lsR;
 }
 
 QVector<QSharedPointer<TextRegion>> WhiteSpaceAnalysis::textLineRegions() const{
 
-	QVector<QSharedPointer<TextRegion>>mTextLineRegions;
-
+	QVector<QSharedPointer<TextRegion>> mTextLineRegions;
 	QVector<QSharedPointer<Region> > textRegions = RegionManager::filter<Region>(mTextBlockRegions, Region::type_text_line);
+	
+	if (textRegions.isEmpty())
+		return mTextLineRegions;
+
 	for (auto tr : textRegions) {
 		mTextLineRegions << qSharedPointerCast<TextRegion>(tr);
 	}
@@ -675,119 +707,53 @@ QVector<QSharedPointer<WSTextLineSet>> TextLineHypothisizer::clusterTextLines(co
 	for (int i = graph.edges().length() - 1; i >= 0; --i) {
 		auto e = graph.edges().at(i);
 
-		if (inEdges.value(e->second()->id()).size() > 1) {
-			forkEdges << e;
-			continue;
-		}
+		//if (inEdges.value(e->second()->id()).size() > 1) {
+		//	forkEdges << e;
+		//	continue;
+		//}
 
 		/*qInfo() << "Line length = " << e->edge().length() << "  -  Line weight = " << e->edgeWeightConst();*/
 		updated = processEdge(e, textLines);
 	}
 
-	//process pixels representing forks
-	for (auto p : graph.set().pixels()) {
+	////process pixels representing forks
+	//for (auto p : graph.set().pixels()) {
 
-		if (inEdges.value(p->id()).size() > 1) {	// inEdges > 1 -> fork
+	//	if (inEdges.value(p->id()).size() > 1) {	// inEdges > 1 -> fork
 
-			int mergeIdx = -1;
-			int maxSize = -1;
+	//		int mergeIdx = -1;
+	//		int maxSize = -1;
 
-			//find longest set connected to fork (best match for merging)
-			for (auto pID : inEdges.value(p->id())) {
-				auto first = graph.set().find(pID);
-				int tmpIdx = findSetIndex(first, textLines);
+	//		//find longest set connected to fork (best match for merging)
+	//		for (auto pID : inEdges.value(p->id())) {
+	//			auto first = graph.set().find(pID);
+	//			int tmpIdx = findSetIndex(first, textLines);
 
-				if (tmpIdx != -1) {
-					int psSize = textLines[tmpIdx]->size();
+	//			if (tmpIdx != -1) {
+	//				int psSize = textLines[tmpIdx]->size();
 
-					if (psSize > maxSize) {
-						maxSize = psSize;
-						mergeIdx = tmpIdx;
-					}
-				}
-			}
-				
-			if (mergeIdx == -1) {
-				qWarning() << "Failed to cluster text regions in TextLineHypothisizer.";
-				continue;
-			}
+	//				if (psSize > maxSize) {
+	//					maxSize = psSize;
+	//					mergeIdx = tmpIdx;
+	//				}
+	//			}
+	//		}
+	//			
+	//		if (mergeIdx == -1) {
+	//			qWarning() << "Failed to cluster text regions in TextLineHypothisizer.";
+	//			continue;
+	//		}
 
-			int forkSetIdx = findSetIndex(p, textLines);
-			if (forkSetIdx == -1) {	//TODO handle cases where idx = -1 (pixel not in a set)
-				textLines[mergeIdx]->add(p);
-			}
-			else {
-				textLines[mergeIdx]->append(textLines[forkSetIdx]->pixels());
-				textLines.remove(forkSetIdx);
-			}
-		}
-	}
-
-		//for (auto e : forkEdges) {
-		//	
-		//	int psIdx1 = findSetIndex(e->first(), textLines);
-		//	int psIdx2 = findSetIndex(e->second(), textLines);
-
-		//	// create a new text line
-		//	if (psIdx1 == psIdx1) {
-		//		if (psIdx1 == -1) {
-		//			QVector<QSharedPointer<Pixel> > px;
-		//			px << e->first();
-		//			px << e->second();
-		//			textLines << QSharedPointer<TextLineSet>::create(px);
-		//			updated = true;
-		//		}
-		//	}
-		//	else if (psIdx2 == -1) {
-		//		double maxErr = textLines[psIdx1]->error() * config()->errorMultiplier();
-		//		double nErr = textLines[psIdx1]->line().distance(e->second()->center());
-
-		//		if (nErr < maxErr)
-		//			textLines[psIdx1]->add(e->second());
-		//		else {
-		//			QSharedPointer<TextLineSet> tls = QSharedPointer<TextLineSet>::create();
-		//			tls->add(e->second());
-		//			textLines << tls;
-		//		}
-		//	}
-		//	// merge one pixel
-		//	else if (psIdx1 == -1) {
-		//		double maxErr = textLines[psIdx2]->error() * config()->errorMultiplier();
-		//		double nErr = textLines[psIdx1]->line().distance(e->first()->center());
-		//			
-		//		if(nErr < maxErr)
-		//			textLines[psIdx2]->add(e->first());
-		//		else {
-		//			QSharedPointer<TextLineSet> tls = QSharedPointer<TextLineSet>::create();
-		//			tls->add(e->first());
-		//			textLines << tls;
-		//		}
-		//	}
-		//	// merge to same text line
-		//	else if (mergeTextLines(textLines[psIdx1], textLines[psIdx2])) {
-
-		//		//textLines[psIdx2]->append(textLines[psIdx1]->pixels());
-		//		//textLines.remove(psIdx1);
-		//		//updated = true;
-
-		//		//QSharedPointer<TextLineSet> tls1 = textLines[psIdx1];
-		//		//QSharedPointer<TextLineSet> tls2 = textLines[psIdx2];
-
-		//		//// do not create vertical lines
-		//		//if (tls1->line().length() < config()->minLineLength() ||
-		//		//	tls2->line().length() < config()->minLineLength())
-		//		//	return true;
-
-		//		//double maxErr1 = tls1->error() * config()->errorMultiplier();
-		//		//double maxErr2 = tls2->error() * config()->errorMultiplier();
-
-		//		//double nErr1 = tls1->computeError(tls2->centers());
-		//		//double nErr2 = tls2->computeError(tls1->centers());
-
-		//		////return nErr1 < maxErr1 && nErr2 < maxErr2;
-		//		//return nErr1 < maxErr1 || nErr2 < maxErr2;
-		//	}
-		//}
+	//		int forkSetIdx = findSetIndex(p, textLines);
+	//		if (forkSetIdx == -1) {	//TODO handle cases where idx = -1 (pixel not in a set)
+	//			textLines[mergeIdx]->add(p);
+	//		}
+	//		else {
+	//			textLines[mergeIdx]->append(textLines[forkSetIdx]->pixels());
+	//			textLines.remove(forkSetIdx);
+	//		}
+	//	}
+	//}
 
 	return textLines;
 }
@@ -814,14 +780,14 @@ bool TextLineHypothisizer::processEdge(const QSharedPointer<PixelEdge>& e, QVect
 	// merge one pixel
 	else if (psIdx2 == -1) {
 
-		if (addPixel(textLines[psIdx1], e->second())) {
+		if (addPixel(textLines[psIdx1], e)) {
 			textLines[psIdx1]->add(e->second());
 			updated = true;
 		}
 	}
 	// merge one pixel
 	else if (psIdx1 == -1) {
-		if (addPixel(textLines[psIdx2], e->first())) {
+		if (addPixel(textLines[psIdx2], e)) {
 			textLines[psIdx2]->add(e->first());
 			updated = true;
 		}
@@ -1003,7 +969,7 @@ void TextLineHypothisizer::extractWhiteSpaces(QSharedPointer<WSTextLineSet>& tex
 	textLine->setWhiteSpacePixels(whiteSpaces);
 }
 
-int TextLineHypothisizer::findSetIndex(const QSharedPointer<Pixel>& pixel, const QVector<QSharedPointer<WSTextLineSet>>& sets) const{
+int TextLineHypothisizer::findSetIndex(const QSharedPointer<Pixel> &pixel, const QVector<QSharedPointer<WSTextLineSet>> &sets) const{
 
 	assert(pixel);
 
@@ -1017,33 +983,31 @@ int TextLineHypothisizer::findSetIndex(const QSharedPointer<Pixel>& pixel, const
 	return -1;
 }
 
-bool TextLineHypothisizer::addPixel(QSharedPointer<WSTextLineSet>& set, const QSharedPointer<Pixel>& pixel) const{
+bool TextLineHypothisizer::addPixel(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<PixelEdge> &e) const{
 
 	//TODO add additional check to avoid merging neighboring text lines
 	//TODO consider additional condition for max distance between pixels
-	//find estimate of line spacing or average text component height
-	//can be used to limit search range or imply additional condition for connnecting pixels
 
-	//Rect p1R = p1->bbox();
-	//Rect p2R = p2->bbox();
+	double maxHeightRatio = 3.0;
+	double minVertOverlapRatio = 0.33;
 
-	////check height ratio
-	//double hRatio = p1R.height() / p2R.height();
+	//filter pixel according to x/y overlap
+	Rect p1R = e->first()->bbox();
+	Rect p2R = e->second()->bbox();
 
-	//if (0.4 < hRatio && hRatio < 2.5) {
+	//check height ratio
+	double heightRatio = p1R.height() / p2R.height();
 
-	//	//check if relative y-overlap is bigger than 1/3 of bigger component
-	//	double yOverlap = std::min(p1R.bottom(), p2R.bottom()) - std::max(p1R.top(), p2R.top());
-	//	double relYoverlap = yOverlap / std::max(p1R.height(), p2R.height());
+	if ((1 / maxHeightRatio) < heightRatio && heightRatio < maxHeightRatio) {
 
-	//	if (yOverlap > 0 && relYoverlap > (0.33)) {
-	//		return true;
-	//	}
-	//}
+		//check if relative y-overlap is bigger than 1/3 of bigger component
+		double yOverlap = std::min(p1R.bottom(), p2R.bottom()) - std::max(p1R.top(), p2R.top());
+		double relYoverlap = yOverlap / std::max(p1R.height(), p2R.height());
 
-
-	//if (set->line().length() < 10)
-	//	return true;
+		if (yOverlap > 0 && relYoverlap > (minVertOverlapRatio)) {
+			return true;
+		}
+	}
 
 	//double mErr = set->error() * config()->errorMultiplier();
 	//double newErr = set->line().distance(pixel->center());
@@ -1058,6 +1022,14 @@ bool TextLineHypothisizer::mergeTextLines(const QSharedPointer<WSTextLineSet>& t
 	// do not merge one and the same textline
 	if (tls1 == tls2)
 		return false;
+
+	if (tls1->boundingBox().intersects(tls2->boundingBox())) {
+		
+		//TODO handle cases with overlapping areas of text lines
+			//forks
+			//overlapping due to failed linking, or dangling text elements/symbols
+		return false;
+	}
 
 	//// do not create vertical lines
 	//if (tls1->line().length() < config()->minLineLength() ||
@@ -1117,9 +1089,15 @@ bool TextLineHypothisizer::compute(){
 		extractWhiteSpaces(tl);
 	}
 
-	//debug draw
+	////debug draw
+	//cv::Mat result_tmp = drawTextLineHypotheses(mImg);
+	//cv::Mat result_tmp2 = drawGraphEdges(mImg);
+	//
 	//QString imgPath = Utils::createFilePath("E:/data/test/HBR2013_training/debug.tif", "_textLineHypotheses_debug");
-	//Image::save(drawTextLineHypotheses(mImg), imgPath);
+	//Image::save(result_tmp, imgPath);
+
+	//imgPath = Utils::createFilePath("E:/data/test/HBR2013_training/debug.tif", "_textLineHypotheses_debug2");
+	//Image::save(result_tmp2, imgPath);
 
 	return true;
 }
@@ -1167,19 +1145,20 @@ cv::Mat TextLineHypothisizer::drawGraphEdges(const cv::Mat& img, const QColor& c
 
 cv::Mat TextLineHypothisizer::drawTextLineHypotheses(const cv::Mat& img) {
 	QImage qImg = Image::mat2QImage(img, true);
-	QPainter p(&qImg);
+	QPainter painter(&qImg);
 
 	for (auto tl : mTextLines) {
-		//tl->convexHull().draw(p);
-		
-		p.setPen(ColorManager::blue());
-		for (auto pix : tl->pixels()) {
-			pix->bbox().draw(p);
+		painter.setPen(ColorManager::randColor());
+		tl->convexHull().draw(painter);
+
+		painter.setPen(ColorManager::randColor());
+		for (auto p : tl->pixels()) {
+			p->bbox().draw(painter);
 		}
 
-		p.setPen(ColorManager::red());
+		painter.setPen(ColorManager::red());
 		for (auto ws : tl->whiteSpacePixels()) {
-			ws->bbox().draw(p);
+			ws->bbox().draw(painter);
 		}
 	}
 
@@ -2016,17 +1995,16 @@ RightNNConnector::RightNNConnector() : PixelConnector() {
 QVector<QSharedPointer<PixelEdge>> RightNNConnector::connect(const QVector<QSharedPointer<Pixel>>& pixels) const{
 
 	//TODO check parameter choice
-	//TODO check text width estimate computation
+	//TODO improve text height estimate computation
 
 	//parameters
 	//double maxHeightRatio = 2.5;
 	double maxHeightRatio = 3.0;
 	double minVertOverlapRatio = 0.33;
-	//double distMultiplier = 5;
 	double distMultiplier = 5;
-	double textWidthEstimate = 0;	// individual value computed below
-	bool filterEdges = true;		// based on maxHeightRatio + minVertOverlapRatio
-	int maxRnnCount = 1;
+	double textHeightEstimate = 0;	// individual value computed below
+	bool filterEdges = false;		// based on maxHeightRatio + minVertOverlapRatio
+	int maxRnnCount = 3;
 
 	QVector<QSharedPointer<PixelEdge> > edges;
 	QVector<QSharedPointer<Pixel>> mPixels(pixels);
@@ -2036,24 +2014,12 @@ QVector<QSharedPointer<PixelEdge>> RightNNConnector::connect(const QVector<QShar
 		return lhs->bbox().top() < rhs->bbox().top();
 	});
 
-	//compute average line spacing -> *0.5 = text width estimate
-	//QList<double> spacings;
-	//for (const QSharedPointer<Pixel>& px : pixels) {
-
-	//	if (!px->stats()) {
-	//		qWarning() << "stats is NULL where it should not be...";
-	//		continue;
-	//	}
-	//	spacings << px->stats()->lineSpacing();
-	//}
-	//textWidthEstimate = (Algorithms::statMoment(spacings, 0.5))*0.5;
-
 	QList<double> spacings;
 	for (auto p : pixels) {
 		spacings << p->bbox().height();
 	}
 
-	textWidthEstimate = Algorithms::statMoment(spacings, 0.5);
+	textHeightEstimate = Algorithms::statMoment(spacings, 0.5);
 
 
 	for (const QSharedPointer<Pixel>& p1 : mPixels) {
@@ -2078,16 +2044,14 @@ QVector<QSharedPointer<PixelEdge>> RightNNConnector::connect(const QVector<QShar
 
 				//filter pixels according to the x-distance between them
 				double xDist = p2R.left() - p1R.right();
-				//textWidthEstimate = std::max(p1R.width(), p2R.width());
-				//textWidthEstimate = (p1->stats()->lineSpacing())*0.5;
 				
-				if(xDist < textWidthEstimate*distMultiplier){
+				if(xDist < textHeightEstimate*distMultiplier){
 					rnn << p2;
 				}
 			}
 		}
 		
-		//sort neighboring pixels from left to right
+		//sort neighboring pixels from left to right (according to center)
 		std::sort(rnn.begin(), rnn.end(), [](const auto& lhs, const auto& rhs) {
 			return lhs->center().x() < rhs->center().x();
 			//return lhs->bbox().left() < rhs->bbox().left();
@@ -2118,7 +2082,7 @@ QVector<QSharedPointer<PixelEdge>> RightNNConnector::connect(const QVector<QShar
 					double relYoverlap = yOverlap / std::max(p1R.height(), p2R.height());
 
 					if (yOverlap > 0 && relYoverlap > (minVertOverlapRatio)) {
-						edges << QSharedPointer<PixelEdge>::create(p1, rnn.at(idx));	//add edges for remaining pairs
+						edges << QSharedPointer<PixelEdge>::create(p1, rnn.at(idx));	//add edge for remaining pair
 					}
 				}
 			}
@@ -2130,63 +2094,6 @@ QVector<QSharedPointer<PixelEdge>> RightNNConnector::connect(const QVector<QShar
 
 	// remove edges that cross stop lines
 	filter(edges);
-
-	return edges;
-}
-
-NNConnector::NNConnector(){
-}
-
-QVector<QSharedPointer<PixelEdge>> NNConnector::connect(const QVector<QSharedPointer<Pixel>>& pixels) const{
-
-	//paramters
-	double spacingMultiplier = 2.5;
-	double lineSpacing = 0;			//computed below - average height of all components
-
-	QVector<QSharedPointer<PixelEdge> > edges;
-	QVector<QSharedPointer<Pixel>> mPixels(pixels);
-
-	//sort pixels according to y_max coordinate for more efficient computation
-	std::sort(mPixels.begin(), mPixels.end(), [](const auto& lhs, const auto& rhs) {
-		return lhs->bbox().top() < rhs->bbox().top();
-	});
-
-	//compute average height
-	QList<double> spacings;
-	for (const QSharedPointer<Pixel>& px : pixels) {
-		spacings << px->bbox().height();
-	}
-
-	lineSpacing = Algorithms::statMoment(spacings, 0.5);
-
-	for (const QSharedPointer<Pixel>& p1 : mPixels) {
-
-		//hbbox
-		double lb = std::max(p1->bbox().left() - (lineSpacing*spacingMultiplier), 0.0);
-		double wb = p1->bbox().width() + ((lineSpacing*spacingMultiplier) * 2);
-		Rect hbbox = Rect(lb, p1->bbox().top(), wb, p1->bbox().height());
-
-		//vbbox
-		double tb = std::max(p1->bbox().top() - (lineSpacing*spacingMultiplier), 0.0);
-		double hb = p1->bbox().height() + ((lineSpacing*spacingMultiplier) * 2);
-		Rect vbbox = Rect(p1->bbox().left(), tb, p1->bbox().width(), hb);
-
-		for (const QSharedPointer<Pixel>& p2 : mPixels) {
-
-			if (p2->bbox().top() > (tb + hb))
-				break;
-
-			if (p1->id() == p2->id())
-				continue;
-			
-			if (p2->bbox().bottom() < tb)
-				continue;
-
-			if (p2->bbox().intersects(hbbox) || p2->bbox().intersects(vbbox)) {
-				edges << QSharedPointer<PixelEdge>::create(p1, p2);
-			}
-		}
-	}
 
 	return edges;
 }
