@@ -185,9 +185,10 @@ namespace rdf {
 		bool checkInput() const override;
 		QVector<QSharedPointer<WSTextLineSet> > clusterTextLines(const PixelGraph& graph) const;
 		int findSetIndex(const QSharedPointer<Pixel>& pixel, const QVector<QSharedPointer<WSTextLineSet> >& sets) const;
-		bool addPixel(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<PixelEdge> &e) const;
-		bool mergeTextLines(const QSharedPointer<WSTextLineSet>& tls1, const QSharedPointer<WSTextLineSet>& tls2) const;
-		bool processEdge(const QSharedPointer<PixelEdge>& edge, QVector<QSharedPointer<WSTextLineSet>>& textLines) const;
+		bool addPixel(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<PixelEdge> &e, double heat) const;
+		bool addPixel2(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<Pixel> &p, double heat) const;
+		bool mergeTextLines(const QSharedPointer<WSTextLineSet>& tls1, const QSharedPointer<WSTextLineSet>& tls2, double heat) const;
+		bool processEdge(const QSharedPointer<PixelEdge>& edge, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat = -1) const;
 		void mergeUnstableTextLines(QVector<QSharedPointer<WSTextLineSet> >& textLines) const;
 		void extractWhiteSpaces(QSharedPointer<WSTextLineSet>& textLine) const;
 	};
@@ -267,7 +268,7 @@ namespace rdf {
 
 		bool mScaleInput = true;
 
-		bool mDebugDraw = true;
+		bool mDebugDraw = false;
 		QString mDebugPath = "E:/data/test/HBR2013_training";
 	};
 	

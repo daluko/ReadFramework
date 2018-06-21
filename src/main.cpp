@@ -252,7 +252,7 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		//dc.setImagePath("C:/read/test/d6.5/0056_S_Alzgern_011-01_0056-crop.JPG");
 		//dc.setImagePath("C:/read/test/d6.5/eval/P_241_27_012.jpg");
 
-		//dc.setImagePath("E:/data/test/HBR2013_training/00443033.tif");
+		dc.setImagePath("E:/data/test/HBR2013_training/00443033.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00451351.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00452456.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00456592.tif");
@@ -260,7 +260,7 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		//dc.setImagePath("E:/data/test/HBR2013_training/00485679.tif"); 
 		
 		
-		dc.setImagePath("E:/data/test/HBR2013_training/00320909.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/00320909.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00425629.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00318461.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00451901.tif");

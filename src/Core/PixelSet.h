@@ -298,6 +298,7 @@ public:
 	};
 	
 	double maxGap() const;
+	double pixelHeight(double statMoment = 0.5) const;
 
 protected:
 	QVector<QSharedPointer<WhiteSpacePixel> > mWsSet;

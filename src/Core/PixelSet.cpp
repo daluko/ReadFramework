@@ -1740,4 +1740,20 @@ double WSTextLineSet::maxGap() const{
 	return mMaxGap;
 }
 
+
+/// <summary>
+/// Computes the median height of the pixels in the set.
+/// </summary>
+/// <param name="statMoment">if != 0.5 a quartile other than the median is computed.</param>
+/// <returns>The set's median orientation.</returns>
+double WSTextLineSet::pixelHeight(double statMoment) const {
+
+	QList<double> heights;
+	for (const QSharedPointer<Pixel>& px : pixels()) {
+		heights << px->bbox().height();
+	}
+
+	return Algorithms::statMoment(heights, statMoment);
+}
+
 }
