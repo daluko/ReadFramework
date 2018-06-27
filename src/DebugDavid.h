@@ -51,7 +51,8 @@ class WhiteSpaceTest {
 public:
 	WhiteSpaceTest(const DebugConfig& config = DebugConfig());
 
-	void WhiteSpaceTest::run();
+	void run();
+	void processDirectory(const QString dirPath);
 
 protected:
 	DebugConfig mConfig;
@@ -62,7 +63,7 @@ class FontClassificationTest {
 public:
 	FontClassificationTest(const DebugConfig& config = DebugConfig());
 
-	void FontClassificationTest::run();
+	void run();
 
 protected:
 	DebugConfig mConfig;
@@ -73,7 +74,7 @@ class TextHeightEstimationTest {
 public:
 	TextHeightEstimationTest(const DebugConfig& config = DebugConfig());
 
-	void TextHeightEstimationTest::run();
+	void run();
 
 protected:
 	DebugConfig mConfig;

@@ -189,6 +189,7 @@ namespace rdf {
 		bool addPixel2(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<Pixel> &p, double heat) const;
 		bool mergeTextLines(const QSharedPointer<WSTextLineSet>& tls1, const QSharedPointer<WSTextLineSet>& tls2, double heat) const;
 		bool processEdge(const QSharedPointer<PixelEdge>& edge, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat = -1) const;
+		bool processEdgeDebug(const QSharedPointer<PixelEdge>& e, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat, Rect debugWindow = Rect()) const;
 		void mergeUnstableTextLines(QVector<QSharedPointer<WSTextLineSet> >& textLines) const;
 		void extractWhiteSpaces(QSharedPointer<WSTextLineSet>& textLine) const;
 	};

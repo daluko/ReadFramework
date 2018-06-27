@@ -46,6 +46,7 @@
 
 #include <QImage>
 #include <QFileInfo>
+#include <QDir>
 
 #include <opencv2/imgproc.hpp>
 
@@ -87,9 +88,9 @@ WhiteSpaceTest::WhiteSpaceTest(const DebugConfig & config) {
 }
 
 void WhiteSpaceTest::run() {
-
-	qDebug() << "Running White Space Analysis test...";
 	
+	qInfo() << "Running White Space Analysis test...";
+
 	Timer dt;
 
 	QImage qImg(mConfig.imagePath());
@@ -103,45 +104,95 @@ void WhiteSpaceTest::run() {
 	WhiteSpaceAnalysis wsa(imgCv);
 	wsa.compute();
 
-	//-------------------------xml text lines
-	QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.outputPath());
-	xmlPath = Utils::createFilePath(xmlPath, "-wsa_lines");
-	rdf::PageXmlParser parser;
-	bool xml_found = parser.read(xmlPath);
 
-	// set xml header info
-	QSharedPointer<PageElement> xmlPage = parser.page();
+	QString xmlPath;
+	rdf::PageXmlParser parser;
+	bool xml_found;
+	QSharedPointer<PageElement> xmlPage;
+
+	////-------------------------xml text lines
+	//xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.imagePath());
+	//xmlPath = Utils::createFilePath(xmlPath, "-wsa_lines");
+	//xml_found = parser.read(xmlPath);
+
+	//// set up xml page
+	//xmlPage = parser.page();
+	//xmlPage->setCreator(QString("CVL"));
+	//xmlPage->setImageSize(QSize(qImg.size()));
+	//xmlPage->setImageFileName(QFileInfo(xmlPath).fileName());
+
+	////add results to xml
+	//xmlPage = parser.page();
+	//xmlPage->rootRegion()->removeAllChildren();
+
+	//for (auto tr : wsa.textLineRegions()) {
+	//	xmlPage->rootRegion()->addChild(tr);
+	//}
+	//parser.write(xmlPath, xmlPage);
+
+	//////-------------------------xml text blocks
+	//xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.imagePath());
+	//xmlPath = Utils::createFilePath(xmlPath, "-wsa_blocks+lines");
+	//xml_found = parser.read(xmlPath);
+
+	//// set up xml page
+	//xmlPage = parser.page();
+	//xmlPage->setCreator(QString("CVL"));
+	//xmlPage->setImageSize(QSize(qImg.size()));
+	//xmlPage->setImageFileName(QFileInfo(xmlPath).fileName());
+
+	////add results to xml
+	//xmlPage = parser.page();
+	//xmlPage->rootRegion()->removeAllChildren();
+	//xmlPage->rootRegion()->addChild(wsa.textBlockRegions());
+	//parser.write(xmlPath, xmlPage);
+
+	////-------------------------eval xml text block regions
+	//NOTE: produce eval xml at the end -> text lines (children) are removed from results
+	xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.imagePath());
+	xml_found = parser.read(xmlPath);
+
+	// set up xml page
+	xmlPage = parser.page();
 	xmlPage->setCreator(QString("CVL"));
 	xmlPage->setImageSize(QSize(qImg.size()));
 	xmlPage->setImageFileName(QFileInfo(xmlPath).fileName());
 
-	//add results to xml
-	xmlPage->rootRegion()->removeAllChildren();
-	for (auto tr : wsa.textLineRegions()) {
-		xmlPage->rootRegion()->addChild(tr);
-	}
-	parser.write(xmlPath, xmlPage);
-
-	////-------------------------xml text blocks
-	xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.outputPath());
-	xmlPath = Utils::createFilePath(xmlPath, "-wsa_block");
-	xml_found = parser.read(xmlPath);
-
-	//add results to xml
-	xmlPage->rootRegion()->removeAllChildren();
-	xmlPage->rootRegion()->addChild(wsa.textBlockRegions());
-	parser.write(xmlPath, xmlPage);
-
-	////-------------------------eval xml text block regions
-	xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.imagePath());
-	xml_found = parser.read(xmlPath);
-	
 	xmlPage->rootRegion()->removeAllChildren();
 	for (auto tr : wsa.evalTextBlockRegions()) {
 		xmlPage->rootRegion()->addChild(tr);
 	}
 	parser.write(xmlPath, xmlPage);
 
+	qInfo() << "White space layout analysis results computed in " << dt;
+}
+
+void WhiteSpaceTest::processDirectory(QString dirPath) {
+
+	QDir dir(dirPath);
+	if (!dir.exists()) {
+		qWarning() << "Directory does not exist!";
+		return;
+	}
+
+	qInfo() << "Running White Space Analysis test on all images in directory: ";
+	qInfo() << dirPath;
+
+	Timer dt;
+
+	QStringList filters;
+	filters << "*.tif";
+	QFileInfoList fileInfoList = dir.entryInfoList(filters, QDir::Files | QDir::NoDotAndDotDot);
+
+	int i = 0;
+	for (auto f : fileInfoList) {
+		++i;
+		qDebug() << "processing image #" << QString::number(i) << " : " << f.absoluteFilePath();
+		mConfig.setImagePath(f.absoluteFilePath());
+		run();
+	}
+	
+	qInfo() << "Directory processed in " << dt;
 }
 
 FontClassificationTest::FontClassificationTest(const DebugConfig & config) {
