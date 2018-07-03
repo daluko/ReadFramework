@@ -102,8 +102,9 @@ void WhiteSpaceTest::run() {
 		qInfo() << mConfig.imagePath() << "NOT loaded...";
 
 	WhiteSpaceAnalysis wsa(imgCv);
-	wsa.compute();
+	wsa.config()->setDebugPath(mConfig.imagePath());
 
+	wsa.compute();
 
 	QString xmlPath;
 	rdf::PageXmlParser parser;

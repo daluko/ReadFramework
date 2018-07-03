@@ -1740,13 +1740,49 @@ double WSTextLineSet::maxGap() const{
 	return mMaxGap;
 }
 
+bool WSTextLineSet::isShort(double minBCRSize) const{
+
+	if (minBCRSize == -1) {
+		minBCRSize = mMinBCRSize;
+	}
+
+
+	//TODO consider max length for short lines (lines with small spacing might still be rather long)
+	if (mMaxGap < minBCRSize || mSet.size() < 3) {
+		return true;
+	}
+	else{
+		if (boundingBox().width() < minBCRSize * 7) { // assumption: minBCRSize = 1/2 avg. text pixel width
+			qDebug() << "Found short text line with additional condition.";
+			//return true;
+		}
+		return false;
+	}
+		
+}
+
 
 /// <summary>
 /// Computes the median height of the pixels in the set.
 /// </summary>
 /// <param name="statMoment">if != 0.5 a quartile other than the median is computed.</param>
-/// <returns>The set's median orientation.</returns>
+/// <returns>The set's median height.</returns>
 double WSTextLineSet::pixelHeight(double statMoment) const {
+
+	QList<double> heights;
+	for (const QSharedPointer<Pixel>& px : pixels()) {
+		heights << px->bbox().height();
+	}
+
+	return Algorithms::statMoment(heights, statMoment);
+}
+
+/// <summary>
+/// Computes the median width of the pixels in the set.
+/// </summary>
+/// <param name="statMoment">if != 0.5 a quartile other than the median is computed.</param>
+/// <returns>The set's median width.</returns>
+double WSTextLineSet::pixelWidth(double statMoment) const {
 
 	QList<double> heights;
 	for (const QSharedPointer<Pixel>& px : pixels()) {

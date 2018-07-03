@@ -283,7 +283,6 @@ public:
 	WSTextLineSet(const QVector<QSharedPointer<Pixel> >& set);
 	WSTextLineSet(const QVector<QSharedPointer<Pixel> >& set, 
 		const QVector<QSharedPointer<WhiteSpacePixel> >& wsSet);
-	
 	bool containsWhiteSpace(const QSharedPointer<WhiteSpacePixel>& wsPixel) const;
 	void setWhiteSpacePixels(const QVector<QSharedPointer<WhiteSpacePixel> >& wsSet);
 	void updateMaxGap(const QVector<QSharedPointer<WhiteSpacePixel>>& wsSet =
@@ -292,17 +291,21 @@ public:
 	void addWhiteSpace(const QSharedPointer<WhiteSpacePixel>& ws);
 	void mergeWSTextLineSet(const QSharedPointer<WSTextLineSet>& tls);
 	QSharedPointer<TextRegionPixel> convertToPixel() const;
-
 	QVector<QSharedPointer<WhiteSpacePixel> > whiteSpacePixels() const {
 		return mWsSet;
 	};
+	void setMinBCRSize(double minBCRSize) { mMinBCRSize = minBCRSize; };
+	double minBCRSize() { return mMinBCRSize; };
 	
 	double maxGap() const;
+	bool isShort(double minBCRSize = -1) const;
 	double pixelHeight(double statMoment = 0.5) const;
+	double pixelWidth(double statMoment = 0.5) const;
 
 protected:
 	QVector<QSharedPointer<WhiteSpacePixel> > mWsSet;
 	double mMaxGap = 0;
+	double mMinBCRSize = 0;
 };
 
 namespace TextLineHelper {

@@ -222,6 +222,11 @@ bool WhiteSpaceAnalysis::compute() {
 	}
 	qInfo() << "Finished white space segmentation.";
 
+
+	//debug 
+	//QString imgPath = Utils::createFilePath(config()->debugPath(), "_whiteSpaces");
+	//Image::save(wss.drawSplitTextLines(mImg), imgPath);
+
 	//get segmented text lines
 	mWSTextLines = wss.textLineSets();
 	//cv::Mat imgDebugWSS = wss.drawSplitTextLines(img);
@@ -239,7 +244,7 @@ bool WhiteSpaceAnalysis::compute() {
 	
 	mInfo << "white space layout analysis computed in" << dt;
 
-	//if(config()->debugDraw())
+	if(config()->debugDraw())
 		drawDebugImages(mImg);
 
 	// scale back to original coordinates
@@ -482,14 +487,14 @@ cv::Mat WhiteSpaceAnalysis::draw(const cv::Mat & img, const QColor& col) const {
 
 void WhiteSpaceAnalysis::drawDebugImages(const cv::Mat & img){
 
-	QString path;
-	QFileInfo info(config()->debugPath());
-	if (info.isDir()) {
-		path = info.absoluteFilePath() + "/debug.png";
-	}
-	else {
-		path = "debug.png";
-	}
+	QString path = config()->debugPath();
+	//QFileInfo info(config()->debugPath());
+	//if (info.isDir()) {
+	//	path = info.absoluteFilePath() + "/debug.png";
+	//}
+	//else {
+	//	path = "debug.png";
+	//}
 
 	QImage qImg = Image::mat2QImage(img, true);
 	QPainter painter(&qImg);
@@ -1023,6 +1028,32 @@ void TextLineHypothisizer::extractWhiteSpaces(QSharedPointer<WSTextLineSet>& tex
 
 	//add white spaces to text line;
 	textLine->setWhiteSpacePixels(whiteSpaces);
+
+
+	//compute approximate lower bound for size of bcr
+	double minBCRSize= textLine->pixelWidth()*0.5;
+
+	//std::vector<float> data(ws_temp.size());
+	//for (int i = 0; i < ws_temp.size(); i++) {
+	//	data[i] = (float) ws_temp.at(i)->bbox().width(); //placeholder
+	//}
+
+	//std::vector<int> labels;
+	//std::vector<float> centers;
+	//cv::kmeans(data, 2, labels, cv::TermCriteria(CV_TERMCRIT_ITER + CV_TERMCRIT_EPS, 10, 0.1),
+	//	3, cv::KMEANS_PP_CENTERS, centers);
+
+	//int minLabel = std::min(centers[0], centers[1]) == centers[0] ? 0 : 1;
+
+	//float maxWSSize = -1;
+	//for (int i = 0; i < labels.size(); i++) {
+	//	if(labels.at(i)==minLabel){
+	//		if (data.at(i) > maxWSSize)
+	//			maxWSSize = data.at(i);
+	//	}
+	//}
+
+	textLine->setMinBCRSize(minBCRSize);
 }
 
 int TextLineHypothisizer::findSetIndex(const QSharedPointer<Pixel> &pixel, const QVector<QSharedPointer<WSTextLineSet>> &sets) const{
@@ -1472,16 +1503,23 @@ bool WhiteSpaceSegmentation::compute() {
 		return false;
 	}
 	
+	cv::Mat initialTextLines = drawSplitTextLines(mImg);
+
 	PixelGraph pg = computeSegmentationGraph();
 
 	//TODO remove bcr with no connections to other bcr 
 	// or remove bcr that only have connections to text pixels?
 	removeIsolatedBCR(pg);
+	processShortTextLines();
 
+	cv::Mat noIsolatedTextLines = drawSplitTextLines(mImg);
+	
 	if (!findWhiteSpaceRuns(pg)) {
 		qInfo("Finished white space segmentation, no white space runs found.");
 		return true;
 	}
+
+	cv::Mat whiteSpaceRuns = drawWhiteSpaceRuns(mImg);
 
 	bool updatedSegmentation = true;
 	while (updatedSegmentation) {
@@ -1492,6 +1530,8 @@ bool WhiteSpaceSegmentation::compute() {
 		//remove groups that represent non-bcr runs or are too short
 		updatedSegmentation = refineWhiteSpaceRuns();
 	}
+
+	cv::Mat finalTextLines = drawSplitTextLines(mImg);
 
 	//TODO further refinement of text lines!?
 
@@ -1549,11 +1589,13 @@ bool WhiteSpaceSegmentation::splitTextLines(){
 
 						if (i == 0 || i == (wsPixels.size() - 1) || (i - lastWSidx) == 0) { //add white space?
 							tls = QSharedPointer<WSTextLineSet>::create(stp);
+							tls->setMinBCRSize(tl->minBCRSize());
 							sTls << tls;
 						}
 						else {
 							QVector<QSharedPointer<WhiteSpacePixel>> sws = wsPixels.mid(lastWSidx, (i - lastWSidx));
 							tls = QSharedPointer<WSTextLineSet>::create(stp, sws);
+							tls->setMinBCRSize(tl->minBCRSize());
 							sTls << tls;
 						}
 
@@ -1582,11 +1624,13 @@ bool WhiteSpaceSegmentation::splitTextLines(){
 
 		if (lastWSidx > (wsPixels.size() - 1)) {	//bcr is last white space in text line
 			tls = QSharedPointer<WSTextLineSet>::create(stp);
+			tls->setMinBCRSize(tl->minBCRSize());
 			sTls << tls;
 		}
 		else {
 			QVector<QSharedPointer<WhiteSpacePixel>> sws = wsPixels.mid(lastWSidx);
 			tls = QSharedPointer<WSTextLineSet>::create(stp, sws);
+			tls->setMinBCRSize(tl->minBCRSize());
 			sTls << tls;
 		}
 
@@ -1665,13 +1709,69 @@ void WhiteSpaceSegmentation::removeIsolatedBCR(PixelGraph pg) {
 			isolatedBCR << bcr;
 	}
 
-	//qInfo() << "there are " << mBcrM.size() << " white spaces";
-
 	//remove isolated bcr (and merge neighboring text lines)
 	deleteBCR(isolatedBCR);
 
 	//qInfo() << isolatedBCR.size() << " isolated white spaces have been removed";
 	//qInfo() << "there are " << mBcrM.size() << " white spaces remaining";
+}
+
+void WhiteSpaceSegmentation::processShortTextLines(){
+	
+	QImage qImg = Image::mat2QImage(mImg, true);
+	QPainter painter(&qImg);
+
+	//merge short text lines enclosed by bcrs with nearest text line
+	for (auto tls : mTlsM) {
+		if (tls->isShort()){
+			painter.setPen(ColorManager::blue());
+			tls->boundingBox().draw(painter);
+
+			QVector<QSharedPointer<WhiteSpacePixel>> tlsNeighbors;
+
+			for (auto bcr : mBcrM) {
+				auto neighbors = mBcrNeighbors.value(bcr->id());
+
+				if (neighbors.contains(tls)) {
+					tlsNeighbors.append(bcr);
+				}
+
+				if (tlsNeighbors.size() == 2)
+					break;
+			}
+
+			if (tlsNeighbors.size() == 2) {
+				if (tlsNeighbors[0]->bbox().width() < tlsNeighbors[1]->bbox().width()) {
+					auto ntl = mBcrNeighbors.value(tlsNeighbors[0]->id());
+					ntl[0]->addWhiteSpace(tlsNeighbors[0]);
+					ntl[0]->mergeWSTextLineSet(ntl[1]);
+				}
+				else {
+					auto ntl = mBcrNeighbors.value(tlsNeighbors[1]->id());
+					ntl[0]->addWhiteSpace(tlsNeighbors[1]);
+					ntl[0]->mergeWSTextLineSet(ntl[1]);
+				}
+			}
+		}
+	}
+
+	//revoke bcr status for white spaces thar are enclosed by short text lines
+	for(auto bcr : mBcrM){
+		auto neighbors = mBcrNeighbors.value(bcr->id());
+		bool hasOnlyShortNeighbors = true;
+
+		for (auto n : neighbors) {
+			if (!n->isShort()) {
+				hasOnlyShortNeighbors = false;
+			}
+		}
+
+		if (hasOnlyShortNeighbors) {
+			bcr->setBCR(false);
+		}
+	}
+
+	cv::Mat result = Image::qImage2Mat(qImg);
 }
 
 void WhiteSpaceSegmentation::deleteBCR(const QVector<QSharedPointer<WhiteSpacePixel>>& bcrM) {
@@ -1684,6 +1784,8 @@ void WhiteSpaceSegmentation::deleteBCR(const QSharedPointer<WhiteSpacePixel>& bc
 
 	//merge text lines neighboring the removable bcr
 	auto ntl = mBcrNeighbors.value(bcr->id());
+	mBcrNeighbors.remove(bcr->id());
+
 
 	if (ntl.size() != 2) {
 		qWarning() << "Deleting BCR but number of neighboring text lines is not equal to 2!";
@@ -1830,10 +1932,16 @@ bool WhiteSpaceSegmentation::findWhiteSpaceRuns(const PixelGraph pg) {
 
 void WhiteSpaceSegmentation::updateBCRStatus() {
 
+	//TODO fix parameters/adjust BCR update process
+	double gapExtFactor = 1.2;
+
 	for (auto bcr : mBcrM) {
 		double bcrGap = bcr->bbox().width();
 		for (auto n : mBcrNeighbors.value(bcr->id())) {
-			if (bcrGap <= n->maxGap()) {
+
+			//TODO compare white spaces with max gaps of other lines in bcr and maybe also with lines nxxt to the bcr (above/below)
+
+			if (bcrGap <= n->maxGap()*gapExtFactor) {
 				bcr->setBCR(false);
 				break;
 			}
@@ -1977,8 +2085,8 @@ cv::Mat WhiteSpaceSegmentation::drawSplitTextLines(const cv::Mat & img, const QC
 			painter.setPen(ColorManager::darkGray());
 
 		bcr->bbox().draw(painter);
-		QString maxGap = QString::number(bcr->bbox().width());
-		painter.drawText(bcr->bbox().toQRect(), Qt::AlignCenter, maxGap);
+		QString wsGap = QString::number(bcr->bbox().width());
+		painter.drawText(bcr->bbox().toQRect(), Qt::AlignCenter, wsGap);
 	}
 	
 	return Image::qImage2Mat(qImg);

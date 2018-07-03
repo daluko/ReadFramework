@@ -186,7 +186,7 @@ namespace rdf {
 		QVector<QSharedPointer<WSTextLineSet> > clusterTextLines(const PixelGraph& graph) const;
 		int findSetIndex(const QSharedPointer<Pixel>& pixel, const QVector<QSharedPointer<WSTextLineSet> >& sets) const;
 		bool addPixel(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<PixelEdge> &e, double heat) const;
-		bool addPixel2(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<Pixel> &p, double heat) const;
+		//bool addPixel2(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<Pixel> &p, double heat) const;
 		bool mergeTextLines(const QSharedPointer<WSTextLineSet>& tls1, const QSharedPointer<WSTextLineSet>& tls2, double heat) const;
 		bool processEdge(const QSharedPointer<PixelEdge>& edge, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat = -1) const;
 		bool processEdgeDebug(const QSharedPointer<PixelEdge>& e, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat, Rect debugWindow = Rect()) const;
@@ -221,6 +221,7 @@ namespace rdf {
 		double computeLineSpacing() const;
 		PixelGraph computeSegmentationGraph() const;
 		void removeIsolatedBCR(const PixelGraph pg);
+		void processShortTextLines();
 		void deleteBCR(const QVector<QSharedPointer<WhiteSpacePixel>>& bcrM);
 		void deleteBCR(const QSharedPointer<WhiteSpacePixel>& bcr);
 		bool findWhiteSpaceRuns(const PixelGraph pg);
