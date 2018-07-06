@@ -274,7 +274,7 @@ SuperPixel WhiteSpaceAnalysis::computeSuperPixels(const cv::Mat & img){
 	int mserMaxArea = config()->mserMaxArea();
 
 	//Text Spotter params
-	//MSER ms(10, (int)(0.00002*mser_img.cols*mser_img.rows), (int)(0.05*mser_img.cols*mser_img.rows), 1, 0.7);;
+	//MSER ms(10, (int)(0.00002*mser_img.cols*mser_img.rows), (int)(0.05*mser_img.cols*mser_img.rows), 1, 0.7);
 
 	// compute super pixels
 	SuperPixel sp = SuperPixel(img);
@@ -1668,6 +1668,8 @@ double WhiteSpaceSegmentation::computeLineSpacing() const{
 
 PixelGraph WhiteSpaceSegmentation::computeSegmentationGraph() const{
 
+	//TODO check if distance between pixels could be reduced (only search for one line below/above)
+
 	// compute pixel graph for segmentation regions
 	PixelSet wsSet;
 	QVector<QSharedPointer<TextRegionPixel>> trSet;
@@ -1698,21 +1700,31 @@ void WhiteSpaceSegmentation::removeIsolatedBCR(PixelGraph pg) {
 	QVector<QSharedPointer<WhiteSpacePixel>> isolatedBCR;
 
 	for (auto bcr : mBcrM) {
-		int wsCount = 0;
+		bool isIsolated = true;
 
-		for (int idx : pg.edgeIndexes(bcr->id())) {
-			if (mBcrM.contains(qSharedPointerCast<WhiteSpacePixel>(pg.edges()[idx]->second())))
-				++wsCount;
+		auto edgeIndexes = pg.edgeIndexes(bcr->id());
+
+		if (edgeIndexes.size() == 0) {
+			continue;
 		}
 
-		if (wsCount == 0)
+		for (int idx : edgeIndexes) {
+
+			auto linkedPixel = pg.edges()[idx]->second();
+			if (mBcrM.contains(qSharedPointerCast<WhiteSpacePixel>(linkedPixel))) {
+				isIsolated = false;
+				break;
+			}
+		}
+
+		if (isIsolated)
 			isolatedBCR << bcr;
 	}
 
 	//remove isolated bcr (and merge neighboring text lines)
 	deleteBCR(isolatedBCR);
 
-	//qInfo() << isolatedBCR.size() << " isolated white spaces have been removed";
+	qInfo() << isolatedBCR.size() << " isolated white spaces have been removed";
 	//qInfo() << "there are " << mBcrM.size() << " white spaces remaining";
 }
 
@@ -1933,20 +1945,39 @@ bool WhiteSpaceSegmentation::findWhiteSpaceRuns(const PixelGraph pg) {
 void WhiteSpaceSegmentation::updateBCRStatus() {
 
 	//TODO fix parameters/adjust BCR update process
-	double gapExtFactor = 1.2;
+	double gapExtFactor = 1.3;
 
-	for (auto bcr : mBcrM) {
-		double bcrGap = bcr->bbox().width();
-		for (auto n : mBcrNeighbors.value(bcr->id())) {
+	for (auto wsr : mWsrM) {
+		double maxGapWsr = 0;
 
-			//TODO compare white spaces with max gaps of other lines in bcr and maybe also with lines nxxt to the bcr (above/below)
+		for (auto ws : wsr->whiteSpaces()) {
+			for (auto tl : mBcrNeighbors.value(ws->id())) {
+				if (maxGapWsr < tl->maxGap()) {
+					maxGapWsr = tl->maxGap();
+				}
+			}
+		}
 
-			if (bcrGap <= n->maxGap()*gapExtFactor) {
-				bcr->setBCR(false);
-				break;
+		for (auto ws : wsr->whiteSpaces()) {
+			if (ws->bbox().width() < maxGapWsr*gapExtFactor) {
+				ws->setBCR(false);
+				continue;
 			}
 		}
 	}
+
+	//for (auto bcr : mBcrM) {
+	//	double bcrGap = bcr->bbox().width();
+	//	for (auto n : mBcrNeighbors.value(bcr->id())) {
+
+	//		//TODO compare white spaces with max gaps of other lines in bcr and maybe also with lines next to the bcr (above/below)
+
+	//		if (bcrGap <= n->maxGap()*gapExtFactor) {
+	//			bcr->setBCR(false);
+	//			break;
+	//		}
+	//	}
+	//}
 }
 
 bool WhiteSpaceSegmentation::refineWhiteSpaceRuns() {
@@ -1989,6 +2020,24 @@ bool WhiteSpaceSegmentation::refineWhiteSpaceRuns() {
 		if (wsr.isNull() || wsr->size() == 0) {
 			qWarning() << "Found WSR with no white spaces! This should not happen!";
 			continue;
+		}
+
+		if (wsr->whiteSpaces().size() > 1) {
+			double maxGapWsr = 0;
+			for (auto ws : wsr->whiteSpaces()) {
+				auto ntl = mBcrNeighbors.value(ws->id());
+				for (auto tl : ntl) {
+					if (maxGapWsr < tl->maxGap()) {
+						maxGapWsr = tl->maxGap(); 
+					}
+				}
+			}
+
+			bool isObsolete = true;
+			for (auto ws : wsr->whiteSpaces()) {
+				if (ws->bbox().width() < maxGapWsr)
+					isObsolete = false;
+			}
 		}
 
 		//delete whole white space run if no or only one bcr is contained

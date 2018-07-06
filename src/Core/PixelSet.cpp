@@ -1746,16 +1746,11 @@ bool WSTextLineSet::isShort(double minBCRSize) const{
 		minBCRSize = mMinBCRSize;
 	}
 
-
 	//TODO consider max length for short lines (lines with small spacing might still be rather long)
-	if (mMaxGap < minBCRSize || mSet.size() < 3) {
+	if (mMaxGap < minBCRSize || mSet.size() < 3 || boundingBox().width() < minBCRSize * 7) {
 		return true;
 	}
 	else{
-		if (boundingBox().width() < minBCRSize * 7) { // assumption: minBCRSize = 1/2 avg. text pixel width
-			qDebug() << "Found short text line with additional condition.";
-			//return true;
-		}
 		return false;
 	}
 		
