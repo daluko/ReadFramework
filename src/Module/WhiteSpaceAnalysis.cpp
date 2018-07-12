@@ -222,7 +222,6 @@ bool WhiteSpaceAnalysis::compute() {
 	}
 	qInfo() << "Finished white space segmentation.";
 
-
 	//debug 
 	//QString imgPath = Utils::createFilePath(config()->debugPath(), "_whiteSpaces");
 	//Image::save(wss.drawSplitTextLines(mImg), imgPath);
@@ -1696,6 +1695,9 @@ PixelGraph WhiteSpaceSegmentation::computeSegmentationGraph() const{
 }
 
 void WhiteSpaceSegmentation::removeIsolatedBCR(PixelGraph pg) {
+	
+	//TODO set parameter in config;
+	double gapExtFactor = 1.3;
 
 	QVector<QSharedPointer<WhiteSpacePixel>> isolatedBCR;
 
@@ -1705,6 +1707,10 @@ void WhiteSpaceSegmentation::removeIsolatedBCR(PixelGraph pg) {
 		auto edgeIndexes = pg.edgeIndexes(bcr->id());
 
 		if (edgeIndexes.size() == 0) {
+
+			//TODO check if these bcr should be investigated further
+			bcr->setBCR(false);
+			isolatedBCR << bcr;
 			continue;
 		}
 
@@ -1876,6 +1882,10 @@ bool WhiteSpaceSegmentation::findWhiteSpaceRuns(const PixelGraph pg) {
 
 	for (auto ws : wsSet) {
 
+		if (!udCount.contains(ws->id())) {
+			continue;
+		}
+
 		int upCount = udCount.value(ws->id())[0];
 		int downCount = udCount.value(ws->id())[1];
 
@@ -1944,7 +1954,7 @@ bool WhiteSpaceSegmentation::findWhiteSpaceRuns(const PixelGraph pg) {
 
 void WhiteSpaceSegmentation::updateBCRStatus() {
 
-	//TODO fix parameters/adjust BCR update process
+	//TODO set parameter in config;
 	double gapExtFactor = 1.3;
 
 	for (auto wsr : mWsrM) {
@@ -1965,19 +1975,6 @@ void WhiteSpaceSegmentation::updateBCRStatus() {
 			}
 		}
 	}
-
-	//for (auto bcr : mBcrM) {
-	//	double bcrGap = bcr->bbox().width();
-	//	for (auto n : mBcrNeighbors.value(bcr->id())) {
-
-	//		//TODO compare white spaces with max gaps of other lines in bcr and maybe also with lines next to the bcr (above/below)
-
-	//		if (bcrGap <= n->maxGap()*gapExtFactor) {
-	//			bcr->setBCR(false);
-	//			break;
-	//		}
-	//	}
-	//}
 }
 
 bool WhiteSpaceSegmentation::refineWhiteSpaceRuns() {
@@ -2184,9 +2181,6 @@ TextBlockFormation::TextBlockFormation(const cv::Mat img, const QVector<QSharedP
 
 bool TextBlockFormation::compute() {
 
-	//TODO improve polygon region output
-	//TODO split text blocks into paragraphs
-
 	if (mTextLines.isEmpty())
 		return false;
 
@@ -2197,6 +2191,8 @@ bool TextBlockFormation::compute() {
 
 	computeAdjacency();
 	formTextBlocks();
+
+	//TODO split text blocks into paragraphs
 
 	// TODO remove parentheses to please Aletheia and avoid errors
 	//tb->setPolygon(rdf::Polygon::fromRect(bb));
@@ -2226,6 +2222,62 @@ void TextBlockFormation::computeAdjacency() {
 
 			//check for x overlap of tlc
 			if (r1.left() <= r2.right() && r2.left() <= r1.right()) {
+
+				//TODO check distance between text lines ( < max distance)
+				Line li = mTextLines[i]->fitLine();
+				Line lj = mTextLines[j]->fitLine();
+				
+				double d1, d2;
+
+				if (li.p1().x() > lj.p1().x())
+					d1 = lj.distance(li.p1());
+				else
+					d1 = li.distance(lj.p1());
+
+				if (li.p2().x() < lj.p2().x())
+					d2 = lj.distance(li.p2());
+				else
+					d2 = li.distance(lj.p2());
+
+				double avgLineDist = (d1 + d2) / 2;
+
+				double textHeight = std::max(mTextLines[i]->pixelHeight(), mTextLines[j]->pixelHeight());
+				double extFactor = 3.0;
+				
+				if (avgLineDist > (textHeight * extFactor)) {
+					break;
+				}
+
+				//QImage qImg = Image::mat2QImage(mImg, true);
+				//QPainter painter(&qImg);
+
+				//painter.setPen(ColorManager::blue());
+				//li.draw(painter);
+				//lj.draw(painter);
+
+				//if (li.p1().x() > lj.p1().x()) {
+				//	if (li.p1().y() > lj.p1().y()) {
+				//		Rect mergeR = Rect(li.p1()- Vector2D(0, textHeight*2.5), Vector2D(textHeight*2.5, textHeight*2.5));
+				//		mergeR.draw(painter);
+				//	}
+				//	else {
+				//		Rect mergeR = Rect(li.p1(), Vector2D(textHeight*2.5, textHeight*2.5));
+				//		mergeR.draw(painter);
+				//	}
+				//}
+				//else {
+				//	if (lj.p1().y() > li.p1().y()) {
+				//		Rect mergeR = Rect(lj.p1() - Vector2D(0, textHeight*2.5), Vector2D(textHeight*2.5, textHeight*2.5));
+				//		mergeR.draw(painter);
+				//	}
+				//	else {
+				//		Rect mergeR = Rect(lj.p1(), Vector2D(textHeight*2.5, textHeight*2.5));
+				//		mergeR.draw(painter);
+				//	}
+				//}
+
+				//cv::Mat results = Image::qImage2Mat(qImg);
+
 				if (bnn1.isNull()) {
 					bnnIndices[i] = QVector<int>(1, j);
 					annCount[j] = annCount[j] + 1;

@@ -214,12 +214,14 @@ int main(int argc, char** argv) {
 			//thet.run();
 
 			rdf::WhiteSpaceTest wst(dc);
+			
 			wst.run();
 
 			//QString dirPath = "E:/data/test/HBR13_test";
 			//QString dirPath = "E:/data/test/HBR2013_training/training";
+			//QString dirPath = "E:/data/test/HBR2013_training/test";
+			
 			//wst.processDirectory(dirPath);
-
 
 			//rdf::FontClassificationTest fct(dc);
 			//fct.run();
@@ -258,11 +260,11 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		//dc.setImagePath("C:/read/test/d6.5/eval/P_241_27_012.jpg");
 
 		//dc.setImagePath("E:/data/test/HBR2013_training/00443033.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/00451351.tif");
+		dc.setImagePath("E:/data/test/HBR2013_training/00451351.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00452456.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00456592.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00465433.tif");
-		dc.setImagePath("E:/data/test/HBR2013_training/00485679.tif"); 
+		//dc.setImagePath("E:/data/test/HBR2013_training/00485679.tif"); 
 		
 		
 		//dc.setImagePath("E:/data/test/HBR2013_training/00320909.tif");
