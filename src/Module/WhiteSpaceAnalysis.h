@@ -262,15 +262,16 @@ namespace rdf {
 		void load(const QSettings& settings) override;
 		void save(QSettings& settings) const override;
 
-		//MSER/super pixel parameters
-		int mNumErosionLayers = 0; //must be > 0
-		int mMserMinArea = 25;
-		int mMserMaxArea = 500;
-		int mMaxImgSide = 1500;
+		//MSER & super pixel parameters
+		int mNumErosionLayers = 0;
+		int mMaxImgSide = 2000;
+		int mMserMaxArea = (int)std::round(mMaxImgSide/1.5);
+		int mMserMinArea = (int)std::round(mMserMaxArea/35);
 
 		bool mScaleInput = true;
 
 		bool mDebugDraw = false;
+		//bool mDebugDraw = true;
 		QString mDebugPath = "E:/data/test/HBR2013_training";
 	};
 	
@@ -296,6 +297,7 @@ namespace rdf {
 		SuperPixel computeSuperPixels(const cv::Mat & img);
 		bool computeLocalStats(PixelSet & pixels) const;
 		Rect filterPixels(PixelSet& pixels);
+		QVector<QVector<QSharedPointer<rdf::Pixel>>> findPixelGroups(PixelSet& set);
 
 		void drawDebugImages(const cv::Mat& img);
 		cv::Mat drawWhiteSpaces(const cv::Mat& img);

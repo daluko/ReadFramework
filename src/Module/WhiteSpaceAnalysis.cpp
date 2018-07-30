@@ -223,8 +223,10 @@ bool WhiteSpaceAnalysis::compute() {
 	qInfo() << "Finished white space segmentation.";
 
 	//debug 
-	//QString imgPath = Utils::createFilePath(config()->debugPath(), "_whiteSpaces");
-	//Image::save(wss.drawSplitTextLines(mImg), imgPath);
+	if (config()->debugDraw()) {
+		QString imgPath = Utils::createFilePath(config()->debugPath(), "_whiteSpaces");
+		Image::save(wss.drawSplitTextLines(mImg), imgPath);
+	}
 
 	//get segmented text lines
 	mWSTextLines = wss.textLineSets();
@@ -268,9 +270,19 @@ SuperPixel WhiteSpaceAnalysis::computeSuperPixels(const cv::Mat & img){
 
 	//TODO FIX PARAMETERS
 	//TODO check if preprocessing image in super pixel class should be changed
-	int numErosionLayers = config()->numErosionLayers(); //must be > 0
+
+	int maxImgSide = config()->maxImgSide();
 	int mserMinArea = config()->mserMinArea();
 	int mserMaxArea = config()->mserMaxArea();
+
+	if (img.rows < maxImgSide) {
+		
+		double maxRatio = maxImgSide / mserMaxArea;
+		mserMaxArea = (int)std::round((double)img.rows / maxRatio);
+
+		double minRatio = maxImgSide / mserMinArea;
+		mserMinArea = (int)std::round((double)img.rows / minRatio);
+	}
 
 	//Text Spotter params
 	//MSER ms(10, (int)(0.00002*mser_img.cols*mser_img.rows), (int)(0.05*mser_img.cols*mser_img.rows), 1, 0.7);
@@ -280,11 +292,11 @@ SuperPixel WhiteSpaceAnalysis::computeSuperPixels(const cv::Mat & img){
 	
 	//changing sp parameters here
 	auto spConfig = sp.config();
-	spConfig->setNumErosionLayers(numErosionLayers);
+	spConfig->setNumErosionLayers(config()->numErosionLayers());
 	spConfig->setMserMaxArea(mserMaxArea);
 	spConfig->setMserMinArea(mserMinArea);
 	sp.setConfig(spConfig);
-
+	
 	if (!sp.compute()) {
 		qDebug() << "error during SuperPixel computation";
 	}
@@ -321,7 +333,6 @@ bool WhiteSpaceAnalysis::computeLocalStats(PixelSet & pixels) const {
 }
 
 Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
-	//TODO find smart/adaptive size filtering constraint
 
 	if (set.isEmpty())
 		return Rect();
@@ -386,7 +397,6 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 		}
 	}
 
-	QVector<QSharedPointer<Pixel>> removedPixels;
 	for (auto id : removeIDs) {
 		removedPixels1 << set.find(id);
 		set.remove(set.find(id));
@@ -394,40 +404,82 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 
 	removeIDs.clear();
 
+
 	//filter overlapping pixels---------------------------------------------------------
-	
-	//sort pixels for more efficient computation
-	auto set_ = set.pixels();
-	std::sort(set_.begin(), set_.end(), [](const auto& lhs, const auto& rhs) {
-		return lhs->bbox().top() < rhs->bbox().top();
-	});
 
-	for (auto p1 : set_) {
+	Timer df;
+	QVector<QString> isolatedPixels;
 
-		if (removeIDs.contains(p1->id()))
-			continue;
+	auto pixelGroups = findPixelGroups(set);
 
-		for (int i = set_.indexOf(p1)+1; i < set_.size(); i++){
-			auto p2 = set_.at(i);
+	//eliminate redundant pixels, based on area they cover within the group
+	for (auto g : pixelGroups) {
 
-			if (p1 == p2)
-				continue;
+		//process biggest pixels first, eliminate pixel if its area is covered by smaller ones
+		std::sort(g.begin(), g.end(), [](const auto& lhs, const auto& rhs) {
+			return lhs->bbox().area() > rhs->bbox().area();
+		});
 
-			if (removeIDs.contains(p2->id()))
-				continue;
+		for (auto p1 : g){
 
-			if (p1->bbox().top() > p2->bbox().top())
-				continue;
+			Rect p1R = p1->bbox();
+			bool hasIntersection = false;
+			QVector<QSharedPointer<Pixel>> overlappingPixels;
 
-			if (p1->bbox().bottom() < p2->bbox().top())
+			//check for every pixel within the group if it is overlapping (nested) with the current one
+			for (int j = 0; j < g.size(); j++) {
+				
+				auto p2 = g.at(j);
+				QString p2ID = p2->id();
+				Rect p2R = p2->bbox();
+
+				if (isolatedPixels.contains(p2ID) || removeIDs.contains(p2ID) || (p1 == p2))
+					continue;
+
+				if (p1R.intersects(p2R))
+					hasIntersection = true;
+				else
+					continue;
+
+				Rect iBox = p1R.intersected(p2R);
+				double relativeOverlap = iBox.area() / p2R.area();
+				
+				if (relativeOverlap > 0.75)
+					overlappingPixels << p2;
+
+			}
+
+			if (!hasIntersection) {
+				isolatedPixels << p1->id();
 				break;
+			}
 
-			if (p1->bbox().contains(p2->bbox())) {
-				removeIDs << p1->id();
-				break;
+			//TODO refine this process
+			if (!overlappingPixels.isEmpty()) {
+
+				Rect uBox = overlappingPixels[0]->bbox();
+				
+				if (overlappingPixels.size() > 1) {
+					for (int k = 1; k < overlappingPixels.size(); k++) {
+							uBox = uBox.joined(overlappingPixels[k]->bbox());
+					}
+				}
+
+				Rect iBox = uBox.intersected(p1R);
+				double relativeOverlap = iBox.area() / p1R.area();
+				
+				if (relativeOverlap > 0.75) 
+					removeIDs << p1->id();
+				else {
+					for (auto p : overlappingPixels)
+						removeIDs << p->id();
+				}
 			}
 		}
 	}
+
+	qDebug() << "Removing overlapping pixels t2: " << df.elapsed();
+	isolatedPixels.clear();
 
 	//remove filtered pixels from set
 	for (auto id : removeIDs) {
@@ -435,7 +487,112 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 		set.remove(set.find(id));
 	}
 
+	qDebug() << "Removing overlapping pixels took: " << df.getTotal();
+	qDebug() << "Removed " << QString::number(removeIDs.size()) << "redundant pixel(s) by analysing overlapping pixels.";
+	qDebug() << "The number of remaining rectangles is: " << QString::number(set.size());
+
 	return lsR;
+}
+
+QVector<QVector<QSharedPointer<rdf::Pixel>>> WhiteSpaceAnalysis::findPixelGroups(PixelSet& set) {
+
+	//sort pixels for more efficient computation
+	auto set_ = set.pixels();
+	std::sort(set_.begin(), set_.end(), [](const auto& lhs, const auto& rhs) {
+		return lhs->bbox().top() < rhs->bbox().top();
+	});
+
+	//create a mask of text pixel regions
+	cv::Mat mask(mImg.size(), CV_8UC1, cv::Scalar(0));
+
+	for (auto p1 : set_) {
+		mask(p1->bbox().toCvRect()) = mask(p1->bbox().toCvRect()) + 1;
+	}
+
+	cv::Mat pixel_mask = mask>0;
+	cv::Mat overlap_mask = mask>1;
+
+	//find contours of text pixel regions and their bounding box
+	std::vector<std::vector<cv::Point>> contours;
+	cv::findContours(pixel_mask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+
+	QVector<Rect> pixelRects;
+	for (auto c : contours) {
+		QVector<Vector2D> c_;
+
+		for (auto p : c)
+			c_.push_back(Vector2D(p));
+
+		Rect bbox = Rect::fromPoints(c_);
+		bbox.setSize(bbox.size() + Vector2D(1.0, 1.0)); //TODO find out why this is needed
+		pixelRects << bbox;
+	}
+
+	//eliminate pixelRects containing only one text region
+	QVector<Rect> pixelRects_;
+	for (auto r : pixelRects) {
+		cv::Mat overlap_r = overlap_mask(r.toCvRect());
+		if (cv::countNonZero(overlap_r) > 0) {
+			pixelRects_.append(r);
+		}
+	}
+
+	pixelRects = pixelRects_;
+
+	//QImage qImg(mImg.size().width, mImg.size().height, QImage::Format_ARGB32);	//blank image
+	//QPainter painter(&qImg);
+	//
+	//for (auto p : set_) {
+	//	painter.setPen(ColorManager::blue());
+	//	p->bbox().draw(painter);
+	//}
+
+	//for (auto r : pixelRects) {
+	//	painter.setPen(ColorManager::red());
+	//	r.draw(painter);
+	//}
+
+	//cv::Mat results = Image::qImage2Mat(qImg);
+
+	//find groups of pixels that are overlapping
+	std::sort(pixelRects.begin(), pixelRects.end(), [](const auto& lhs, const auto& rhs) {
+		return lhs.top() < rhs.top();
+	});
+
+	QVector<QVector<QSharedPointer<rdf::Pixel>>> pixelGroups(pixelRects.size());
+	if (!pixelRects.isEmpty()) {
+		for (auto p : set_) {
+			Rect pR = p->bbox();
+
+			for (int i = 0; i < pixelRects.size(); ++i) {
+				Rect gR = pixelRects[i];
+				if (gR.bottom() < pR.top())
+					continue;
+
+				if (gR.top() > pR.bottom())
+					break;
+
+				if (gR.contains(p->bbox())) {
+					pixelGroups[i].append(p);
+					break;
+				}
+			}
+		}
+	}
+
+	//QImage qImg1(mImg.size().width, mImg.size().height, QImage::Format_ARGB32);	//blank image
+	//QPainter painter1(&qImg1);
+
+	//for (auto g : pixelGroups) {
+	//	painter1.setPen(ColorManager::randColor());
+	//	for (auto p : g) {
+	//		p->bbox().draw(painter1);
+	//	}
+	//}
+
+	//cv::Mat results2 = Image::qImage2Mat(qImg1);
+
+	return pixelGroups;
 }
 
 QVector<QSharedPointer<TextRegion>> WhiteSpaceAnalysis::textLineRegions() const{
@@ -688,7 +845,12 @@ bool TextLineHypothisizer::compute() {
 	mPg = pg; //debug drawing, remove later
 
 	mTextLines = clusterTextLines(pg);
+
+	//cv::Mat results = drawTextLineHypotheses(mImg);
+
 	mergeUnstableTextLines(mTextLines);
+
+	//cv::Mat results2 = drawTextLineHypotheses(mImg);
 
 	//remove short text lines
 	//TODO refine and transfer code to own function
@@ -706,16 +868,6 @@ bool TextLineHypothisizer::compute() {
 	for (auto tl : mTextLines) {
 		extractWhiteSpaces(tl);
 	}
-
-	////debug draw
-	//cv::Mat result_tmp = drawTextLineHypotheses(mImg);
-	//cv::Mat result_tmp2 = drawGraphEdges(mImg);
-	//
-	//QString imgPath = Utils::createFilePath("E:/data/test/HBR2013_training/debug.tif", "_textLineHypotheses_debug");
-	//Image::save(result_tmp, imgPath);
-
-	//imgPath = Utils::createFilePath("E:/data/test/HBR2013_training/debug.tif", "_textLineHypotheses_debug2");
-	//Image::save(result_tmp2, imgPath);
 
 	return true;
 }
@@ -1075,8 +1227,8 @@ bool TextLineHypothisizer::addPixel(QSharedPointer<WSTextLineSet> &set, const QS
 	//TODO consider additional condition for max distance between pixels
 
 	double mMinPointDist = 40.0;		// acceptable minimal distance of a point to a line
-	double mErrorMultiplier = 1.2;		// maximal increase of error when merging two lines
-	double setError = set->error() * config()->errorMultiplier();
+	double mErrorMultiplier = config()->errorMultiplier();		// maximal increase of error when merging two lines
+	double setError = set->error() * mErrorMultiplier;
 	double heatError = mMinPointDist * heat;
 	double mErr = std::max(setError, heatError);
 	double newErr = set->line().distance(e->second()->center());
@@ -1695,9 +1847,6 @@ PixelGraph WhiteSpaceSegmentation::computeSegmentationGraph() const{
 }
 
 void WhiteSpaceSegmentation::removeIsolatedBCR(PixelGraph pg) {
-	
-	//TODO set parameter in config;
-	double gapExtFactor = 1.3;
 
 	QVector<QSharedPointer<WhiteSpacePixel>> isolatedBCR;
 
@@ -2223,7 +2372,7 @@ void TextBlockFormation::computeAdjacency() {
 			//check for x overlap of tlc
 			if (r1.left() <= r2.right() && r2.left() <= r1.right()) {
 
-				//TODO check distance between text lines ( < max distance)
+				//TODO consider splitting into paragraphs accroding to average distance of a group
 				Line li = mTextLines[i]->fitLine();
 				Line lj = mTextLines[j]->fitLine();
 				
@@ -2241,11 +2390,12 @@ void TextBlockFormation::computeAdjacency() {
 
 				double avgLineDist = (d1 + d2) / 2;
 
-				double textHeight = std::max(mTextLines[i]->pixelHeight(), mTextLines[j]->pixelHeight());
-				double extFactor = 3.0;
+				double textHeight = std::min(mTextLines[i]->pixelHeight(), mTextLines[j]->pixelHeight());
+				double extFactor = 3.5;
 				
+				bool hasBigGap = false;
 				if (avgLineDist > (textHeight * extFactor)) {
-					break;
+					hasBigGap = true;
 				}
 
 				//QImage qImg = Image::mat2QImage(mImg, true);
@@ -2255,28 +2405,42 @@ void TextBlockFormation::computeAdjacency() {
 				//li.draw(painter);
 				//lj.draw(painter);
 
+				//if (hasBigGap)
+				//	painter.setPen(ColorManager::red());
+
 				//if (li.p1().x() > lj.p1().x()) {
 				//	if (li.p1().y() > lj.p1().y()) {
-				//		Rect mergeR = Rect(li.p1()- Vector2D(0, textHeight*2.5), Vector2D(textHeight*2.5, textHeight*2.5));
+				//		Rect mergeR = Rect(li.p1()- Vector2D(0, textHeight*extFactor), Vector2D(textHeight*extFactor, textHeight*extFactor));
+				//		mergeR.draw(painter);
+				//		mergeR = Rect(li.p1() - Vector2D(0, textHeight*extFactor), Vector2D(textHeight, textHeight));
 				//		mergeR.draw(painter);
 				//	}
 				//	else {
-				//		Rect mergeR = Rect(li.p1(), Vector2D(textHeight*2.5, textHeight*2.5));
+				//		Rect mergeR = Rect(li.p1(), Vector2D(textHeight*extFactor, textHeight*extFactor));
+				//		mergeR.draw(painter);
+				//		mergeR = Rect(li.p1(), Vector2D(textHeight, textHeight));
 				//		mergeR.draw(painter);
 				//	}
 				//}
 				//else {
 				//	if (lj.p1().y() > li.p1().y()) {
-				//		Rect mergeR = Rect(lj.p1() - Vector2D(0, textHeight*2.5), Vector2D(textHeight*2.5, textHeight*2.5));
+				//		Rect mergeR = Rect(lj.p1() - Vector2D(0, textHeight*extFactor), Vector2D(textHeight*extFactor, textHeight*extFactor));
+				//		mergeR.draw(painter);
+				//		mergeR = Rect(lj.p1() - Vector2D(0, textHeight*extFactor), Vector2D(textHeight, textHeight));
 				//		mergeR.draw(painter);
 				//	}
 				//	else {
-				//		Rect mergeR = Rect(lj.p1(), Vector2D(textHeight*2.5, textHeight*2.5));
+				//		Rect mergeR = Rect(lj.p1(), Vector2D(textHeight*extFactor, textHeight*extFactor));
+				//		mergeR.draw(painter);
+				//		mergeR = Rect(lj.p1(), Vector2D(textHeight, textHeight));
 				//		mergeR.draw(painter);
 				//	}
 				//}
 
 				//cv::Mat results = Image::qImage2Mat(qImg);
+
+				if (hasBigGap)
+					break;
 
 				if (bnn1.isNull()) {
 					bnnIndices[i] = QVector<int>(1, j);

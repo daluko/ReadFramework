@@ -80,6 +80,13 @@ QSharedPointer<MserContainer> SuperPixel::mser(const cv::Mat & img) const {
 	mser->setMinArea(config()->mserMinArea());
 	mser->setMaxArea(config()->mserMaxArea());
 
+	//
+	mser->setPass2Only(true);
+	bitwise_not(img, img);
+	int delta = 5; //standard = 5
+	mser->setDelta(delta);
+	//
+
 	QSharedPointer<MserContainer> blobs(new MserContainer());
 	mser->detectRegions(img, blobs->pixels, blobs->boxes);
 	assert(blobs->pixels.size() == blobs->boxes.size());
