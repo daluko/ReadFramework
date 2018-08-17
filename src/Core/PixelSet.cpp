@@ -1772,6 +1772,16 @@ double WSTextLineSet::pixelHeight(double statMoment) const {
 	return Algorithms::statMoment(heights, statMoment);
 }
 
+double WSTextLineSet::avgPixelHeight() const {
+
+	double hSum = 0;
+	for (const QSharedPointer<Pixel>& px : pixels()) {
+		hSum += px->bbox().height();
+	}
+
+	return  hSum / (double)pixels().size();
+}
+
 /// <summary>
 /// Computes the median width of the pixels in the set.
 /// </summary>

@@ -152,7 +152,7 @@ namespace rdf {
 
 	protected:
 
-		int mMinLineLength = 3;			// minimum text line length when clustering
+		int mMinLineLength = 3;				// minimum text line length when clustering
 		double mErrorMultiplier = 1.2;		// maximal increase of error when merging two lines
 		QString mDebugPath = "E:/data/test/HBR2013_training";
 		void load(const QSettings& settings) override;
@@ -176,6 +176,8 @@ namespace rdf {
 		cv::Mat drawTextLineHypotheses(const cv::Mat& img);
 
 	protected:
+		double minAgreeRatio = 0.5;
+
 		PixelSet mSet;
 		cv::Mat mImg;
 		QVector<QSharedPointer<WSTextLineSet> > mTextLines;
@@ -185,12 +187,14 @@ namespace rdf {
 		bool checkInput() const override;
 		QVector<QSharedPointer<WSTextLineSet> > clusterTextLines(const PixelGraph& graph) const;
 		int findSetIndex(const QSharedPointer<Pixel>& pixel, const QVector<QSharedPointer<WSTextLineSet> >& sets) const;
-		bool addPixel(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<PixelEdge> &e, double heat) const;
-		//bool addPixel2(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<Pixel> &p, double heat) const;
-		bool mergeTextLines(const QSharedPointer<WSTextLineSet>& tls1, const QSharedPointer<WSTextLineSet>& tls2, double heat) const;
+		bool mergePixels(const QSharedPointer<PixelEdge> &e) const;
+		bool addPixel(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<PixelEdge> &e, const QSharedPointer<Pixel> &pixel, double heat) const;
+		bool isContinuousMerge(const QSharedPointer<WSTextLineSet>& tls, const QVector<QSharedPointer<Pixel>>& pixels) const;
+		bool mergeTextLines(const QSharedPointer<WSTextLineSet>& tls1, const QSharedPointer<WSTextLineSet>& tls2, const QSharedPointer<PixelEdge> &e, double heat) const;
 		bool processEdge(const QSharedPointer<PixelEdge>& edge, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat = -1) const;
 		bool processEdgeDebug(const QSharedPointer<PixelEdge>& e, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat, Rect debugWindow = Rect()) const;
 		void mergeUnstableTextLines(QVector<QSharedPointer<WSTextLineSet> >& textLines) const;
+		void removeShortTextLines();
 		void extractWhiteSpaces(QSharedPointer<WSTextLineSet>& textLine) const;
 	};
 

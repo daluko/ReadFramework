@@ -300,6 +300,7 @@ public:
 	double maxGap() const;
 	bool isShort(double minBCRSize = -1) const;
 	double pixelHeight(double statMoment = 0.5) const;
+	double avgPixelHeight() const;
 	double pixelWidth(double statMoment = 0.5) const;
 
 protected:
