@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -142,7 +142,10 @@ public:
 	LabelInfo find(const QString& str) const;
 	LabelInfo find(const Region& r) const;
 	LabelInfo find(int id) const;
+	int indexOf(int id) const;
 	LabelInfo backgroundLabel() const;
+
+	QVector<LabelInfo> labelInfos() const;
 
 	static QString jsonKey();
 
@@ -150,6 +153,26 @@ public:
 
 protected:
 	QVector<LabelInfo> mLookups;
+};
+
+class DllCoreExport PixelVotes : public BaseElement {
+
+public:
+	PixelVotes(const LabelManager& lm = LabelManager(), const QString& id = QString());
+
+	bool isEmpty() const;
+
+	void setRawVotes(const cv::Mat& rawVotes);
+	cv::Mat data() const;
+
+	int labelIndex() const;
+
+protected:
+	LabelManager mManager;
+	cv::Mat mVotes;
+	double mNumTrees = 0;
+
+	int maxVote() const;
 };
 
 class DllCoreExport PixelLabel : public BaseElement {
@@ -165,9 +188,13 @@ public:
 	void setTrueLabel(const LabelInfo& label);
 	LabelInfo trueLabel() const;
 
+	void setVotes(const PixelVotes& votes);
+	PixelVotes votes() const;
+
 protected:
 	LabelInfo mTrueLabel = LabelInfo::label_unknown;
 	LabelInfo mLabel = LabelInfo::label_unknown;
+	PixelVotes mVotes;
 };
 
 class DllCoreExport SuperPixelModel {
@@ -178,6 +205,7 @@ public:
 	bool isEmpty() const;
 
 	cv::Ptr<cv::ml::StatModel> model() const;
+	cv::Ptr<cv::ml::RTrees> randomTrees() const;
 	LabelManager manager() const;
 
 	QVector<PixelLabel> classify(const cv::Mat& features) const;
@@ -191,6 +219,7 @@ protected:
 
 	static cv::Ptr<cv::ml::RTrees> readRTreesModel(QJsonObject& jo);
 	void toJson(QJsonObject& jo) const;
+
 };
 
 }

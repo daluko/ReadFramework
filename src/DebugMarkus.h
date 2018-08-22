@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -71,6 +71,7 @@ public:
 protected:
 	void testFeatureCollector(const cv::Mat& src) const;
 	void testTrainer();
+	void testClassifier(const cv::Mat& src) const;
 	void testLineDetector(const cv::Mat& src) const;
 
 	void testLayout(const cv::Mat& src) const;
@@ -79,6 +80,21 @@ protected:
 	double scaleFactor(const cv::Mat& img) const;
 	void eval() const;
 	void eval(const QString& toolPath, const QString& gtPath, const QString& resultPath) const;
+
+	DebugConfig mConfig;
+};
+
+class DeepMergeTest {
+
+public:
+	DeepMergeTest(const DebugConfig& config = DebugConfig());
+
+	void run();
+
+protected:
+
+	void merge(const cv::Mat& src) const;
+	cv::Mat thresh(const cv::Mat& src, double thr = 0.5) const;
 
 	DebugConfig mConfig;
 };

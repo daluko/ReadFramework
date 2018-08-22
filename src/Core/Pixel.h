@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -37,6 +37,7 @@
 #include "Utils.h"
 #include "PixelLabel.h"
 #include "Algorithms.h"
+#include "ScaleFactory.h"
 
 #pragma warning(push, 0)	// no warnings from includes
 #include <QObject>
@@ -101,9 +102,10 @@ protected:
 class DllCoreExport PixelStats : public BaseElement {
 
 public:
-	PixelStats(const cv::Mat& orHist = cv::Mat(), 
-		const cv::Mat& sparsity = cv::Mat(), 
-		double scale = 0.0, 
+	PixelStats(const cv::Mat& orHist = cv::Mat(),
+		const cv::Mat& sparsity = cv::Mat(),
+		double scale = 0.0,
+		QSharedPointer<ScaleFactory> scaleFactory = QSharedPointer<ScaleFactory>(new ScaleFactory()),
 		const QString& id = QString());
 
 	/* row index of data */
@@ -118,6 +120,8 @@ public:
 	};
 
 	bool isEmpty() const;
+
+	void setScaleFactory(const QSharedPointer<ScaleFactory>& scaleFactory);
 
 	void setOrientationIndex(int orIdx);
 	void setLineSpacing(int ls);
@@ -135,11 +139,12 @@ public:
 	cv::Mat data(const DataIndex& dIdx = all_data);
 
 	QString toString() const;
-
+	
 protected:
 	cv::Mat mData;	// MxN orientation histograms M ... idx_end and N ... number of orientations
 	double mScale = 0.0;
 	double mMinVal = 0.0;
+	QSharedPointer<ScaleFactory> mScaleFactory;
 
 	int mHistSize = 0;
 	int mOrIdx = -1;
@@ -209,8 +214,8 @@ public:
 	void setTabStop(const PixelTabStop& tabStop);
 	PixelTabStop tabStop() const;
 
-	void setLabel(const PixelLabel& label);
-	PixelLabel label() const;
+	void setLabel(const QSharedPointer<PixelLabel>& label);
+	QSharedPointer<PixelLabel> label() const;
 
 	void setPyramidLevel(int level);
 	int pyramidLevel() const;
@@ -244,7 +249,7 @@ protected:
 	Rect mBBox;
 	QVector<QSharedPointer<PixelStats> > mStats;
 	PixelTabStop mTabStop;
-	PixelLabel mLabel;
+	QSharedPointer<PixelLabel> mLabel = QSharedPointer<PixelLabel>::create();
 	double mValue = 0.0;	// e.g. gradient magnitude for GridPixels
 
 	int mPyramidLevel = 0;	// 1.0/std::pow(2, mPyramidLevel) scales back to the pyramid

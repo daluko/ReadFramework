@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -267,6 +267,37 @@ void IP::normalize(cv::Mat & src) {
 	}
 }
 
+QVector<Polygon> IP::maskToPoly(const cv::Mat & src, double scale) {
+	
+
+	std::vector<cv::Vec4i> hierarchy;
+	std::vector<std::vector<cv::Point> > contours;
+	
+	cv::Mat img = src.clone();	// find contours changes the src
+	cv::findContours(img, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE);
+	
+	// convert to Qt
+	QVector<Polygon> polys;
+	std::vector<cv::Vec4i>::iterator hy(hierarchy.begin());
+	for (const std::vector<cv::Point>& ct : contours) {
+
+		// remove inner contours
+		if ((*hy)[3] >= 0) {
+			hy++;
+			continue;
+		}
+
+		Polygon p = Polygon::fromCvPoints(ct);
+		if (scale != 1.0)
+			p.scale(scale);
+
+		polys << p;
+		hy++;
+	}
+
+	return polys;
+}
+
 /// <summary>
 /// Dilates the image bwImg with a given structuring element.
 /// </summary>
@@ -396,7 +427,6 @@ cv::Mat IP::threshOtsu(const cv::Mat& srcImg, int thType) {
 
 	cv::Mat srcGray = srcImg;
 	if (srcImg.channels() != 1) cv::cvtColor(srcImg, srcGray, CV_RGB2GRAY);
-	//qDebug() << "convertedImg has " << srcGray.channels() << " channels";
 
 	cv::Mat binImg;
 	cv::threshold(srcGray, binImg, 0, 255, thType | CV_THRESH_OTSU);

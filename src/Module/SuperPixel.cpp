@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -403,7 +403,7 @@ size_t MserContainer::size() const {
 }
 
 // LocalOrientationConfig --------------------------------------------------------------------
-LocalOrientationConfig::LocalOrientationConfig() : ModuleConfig("Local Orientation") {
+LocalOrientationConfig::LocalOrientationConfig() : ScaleModuleConfig("Local Orientation") {
 }
 
 QString LocalOrientationConfig::toString() const {
@@ -416,11 +416,12 @@ QString LocalOrientationConfig::toString() const {
 }
 
 int LocalOrientationConfig::maxScale() const {
-	return qRound(mMaxScale*ScaleFactory::scaleFactorDpi());
+	
+	return qRound(mMaxScale*mScaleFactory->scaleFactorDpi());
 }
 
 int LocalOrientationConfig::minScale() const {
-	return qRound(mMinScale*ScaleFactory::scaleFactorDpi());
+	return qRound(mMinScale*mScaleFactory->scaleFactorDpi());
 }
 
 Vector2D LocalOrientationConfig::scaleIvl() const {
@@ -575,7 +576,7 @@ void LocalOrientation::computeAllOrHists(Pixel* pixel, const QVector<Pixel*>& se
 		sparsity.at<float>(0, k) = sp;
 	}
 
-	pixel->addStats(QSharedPointer<PixelStats>(new PixelStats(orHist, sparsity, radius, pixel->id())));
+	pixel->addStats(QSharedPointer<PixelStats>(new PixelStats(orHist, sparsity, radius, config()->scaleFactory(), pixel->id())));
 }
 
 void LocalOrientation::computeOrHist(const Pixel* pixel, 
@@ -835,7 +836,7 @@ bool GridSuperPixel::compute() {
 	mGridPixel = merge(pixelMap, mag, phase);
 
 	for (auto p : mGridPixel) {
-		if (!p->isDead())
+		if (!p->isDead() && p->ellipse().isValid())
 			mSet << p->toPixel();
 	}
 

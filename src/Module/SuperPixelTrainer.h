@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -73,8 +73,8 @@ public:
 	FeatureCollection(const cv::Mat& descriptors = cv::Mat(), const LabelInfo& label = LabelInfo());
 	friend DllCoreExport bool operator==(const FeatureCollection& fcl, const FeatureCollection& fcr);
 
-	QJsonObject toJson() const;
-	static FeatureCollection read(QJsonObject& jo);
+	QJsonObject toJson(const QString& filePath = "") const;
+	static FeatureCollection read(QJsonObject& jo, const QString& filePath = "");
 
 	void append(const cv::Mat& descriptor);
 	LabelInfo label() const;
@@ -176,14 +176,14 @@ public:
 	bool compute() override;
 	QSharedPointer<SuperPixelLabelerConfig> config() const;
 
-	cv::Mat draw(const cv::Mat& img) const;
+	cv::Mat draw(const cv::Mat& img, bool drawPixels = true) const;
 	QString toString() const override;
 
 	void setFilePath(const QString& filePath);
 	void setRootRegion(const QSharedPointer<RootRegion>& region);
 	void setLabelManager(const LabelManager& manager);
 	void setPage(const QSharedPointer<PageElement>& page);
-	QImage createLabelImage(const Rect& imgRect) const;
+	QImage createLabelImage(const Rect& imgRect, bool visualize = false) const;
 
 	PixelSet set() const;
 
@@ -217,10 +217,14 @@ public:
 
 	virtual QString toString() const override;
 
+	void setNumTrees(int numTrees);
+	int numTrees() const;
+
 protected:
 
 	QStringList mFeatureCachePaths;
 	QString mModelPath;
+	int mNumTrees = 150;
 
 	void load(const QSettings& settings) override;
 	void save(QSettings& settings) const override;

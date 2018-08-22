@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -47,6 +47,7 @@
 #include <QPainter>
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -186,15 +187,23 @@ QSharedPointer<SuperPixelLabelerConfig> SuperPixelLabeler::config() const {
 	return qSharedPointerDynamicCast<SuperPixelLabelerConfig>(mConfig);
 }
 
-cv::Mat SuperPixelLabeler::draw(const cv::Mat& img) const {
+cv::Mat SuperPixelLabeler::draw(const cv::Mat& img, bool drawPixels) const {
 
 	// draw mser blobs
 	Timer dtf;
 	QImage qImg = Image::mat2QImage(img, true);
 
+	QImage labelImgQt = createLabelImage(mImgRect, true);
+
 	QPainter p(&qImg);
+
+	p.setOpacity(0.4);
+	p.drawImage(QPoint(), labelImgQt);
+	p.setOpacity(1.0);
 	p.setPen(ColorManager::red());
-	mSet.draw(p, PixelSet::draw_pixels);
+	
+	if (drawPixels)
+		mSet.draw(p, PixelSet::draw_pixels);
 
 	// draw legend
 	mManager.draw(p);
@@ -242,7 +251,7 @@ void SuperPixelLabeler::setPage(const QSharedPointer<PageElement>& page) {
 	mPage = page;
 }
 
-QImage SuperPixelLabeler::createLabelImage(const Rect & imgRect) const {
+QImage SuperPixelLabeler::createLabelImage(const Rect & imgRect, bool visualize) const {
 
 	if (mManager.isEmpty())
 		mWarning << "label manager is empty...";
@@ -279,16 +288,22 @@ QImage SuperPixelLabeler::createLabelImage(const Rect & imgRect) const {
 
 		LabelInfo ll = mManager.find(*region);
 
+		if (ll == LabelInfo())
+			continue;
+
 		if (ll.isNull()) { 
 			qDebug() << "could not find region: " << RegionManager::instance().typeName(region->type());
 			continue;
 		}
 		
-		QColor labelC = ll.color();
+		QColor labelC = (!visualize) ? ll.color() : ll.visColor();
 		p.setPen(labelC);
 		p.setBrush(labelC);
 		region->polygon().draw(p);
 	}
+
+	if (visualize)
+		mManager.draw(p);
 
 	return img;
 }
@@ -361,10 +376,9 @@ PixelSet SuperPixelLabeler::labelBlobs(const cv::Mat & labelImg, const QVector<Q
 		int id = LabelInfo::color2Id(col);
 
 		// assign ground truth & convert to pixel
-		PixelLabel label;
-		label.setTrueLabel(mManager.find(id));
 		QSharedPointer<Pixel> px = cb->toPixel();
-		px->setLabel(label);
+		QSharedPointer<PixelLabel> l = px->label();
+		l->setTrueLabel(mManager.find(id));
 		set.add(px);
 	}
 	
@@ -374,6 +388,7 @@ PixelSet SuperPixelLabeler::labelBlobs(const cv::Mat & labelImg, const QVector<Q
 PixelSet SuperPixelLabeler::labelPixels(const cv::Mat & labelImg, const PixelSet& set) const {
 
 	PixelSet setL;
+	int rCnt = 0;
 
 	for (const auto& px : set.pixels()) {
 
@@ -386,15 +401,25 @@ PixelSet SuperPixelLabeler::labelPixels(const cv::Mat & labelImg, const PixelSet
 			mask = mask(Rect(Vector2D(), r.size()).toCvRect());
 
 		// find the blob's label
-		QColor col = IP::statMomentColor(labelBBox, mask);
-		int id = LabelInfo::color2Id(col);
+		QColor col1 = IP::statMomentColor(labelBBox, mask, 0.2);
+		QColor col2 = IP::statMomentColor(labelBBox, mask, 0.8);
 
-		// assign ground truth & convert to pixel
-		PixelLabel label = px->label();
-		label.setTrueLabel(mManager.find(id));
-		px->setLabel(label);		
+		// if less than 60% of the blob's area is consistent, we reject the blob
+		if (col1 != col2) {
+			rCnt++;
+			continue;
+		}
+
+		// col1 == col2
+		int id = LabelInfo::color2Id(col1);
+
+		// assign ground truth
+		QSharedPointer<PixelLabel> l = px->label();
+		l->setTrueLabel(mManager.find(id));
 		setL << px;
 	}
+
+	qDebug() << rCnt << "rejected because they have an ambigous GT class";
 
 	return set;
 }
@@ -410,20 +435,34 @@ bool operator==(const FeatureCollection& fcl, const FeatureCollection& fcr) {
 	return fcl.label() == fcr.label();
 }
 
-QJsonObject FeatureCollection::toJson() const {
+QJsonObject FeatureCollection::toJson(const QString& filePath) const {
 
 	QJsonObject jo;
 	mLabel.toJson(jo);
-	jo.insert("descriptors", Image::matToJson(mDesc));
+
+	// embed features
+	if (filePath == "")
+		jo.insert("descriptors", Image::matToJson(mDesc));
+	else {
+
+		// write data to external file
+		QString fp = Utils::createFilePath(filePath, "-" + Utils::timeStampFileName(mLabel.name(), ""), "rdf");
+		Image::writeMat(mDesc, fp);
+
+		QFileInfo fi(fp);
+		jo.insert("descriptors", Image::matToJsonExtern(mDesc, fi.fileName()));
+	}
 
 	return jo;
 }
 
-FeatureCollection FeatureCollection::read(QJsonObject & jo) {
+FeatureCollection FeatureCollection::read(QJsonObject & jo, const QString& filePath) {
+
+	QString path = QFileInfo(filePath).absolutePath();
 
 	FeatureCollection fc;
 	fc.mLabel = LabelInfo::fromJson(jo.value("Class").toObject());
-	fc.mDesc = Image::jsonToMat(jo.value("descriptors").toObject());
+	fc.mDesc = Image::jsonToMat(jo.value("descriptors").toObject(), path);
 
 	return fc;
 }
@@ -442,7 +481,7 @@ QVector<FeatureCollection> FeatureCollection::split(const cv::Mat & descriptors,
 	for (int idx = 0; idx < set.size(); idx++) {
 
 		const QSharedPointer<Pixel> px = set.pixels()[idx];
-		const LabelInfo& cLabel = px->label().trueLabel();
+		const LabelInfo& cLabel = px->label()->trueLabel();
 		bool isNew = true;
 		
 		for (FeatureCollection& fc : collections) {
@@ -500,7 +539,7 @@ void FeatureCollectionManager::write(const QString & filePath) const {
 
 	// NOTE: JSON objects have a size limit ~40MB
 	for (const FeatureCollection& fc : mCollection) {
-		ja << fc.toJson();
+		ja << fc.toJson(filePath);
 	}
 	
 	QJsonObject jo;
@@ -523,7 +562,7 @@ FeatureCollectionManager FeatureCollectionManager::read(const QString & filePath
 	// parse labels
 	for (const QJsonValue& cLabel : labels) {
 		QJsonObject co = cLabel.toObject();
-		manager.add(FeatureCollection::read(co));
+		manager.add(FeatureCollection::read(co, filePath));
 	}
 
 	return manager;
@@ -722,17 +761,27 @@ QString SuperPixelTrainerConfig::toString() const {
 	return msg;
 }
 
+void SuperPixelTrainerConfig::setNumTrees(int numTrees) {
+	mNumTrees = numTrees;
+}
+
+int SuperPixelTrainerConfig::numTrees() const {
+	return mNumTrees;
+}
+
 void SuperPixelTrainerConfig::load(const QSettings & settings) {
 
 	QString paths = settings.value("featureCachePaths", mFeatureCachePaths.join(",")).toString();
 	mFeatureCachePaths = paths.split(",");
 	mModelPath = settings.value("modelPath", mModelPath).toString();
+	mNumTrees = settings.value("numTrees", mNumTrees).toInt();
 }
 
 void SuperPixelTrainerConfig::save(QSettings & settings) const {
 	
 	settings.setValue("featureCachePaths", mFeatureCachePaths.join(","));
 	settings.setValue("modelPath", mModelPath);
+	settings.setValue("numTrees", mNumTrees);
 }
 
 // SuperPixelTrainer --------------------------------------------------------------------
@@ -754,6 +803,11 @@ bool SuperPixelTrainer::compute() {
 	Timer dt;
 	
 	mModel = cv::ml::RTrees::create();
+	
+	// TODO: validate!
+	cv::TermCriteria tc(cv::TermCriteria::COUNT, config()->numTrees(), 1e-6);
+	mModel->setTermCriteria(tc);
+	qInfo() << "training RF with" << config()->numTrees() << "trees";
 
 	if (mFeatureManager.numFeatures() == 0) {
 		qCritical() << "Cannot train random trees if no feature vectors are provided";
@@ -773,7 +827,9 @@ bool SuperPixelTrainer::compute() {
 		int i, n = (int)vi.total();
 		for (i = 0; i < n; i++ )
 			qInfo() << i << "\t" << 100.f * vi.at<float>(i)/viSum;
+
 	}
+	qInfo() << "num trees (nodes):" << mModel->getNodes().size();
 
 	mInfo << "trained in" << dt;
 
@@ -802,7 +858,7 @@ QString SuperPixelTrainer::toString() const {
 
 bool SuperPixelTrainer::write(const QString & filePath) const {
 
-	if (!mModel->isTrained())
+	if (mModel && !mModel->isTrained())
 		qWarning() << "writing trainer that is NOT trained!";
 
 	return model()->write(filePath);

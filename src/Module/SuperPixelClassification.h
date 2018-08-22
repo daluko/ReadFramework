@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -121,6 +121,7 @@ public:
 	QString toString() const override;
 
 	void setModel(const QSharedPointer<SuperPixelModel>& model);
+	PixelSet pixelSet() const;
 
 private:
 	cv::Mat mImg;
@@ -130,34 +131,6 @@ private:
 	bool checkInput() const override;
 };
 
-class DllCoreExport GraphCutLabels : public Module {
-
-public:
-	GraphCutLabels(const PixelSet& set);
-
-	bool isEmpty() const override;
-	bool compute() override;
-
-	//QString toString() const override;
-	//QSharedPointer<LocalOrientationConfig> config() const;
-
-	// results - available after compute() is called
-	PixelSet set() const;
-	void setModel(const QSharedPointer<SuperPixelModel>& model);
-
-private:
-
-	// input/output
-	PixelSet mSet;
-	QSharedPointer<SuperPixelModel> mModel;
-	double mScaleFactor = 1000.0;	// TODO: think about that
-
-	bool checkInput() const override;
-
-	void graphCut(const PixelGraph& graph);
-	cv::Mat costs(int numLabels) const;
-	cv::Mat labelDistMatrix(int numLabels) const;
-};
 
 
 }

@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -35,7 +35,7 @@
 #include "Network.h"
 
 #pragma warning(push, 0)	// no warnings from includes
-#include <QApplication>
+#include <QCoreApplication>
 #include <QDebug>
 #include <QPolygon>
 #include <QFileInfo>
@@ -77,7 +77,9 @@ Utils& Utils::instance() {
 }
 
 bool Utils::hasGui() {
-	return (qobject_cast<QApplication*>(QCoreApplication::instance()) != 0);	// check if only QCoreApplication (headless) is running
+	//return (qobject_cast<QApplication*>(QCoreApplication::instance()) != 0);	// check if only QCoreApplication (headless) is running
+	// as of Qt 5.11 we have painters in the headless too ...
+	return false;
 }
 
 void Utils::initFramework() const {
@@ -141,8 +143,8 @@ void Utils::registerVersion() const {
 
 #else
 	QString version(RDF_FRAMEWORK_VERSION);	// default version (we do not know the build)
-#endif
-	QApplication::setApplicationVersion(version);
+#endif	
+	QCoreApplication::setApplicationVersion(version);
 
 }
 
@@ -344,7 +346,7 @@ int64 Utils::writeJson(const QString & filePath, const QJsonObject & jo) {
 void Utils::initDefaultFramework() {
 
 	QCoreApplication::setOrganizationName("TU Wien");
-	QCoreApplication::setOrganizationDomain("http://www.caa.tuwien.ac.at/cvl");
+	QCoreApplication::setOrganizationDomain("http://www.cvl.tuwien.ac.at/cvl");
 	QCoreApplication::setApplicationName("READ Framework");
 
 	rdf::Utils::instance().initFramework();

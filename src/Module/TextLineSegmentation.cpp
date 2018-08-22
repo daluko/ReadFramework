@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -49,7 +49,7 @@
 namespace rdf {
 
 // TextLineConfig --------------------------------------------------------------------
-TextLineConfig::TextLineConfig() : ModuleConfig("Text Line Module") {
+TextLineConfig::TextLineConfig() : ScaleModuleConfig("Text Line Module") {
 }
 
 QString TextLineConfig::toString() const {
@@ -64,7 +64,7 @@ void TextLineConfig::setMinLineLength(int length) {
 int TextLineConfig::minLineLength() const {
 	
 	double ml = checkParam(mMinLineLength, 0, INT_MAX, "minLineLength");
-	ml *= ScaleFactory::scaleFactorDpi();
+	ml *= mScaleFactory->scaleFactorDpi();
 
 	return qRound(ml);
 }
@@ -75,7 +75,7 @@ void TextLineConfig::setMinPointDistance(double dist) {
 
 double TextLineConfig::minPointDistance() const {
 	double mp = checkParam(mMinPointDist, 0.0, DBL_MAX, "minPointDist");
-	mp *= ScaleFactory::scaleFactorDpi();
+	mp *= mScaleFactory->scaleFactorDpi();
 
 	return mp;
 }
@@ -518,7 +518,8 @@ cv::Mat TextLineSegmentation::draw(const cv::Mat& img,  const QVector<QSharedPoi
 
 		Vector2D c = tl->center();
 		c.setX(c.x() + 20);
-		p.drawText(c.toQPointF(), QString::number(tl->density()));
+		//p.drawText(c.toQPointF(), QString::number(tl->density()));
+		//p.drawText(c.toQPointF(), tl->id());
 	}
 
 	// draw errored/crucial text lines
@@ -570,7 +571,8 @@ bool TextLineSegmentation::checkInput() const {
 }
 
 // SimpleTextLineConfig --------------------------------------------------------------------
-SimpleTextLineConfig::SimpleTextLineConfig() : ModuleConfig("Simple Textline Segmentation") {
+SimpleTextLineConfig::SimpleTextLineConfig(QSharedPointer<ScaleFactory> scaleFactory) : ModuleConfig("Simple Textline Segmentation") {
+	mScaleFactory = scaleFactory;
 }
 
 QString SimpleTextLineConfig::toString() const {
@@ -585,7 +587,7 @@ void SimpleTextLineConfig::setMaxEdgeThresh(double et) {
 }
 
 double SimpleTextLineConfig::maxEdgeTrhesh() const {
-	return mMaxEdgeThresh*ScaleFactory::scaleFactorDpi();
+	return mMaxEdgeThresh*mScaleFactory->scaleFactorDpi();
 }
 
 void SimpleTextLineConfig::load(const QSettings & settings) {

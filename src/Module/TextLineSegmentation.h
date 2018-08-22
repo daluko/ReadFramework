@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -35,6 +35,7 @@
 #include "BaseModule.h"
 #include "Pixel.h"
 #include "PixelSet.h"
+#include "ScaleFactory.h"
 
 #pragma warning(push, 0)	// no warnings from includes
 
@@ -57,16 +58,17 @@ namespace rdf {
 class DllCoreExport SimpleTextLineConfig : public ModuleConfig {
 
 public:
-	SimpleTextLineConfig();
+	SimpleTextLineConfig(QSharedPointer<ScaleFactory> scaleFactory = QSharedPointer<ScaleFactory>(new ScaleFactory()));
 
 	virtual QString toString() const override;
 
 	void setMaxEdgeThresh(double et); // <-- hehe E.T.
 	double maxEdgeTrhesh() const;
-
+	
 protected:
 
 	double mMaxEdgeThresh = 20;			// maximum edge in px
+	QSharedPointer<ScaleFactory> mScaleFactory;
 
 	void load(const QSettings& settings) override;
 	void save(QSettings& settings) const override;
@@ -104,7 +106,7 @@ private:
 };
 
 
-class DllCoreExport TextLineConfig : public ModuleConfig {
+class DllCoreExport TextLineConfig : public ScaleModuleConfig {
 
 public:
 	TextLineConfig();
@@ -125,9 +127,9 @@ public:
 protected:
 
 	int mMinLineLength = 15;			// minimum text line length when clustering
-	double mMinPointDist = 40.0;		// acceptable minimal distance of a point to a line
-	double mErrorMultiplier = 1.2;		// maximal increase of error when merging two lines
-	QString mDebugPath = "C:/temp/cluster/";
+	double mMinPointDist = 80.0;		// acceptable minimal distance of a point to a line
+	double mErrorMultiplier = 1.4;		// maximal increase of error when merging two lines
+	QString mDebugPath = "C:/temp/cluster/";	// TODO: remove
 
 	void load(const QSettings& settings) override;
 	void save(QSettings& settings) const override;
@@ -171,7 +173,6 @@ private:
 
 	// post processing
 	void mergeUnstableTextLines(QVector<QSharedPointer<TextLineSet> >& textLines) const;
-
 };
 
 }

@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -279,8 +279,12 @@ namespace rdf {
 		}
 
 		cv::Mat imgFormG = imgForm;
+
 		if (imgForm.channels() != 1)
 			cv::cvtColor(imgForm, imgFormG, CV_RGB2GRAY);
+		else {
+			cv::cvtColor(imgForm, imgForm, CV_GRAY2RGB);
+		}
 		
 		//cv::Mat maskTempl = rdf::Algorithms::estimateMask(imgTemplG);
 
@@ -301,8 +305,9 @@ namespace rdf {
 		QSharedPointer<rdf::FormFeaturesConfig> tmpConfig(new rdf::FormFeaturesConfig());
 		//(*tmpConfig) = mFormConfig;
 		tmpConfig->setTemplDatabase(mConfig.tableTemplate());
-		//tmpConfig->setVariationThrLower(0.5);
-		//tmpConfig->setVariationThrUpper(0.55);
+		tmpConfig->setVariationThrLower(mFormConfig.variationThrLower());
+		tmpConfig->setVariationThrUpper(mFormConfig.variationThrUpper());
+		tmpConfig->setSaveChilds(mFormConfig.saveChilds());
 		formF.setConfig(tmpConfig);
 
 		//rdf::FormFeatures formTemplate;
@@ -368,6 +373,10 @@ namespace rdf {
 		parserOut.write(loadXmlPath, pe);
 
 		return true;
+	}
+
+	void TableProcessing::setTableConfig(const rdf::FormFeaturesConfig & tableConfig) 	{
+		mFormConfig = tableConfig;
 	}
 
 

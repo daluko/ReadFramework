@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -1524,6 +1524,10 @@ bool Ellipse::isNull() const {
 	return mIsNull;
 }
 
+bool Ellipse::isValid() const {
+	return mCenter.x() == mCenter.x() && mCenter.y() == mCenter.y();	// check if the center is nan
+}
+
 QString Ellipse::toString() const {
 
 	return QString("c %1 axis %3 angle %5")
@@ -1768,7 +1772,11 @@ Vector2D Ellipse::getPoint(double angle) const {
 
 	double a = mAxis.x();
 	double b = mAxis.y();
-	
+
+	// fix numerical issues
+	if (b == 0)
+		b = 1;
+
 	double tt = std::tan(lAngle);
 	double x = (a*b) / (std::sqrt(b*b + a*a * (tt*tt)));
 

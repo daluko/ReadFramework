@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -50,6 +50,7 @@
 
 // Qt defines
 class GCoptimizationGeneralGraph;
+class GCoptimizationGridGraph;
 
 namespace rdf {
 
@@ -147,6 +148,32 @@ private:
 	cv::Mat costs(int numLabels) const override;
 	cv::Mat labelDistMatrix(int numLabels) const override;
 	int numLabels() const override;
+};
+
+/// <summary>
+/// Graph cut for pixel labeling.
+/// </summary>
+/// <seealso cref="GraphCutPixel" />
+class DllCoreExport GraphCutPixelLabel : public GraphCutPixel {
+
+public:
+	GraphCutPixelLabel(const PixelSet& set);
+
+	virtual bool compute() override;
+
+	cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
+
+	void setLabelManager(const LabelManager& m);
+
+private:
+
+	bool checkInput() const override;
+
+	cv::Mat costs(int numLabels) const override;
+	cv::Mat labelDistMatrix(int numLabels) const override;
+	int numLabels() const override;
+
+	LabelManager mManager;
 };
 
 class DllCoreExport GraphCutLineSpacingConfig : public GraphCutConfig {
@@ -248,6 +275,83 @@ private:
 
 		return s;
 	}
+};
+
+/// <summary>
+/// The base class for all graphcuts operating on images.
+/// </summary>
+/// <seealso cref="Module" />
+class DllCoreExport GraphCutImage : public Module {
+
+public:
+	GraphCutImage(const QVector<cv::Mat>& src);
+
+	virtual bool isEmpty() const override;
+
+	QSharedPointer<GraphCutConfig> config() const;
+
+	// results - available after compute() is called
+	cv::Mat image() const;
+
+protected:
+
+	// input/output
+	QVector<cv::Mat> mImgs;
+	cv::Mat mLabelImg;
+
+	/// <summary>
+	/// Performs the graphcut.
+	/// The graphcut globally optimizes the pixel states
+	/// w.r.t. the costs given
+	/// </summary>
+	/// <param name="graph">The pixel graph.</param>
+	/// <returns></returns>
+	QSharedPointer<GCoptimizationGridGraph> graphCut(const QVector<cv::Mat>& src) const;
+
+	/// <summary>
+	/// Returns a matrix with the costs for each state.
+	/// The matrix must be mSet.size() x numLabels 32SC1.
+	/// It contains cost values for each element given a state.
+	/// Normalized costs are usually multiplied by mScaleFactor
+	/// to fit the data format.
+	/// </summary>
+	/// <param name="numLabels">The number labels.</param>
+	/// <returns></returns>
+	//virtual cv::Mat costs(int numLabels) const = 0;
+
+	/// <summary>
+	/// Indicates the costs to move from one label to another.
+	/// High values indicate high costs.
+	/// Usually this matrix is symmetric.
+	/// </summary>
+	/// <param name="numLabels">The number labels.</param>
+	/// <returns>A numLabels x numLabels 32SC1 matrix.</returns>
+	virtual cv::Mat labelDistMatrix(int numLabels) const = 0;
+
+	virtual int numLabels() const = 0;
+	cv::Mat convertData(const QVector<cv::Mat>& src) const;
+	QSize size() const;
+};
+
+/// <summary>
+/// Graph cut for optimizing probability maps.
+/// </summary>
+/// <seealso cref="GraphCutImage" />
+class DllCoreExport DeepCut : public GraphCutImage {
+
+public:
+	DeepCut(const QVector<cv::Mat>& src);
+
+	virtual bool compute() override;
+
+	cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
+
+private:
+
+	bool checkInput() const override;
+
+	cv::Mat labelDistMatrix(int numLabels) const override;
+	int numLabels() const override;
 };
 
 }

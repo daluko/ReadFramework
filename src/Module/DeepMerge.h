@@ -33,11 +33,12 @@
 #pragma once
 
 #include "BaseModule.h"
-#include "Image.h"
+#include "BaseImageElement.h"
+#include "PixelLabel.h"
 #include "Shapes.h"
 
 #pragma warning(push, 0)	// no warnings from includes
-// Qt Includes
+#include <QColor>
 #pragma warning(pop)
 
 #ifndef DllCoreExport
@@ -53,66 +54,103 @@
 namespace rdf {
 
 // read defines
-class BaseElement;
 
-/// <summary>
-/// Class that configures the ScaleFactory
-/// </summary>
-/// <seealso cref="ModuleConfig" />
-class DllCoreExport ScaleFactoryConfig : public ModuleConfig {
+class DllCoreExport DeepMergeConfig : public ModuleConfig {
 
 public:
-	enum ScaleSideMode {
-		scale_max_side = 0,		// scales w.r.t to the max side usefull if you have free images
-		scale_height,			// [default] choose this if you now that you have pages & double pages
-
-		scale_end
-	};
-	
-	ScaleFactoryConfig();
+	DeepMergeConfig();
 
 	virtual QString toString() const override;
 
-	void setMaxImageSide(int maxSide);
-	int maxImageSide() const;
-
-	void setScaleMode(const ScaleFactoryConfig::ScaleSideMode& mode);
-	ScaleFactoryConfig::ScaleSideMode scaleMode() const;
-
-	int dpi() const;
+	QString labelConfigPath() const;
 
 protected:
 
+	QString mLabelConfigPath = "C:/nextcloud/READ/basilis/DeepMerge-config.json";
+
 	void load(const QSettings& settings) override;
 	void save(QSettings& settings) const override;
-
-	// 1000px == 100dpi @ A4
-	int mMaxImageSide = 1000;				// maximum image side in px (larger images are downscaled accordingly)
-	int mDpi = 300;							// estimated dpi (even better if we truely know it : )
-	ScaleFactoryConfig::ScaleSideMode mScaleMode = ScaleFactoryConfig::scale_height;	// scaling mode (see ScaleSideMode)
 };
 
-class DllCoreExport ScaleFactory {
+class DllCoreExport DMRegion : public BaseElement {
 
 public:
-	ScaleFactory(const Vector2D& imgSize = Vector2D());
+	DMRegion(const QVector<Polygon>& poly = QVector<Polygon>(), const LabelInfo& l = LabelInfo());
 
-	double scaleFactor();
-	double scaleFactorDpi();
-	cv::Mat scaled(cv::Mat& img);
-	void scale(BaseElement& el);
-	void scaleInv(BaseElement& el);
-	Vector2D imgSize();
+	void operator<<(const Polygon& py) {
+		mPoly << py;
+	}
 
-	QSharedPointer<ScaleFactoryConfig> config() const;
-	void setConfig(QSharedPointer<ScaleFactoryConfig> c);
+	void setRegions(const QVector<Polygon>& poly);
+	QVector<Polygon> regions() const;
+
+	LabelInfo label() const;
+
+	void draw(QPainter& p);
 
 private:
-	Vector2D mImgSize;
-	double mScaleFactor = 1.0;
-	QSharedPointer<ScaleFactoryConfig> mConfig;
+	QVector<Polygon> mPoly;
+	LabelInfo mLabel;
+};
 
-	double scaleFactor(const Vector2D& size, int maxImageSize, const ScaleFactoryConfig::ScaleSideMode& mode) const;
+class DllCoreExport DeepMerge : public Module {
+
+public:
+	DeepMerge(const cv::Mat& img);
+
+	bool isEmpty() const override;
+	bool compute() override;
+
+	cv::Mat thresh(const cv::Mat& src, double thr) const;
+
+	QSharedPointer<DeepMergeConfig> config() const;
+
+	cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
+	QString toString() const override;
+
+	cv::Mat image() const;
+
+	void setScaleFactor(double sf);
+
+private:
+	bool checkInput() const override;
+
+	// input
+	cv::Mat mImg;
+	double mScaleFactor = 1.0;
+
+	// output
+	cv::Mat mLabelImg;
+	QVector<DMRegion> mRegions;
+	LabelManager mManager;
+
+	// helpers
+	template <typename numFmt>
+	cv::Mat maxChannels(const cv::Mat & src) const {
+
+		// find the max channel
+		cv::Mat maxImg(src.size(), src.depth(), cv::Scalar(0));
+
+		for (int rIdx = 0; rIdx < maxImg.rows; rIdx++) {
+
+			const numFmt* rPtr = src.ptr<numFmt>(rIdx);
+			numFmt* mPtr = maxImg.ptr<numFmt>(rIdx);
+
+			for (int cIdx = 0; cIdx < maxImg.cols; cIdx++) {
+
+				numFmt m = *rPtr;	rPtr++;
+				m = qMax(m, *rPtr); rPtr++;
+				m = qMax(m, *rPtr); rPtr++;
+
+				// max of all channels
+				mPtr[cIdx] = m;
+			}
+		}
+
+		return maxImg;
+	}
+
+
 };
 
 

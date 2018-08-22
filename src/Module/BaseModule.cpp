@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -32,6 +32,7 @@
 
 #include "BaseModule.h"
 #include "Settings.h"
+#include "ScaleFactory.h"
 
 #pragma warning(push, 0)	// no warnings from includes
 #include <QSettings>
@@ -140,6 +141,20 @@ QDebug operator<<(QDebug d, const Module& m) {
 
 	d << qPrintable(m.toString());
 	return d;
+}
+
+// -------------------------------------------------------------------- ScaleModuleConfig 
+ScaleModuleConfig::ScaleModuleConfig(const QString & moduleName, const QSharedPointer<ScaleFactory>& sf) : ModuleConfig(moduleName) {
+	
+	mScaleFactory = sf ? sf : QSharedPointer<ScaleFactory>(new ScaleFactory());
+}
+
+void ScaleModuleConfig::setScaleFactory(const QSharedPointer<ScaleFactory>& sf) {
+	mScaleFactory = sf;
+}
+
+QSharedPointer<ScaleFactory> ScaleModuleConfig::scaleFactory() {
+	return mScaleFactory;
 }
 
 }

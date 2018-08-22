@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -85,47 +85,39 @@ void ScaleFactoryConfig::save(QSettings & settings) const {
 }
 
 // --------------------------------------------------------------------  ScaleFactory
-ScaleFactory::ScaleFactory() {
+ScaleFactory::ScaleFactory(const Vector2D& imgSize) {
 
 	mConfig = QSharedPointer<ScaleFactoryConfig>::create();
 	mConfig->loadSettings();
-}
 
-ScaleFactory& ScaleFactory::instance() {
-
-	static QSharedPointer<ScaleFactory> inst;
-	if (!inst)
-		inst = QSharedPointer<ScaleFactory>(new ScaleFactory());
-	return *inst;
+	mImgSize = imgSize;
+	mScaleFactor = scaleFactor(mImgSize, config()->maxImageSide(), config()->scaleMode());
 }
 
 double ScaleFactory::scaleFactor() {
 
-	ScaleFactory& sf = ScaleFactory::instance();
 
-	if (sf.mImgSize.isNull()) {
+	if (mImgSize.isNull()) {
 		qWarning() << "querying scaleFactor() of uninitialized ScaleFactory...";
 		return 1.0;
 	}
 
-	return sf.mScaleFactor;
+	return mScaleFactor;
 }
 
 double ScaleFactory::scaleFactorDpi() {
 
-	ScaleFactory& sf = ScaleFactory::instance();
-
 	// clear dpi changes (parameters are tuned for 300dpi)
-	return sf.scaleFactor() * (double)sf.config()->dpi() / 300.0;
+	return scaleFactor() * (double)config()->dpi() / 300.0;
 }
 
 QSharedPointer<ScaleFactoryConfig> ScaleFactory::config() const {
 	return mConfig;
 }
 
-void ScaleFactory::init(const Vector2D & imgSize) {
+void ScaleFactory::setConfig(QSharedPointer<ScaleFactoryConfig> c) {
 
-	mImgSize = imgSize;
+	mConfig = c;
 	mScaleFactor = scaleFactor(mImgSize, config()->maxImageSide(), config()->scaleMode());
 }
 
@@ -149,11 +141,11 @@ void ScaleFactory::scale(BaseElement & el) {
 }
 
 void ScaleFactory::scaleInv(BaseElement & el) {
-	el.scale(1.0/ ScaleFactory::scaleFactor());
+	el.scale(1.0 / ScaleFactory::scaleFactor());
 }
 
 Vector2D ScaleFactory::imgSize() {
-	return ScaleFactory::instance().mImgSize;
+	return mImgSize;
 }
 
 double ScaleFactory::scaleFactor(const Vector2D& size, int maxImageSize, const ScaleFactoryConfig::ScaleSideMode& mode) const {

@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -34,6 +34,7 @@
 
 #include "BaseModule.h"
 
+#include "ScaleFactory.h"
 #include "Shapes.h"
 #include "Pixel.h"
 #include "PixelSet.h"
@@ -226,7 +227,7 @@ public:
 	virtual QString toString() const override;
 
 	bool autoWindowSize() const;
-	void estimateWindowSize(int height, int numTiles = 75);
+	void estimateWindowSize(int height, int numTiles = 100);
 	int winSize() const;
 	double winOverlap() const;
 	double minEnergy() const;
@@ -317,7 +318,7 @@ private:
 /// Configuration file for local orientation extraction.
 /// </summary>
 /// <seealso cref="ModuleConfig" />
-class DllCoreExport LocalOrientationConfig : public ModuleConfig {
+class DllCoreExport LocalOrientationConfig : public ScaleModuleConfig {
 
 public:
 	LocalOrientationConfig();

@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -168,9 +168,11 @@ void MserBlob::draw(QPainter & p) {
 PixelStats::PixelStats(const cv::Mat& orHist, 
 	const cv::Mat& sparsity, 
 	double scale, 
+	QSharedPointer<ScaleFactory> scaleFactory,
 	const QString& id) : BaseElement(id) {
 
 	mScale = scale;
+	mScaleFactory = scaleFactory;
 	convertData(orHist, sparsity);
 }
 
@@ -209,6 +211,10 @@ void PixelStats::convertData(const cv::Mat& orHist, const cv::Mat& sparsity) {
 
 bool PixelStats::isEmpty() const {
 	return mData.empty();
+}
+
+void PixelStats::setScaleFactory(const QSharedPointer<ScaleFactory>& scaleFactory) {
+	mScaleFactory = scaleFactory;
 }
 
 void PixelStats::setOrientationIndex(int orIdx) {
@@ -257,8 +263,8 @@ double PixelStats::lineSpacing() const {
 	if (mLineSpacing != -1)
 		return mLineSpacing;
 
-	double sr = (256*ScaleFactory::scaleFactorDpi() / scaleFactor());	// sampling rate
-	return qMax((double)lineSpacingIndex() * sr, 10.0);	// assume some minimum line spacing
+	double sr = (256 * mScaleFactory->scaleFactorDpi() / scaleFactor());	// sampling rate
+	return qMax((double)lineSpacingIndex() * sr, 10.0);						// assume some minimum line spacing
 }
 
 int PixelStats::numOrientations() const {
@@ -300,7 +306,6 @@ QString PixelStats::toString() const {
 
 // Pixel --------------------------------------------------------------------
 Pixel::Pixel() {
-
 }
 
 Pixel::Pixel(const Ellipse & ellipse, const Rect& bbox, const QString& id) : BaseElement(id) {
@@ -386,11 +391,11 @@ PixelTabStop Pixel::tabStop() const {
 	return mTabStop;
 }
 
-void Pixel::setLabel(const PixelLabel & label) {
+void Pixel::setLabel(const QSharedPointer<PixelLabel> & label) {
 	mLabel = label;
 }
 
-PixelLabel Pixel::label() const {
+QSharedPointer<PixelLabel> Pixel::label() const {
 	return mLabel;
 }
 
@@ -450,11 +455,11 @@ void Pixel::draw(QPainter & p, double alpha, const DrawFlags & df) const {
 				p.setPen(ColorManager::red());
 		}
 		else */{
-			if (!label().predicted().isNull()) {
-				p.setPen(label().predicted().visColor());
+			if (!label()->predicted().isNull()) {
+				p.setPen(label()->predicted().visColor());
 			}
-			else if (!label().trueLabel().isNull()) {
-				p.setPen(label().trueLabel().visColor());
+			else if (!label()->trueLabel().isNull()) {
+				p.setPen(label()->trueLabel().visColor());
 			}
 
 		}

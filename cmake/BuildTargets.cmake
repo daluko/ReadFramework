@@ -3,6 +3,7 @@
 set(RDF_BINARY_NAME ${PROJECT_NAME})		# binary
 set(RDF_TEST_NAME ${PROJECT_NAME}Test)		# test binary
 set(RDF_DLL_CORE_NAME ${PROJECT_NAME}Core)	# library
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 if (MSVC)
 	set(RDF_RC src/rdf.rc) #add resource file when compiling with MSVC 
@@ -47,12 +48,12 @@ target_link_libraries(${RDF_DLL_CORE_NAME} ${VERSION_LIB} ${OpenCV_LIBS})
 add_dependencies(${RDF_BINARY_NAME} ${RDF_DLL_CORE_NAME}) 
 
 target_include_directories(${RDF_BINARY_NAME} 		PRIVATE ${OpenCV_INCLUDE_DIRS})
-target_include_directories(${RDF_TEST_NAME} 	    PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_include_directories(${RDF_TEST_NAME} 	    	PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_include_directories(${RDF_DLL_CORE_NAME} 	PRIVATE ${OpenCV_INCLUDE_DIRS})
 
-qt5_use_modules(${RDF_BINARY_NAME} 		Core Network Widgets)
-qt5_use_modules(${RDF_TEST_NAME} 		Core Network Widgets)
-qt5_use_modules(${RDF_DLL_CORE_NAME} 	Core Network Widgets)
+target_link_libraries(${RDF_BINARY_NAME} 		Qt5::Core Qt5::Network Qt5::Gui)
+target_link_libraries(${RDF_TEST_NAME} 			Qt5::Core Qt5::Network Qt5::Gui)
+target_link_libraries(${RDF_DLL_CORE_NAME} 	Qt5::Core Qt5::Network Qt5::Gui)
 
 # core flags
 set_target_properties(${RDF_DLL_CORE_NAME} PROPERTIES ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/libs/$<CONFIGURATION>)
@@ -81,7 +82,6 @@ endif()
 
 if (MSVC)
 	# set properties for Visual Studio Projects
-	add_definitions(/Zc:wchar_t-)
 	set(CMAKE_CXX_FLAGS_DEBUG "/W4 ${CMAKE_CXX_FLAGS_DEBUG}")
 	set(CMAKE_CXX_FLAGS_RELEASE "/W4 /O2 ${CMAKE_CXX_FLAGS_RELEASE}")
 	
@@ -133,17 +133,18 @@ else ()
 	set(RDF_BINARIES 
 		${CMAKE_CURRENT_BINARY_DIR}/lib${RDF_DLL_CORE_NAME}.so 
 		)
+	set(RDF_CORE_LIB ${CMAKE_CURRENT_BINARY_DIR}/lib${RDF_DLL_CORE_NAME}.so)
 endif()
 
 set(RDF_LIBS ${RDF_CORE_LIB})
 
 configure_file(${RDF_SOURCE_DIR}/ReadFramework.cmake.in ${CMAKE_BINARY_DIR}/ReadFrameworkConfig.cmake)
 
-# tests
-add_test(NAME SuperPixel COMMAND ${RDF_TEST_NAME} "--super-pixel")
-add_test(NAME BaselineTest COMMAND ${RDF_TEST_NAME} "--baseline")
-add_test(NAME TableTest COMMAND ${RDF_TEST_NAME} "--table")
-add_test(NAME PreProcessing COMMAND ${RDF_TEST_NAME} "--pre-processing")
+# # tests
+# add_test(NAME BaselineTest COMMAND ${RDF_TEST_NAME} "--baseline")
+# add_test(NAME TableTest COMMAND ${RDF_TEST_NAME} "--table")
+# add_test(NAME PreProcessing COMMAND ${RDF_TEST_NAME} "--pre-processing")
+# add_test(NAME SuperPixel COMMAND ${RDF_TEST_NAME} "--super-pixel")
 
 #package 
 if (UNIX)

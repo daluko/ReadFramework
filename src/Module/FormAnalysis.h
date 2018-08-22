@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -153,6 +153,9 @@ namespace rdf {
 		void setCellIdx(int idx);
 		int cellIdx() const;
 
+		void setNeighbourCellIdx(QVector<int> n);
+		QVector<int> neighbourCellIDx();
+
 		double weight();
 
 		QVector<int> adjacencyNodes() const;
@@ -169,6 +172,7 @@ namespace rdf {
 
 	protected:
 		int mCellIdx = 1;
+		QVector<int> mMergedNeighbourCells;
 		Line mReferenceLine;
 		LinePosition mLinePos;
 		int mRefRowIdx = -1;
@@ -271,11 +275,13 @@ namespace rdf {
 		QSharedPointer<rdf::TableRegion> tableRegionTemplate();
 		QVector<QSharedPointer<rdf::TableCellRaw>> createRawTableFromTemplate();
 		void createAssociationGraphNodes(QVector<QSharedPointer<rdf::TableCellRaw>> cellsR);
+		void createReducedAssociationGraphNodes(QVector<QSharedPointer<rdf::TableCellRaw>> cellsR);
 		QVector<QSharedPointer<rdf::AssociationGraphNode>> mergeColinearNodes(QVector<QSharedPointer<rdf::AssociationGraphNode>> &tmpNodes);
 		void createAssociationGraph();
 		bool** adjacencyMatrix(const QVector<QSharedPointer<rdf::AssociationGraphNode>> &associationGraphNodes);
 		void findMaxCliques();
 		void createTableFromMaxClique(const QVector<QSharedPointer<rdf::TableCell>> &cells);
+		void createTableFromMaxCliqueReduced(const QVector<QSharedPointer<rdf::TableCell>> &cells);
 		//void plausibilityCheck();
 
 		QVector<QSet<int>> getMaxCliqueHor() const;

@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -360,6 +360,18 @@ LabelInfo LabelManager::find(int id) const {
 	return LabelInfo();
 }
 
+int LabelManager::indexOf(int id) const {
+
+	// try to directly find the entry
+	for (int idx = 0; idx < mLookups.size(); idx++) {
+
+		if (mLookups[idx].id() == id)
+			return idx;
+	}
+
+	return -1;
+}
+
 /// <summary>
 /// Returns the first label that is marked as background label.
 /// </summary>
@@ -371,6 +383,10 @@ LabelInfo LabelManager::backgroundLabel() const {
 			return li;
 	
 	return LabelInfo();
+}
+
+QVector<LabelInfo> LabelManager::labelInfos() const {
+	return mLookups;
 }
 
 QString LabelManager::jsonKey() {
@@ -425,6 +441,14 @@ LabelInfo PixelLabel::trueLabel() const {
 	return mTrueLabel;
 }
 
+void PixelLabel::setVotes(const PixelVotes & votes) {
+	mVotes = votes;
+}
+
+PixelVotes PixelLabel::votes() const {
+	return mVotes;
+}
+
 /// <summary>
 /// Checks if GT and prediction are present
 /// </summary>
@@ -449,6 +473,10 @@ cv::Ptr<cv::ml::StatModel> SuperPixelModel::model() const {
 	return mModel;
 }
 
+cv::Ptr<cv::ml::RTrees> SuperPixelModel::randomTrees() const {
+	return mModel.dynamicCast<cv::ml::RTrees>();
+}
+
 LabelManager SuperPixelModel::manager() const {
 	return mManager;
 }
@@ -467,20 +495,37 @@ QVector<PixelLabel> SuperPixelModel::classify(const cv::Mat & features) const {
 		// TODO: get weights
 		const cv::Mat& cr = cFeatures.row(rIdx);
 		cv::Mat out(1, cr.cols, cr.depth());
-		float l = mModel->predict(cr);// , out, cv::ml::DTrees::RAW_OUTPUT);// , cv::ml::DTrees::PREDICT_MASK);
 
-		////int labelId = qRound(mModel->predict(cr));
-		//qDebug() << Image::printImage(out, "voting");
-		//qDebug() << "label" << l;
-		int labelId = qRound(l);
+		cv::Mat rawVotes;
+		float rawLabel = 0;
+
+		PixelLabel pLabel;
+
+#if CV_MAJOR_VERSION >= 3 && CV_MINOR_VERSION >= 3
+		
+		if (randomTrees()) {
+			randomTrees()->getVotes(cr, rawVotes, cv::ml::DTrees::RAW_OUTPUT);
+
+			// get pixel votes
+			PixelVotes pv(mManager);
+			pv.setRawVotes(rawVotes);
+
+			rawLabel = (float)pv.labelIndex();
+			pLabel.setVotes(pv);
+		}
+		else {
+			rawLabel = mModel->predict(cr);
+		}
+#else
+		rawLabel = mModel->predict(cr);
+#endif
+
+		// get label
+		int labelId = qRound(rawLabel);
 
 		LabelInfo label = mManager.find(labelId);
 		assert(label.id() != LabelInfo::label_unknown);
-		
-		//qDebug() << label;
-		//qDebug() << "id: " << labelId;
 
-		PixelLabel pLabel;
 		pLabel.setLabel(label);
 		labelInfos << pLabel;
 	}
@@ -492,7 +537,7 @@ QVector<PixelLabel> SuperPixelModel::classify(const cv::Mat & features) const {
 
 bool SuperPixelModel::write(const QString & filePath) const {
 
-	if (!mModel->isTrained())
+	if (mModel && !mModel->isTrained())
 		qWarning() << "writing trainer that is NOT trained!";
 
 	// write all label data
@@ -508,6 +553,11 @@ bool SuperPixelModel::write(const QString & filePath) const {
 }
 
 void SuperPixelModel::toJson(QJsonObject& jo) const {
+
+	if (!mModel) {
+		qWarning() << "cannot save SuperPixelModel because it is NULL.";
+		return;
+	}
 
 	cv::FileStorage fs(".xml", cv::FileStorage::WRITE | cv::FileStorage::MEMORY | cv::FileStorage::FORMAT_XML);
 	mModel->write(fs);
@@ -566,6 +616,62 @@ cv::Ptr<cv::ml::RTrees> SuperPixelModel::readRTreesModel(QJsonObject & jo) {
 
 	cv::Ptr<cv::ml::RTrees> model = cv::Algorithm::read<cv::ml::RTrees>(root);
 	return model;
+}
+
+// -------------------------------------------------------------------- PixelVotes 
+PixelVotes::PixelVotes(const LabelManager & lm, const QString & id) : BaseElement(id) {
+	mManager = lm;
+}
+
+bool PixelVotes::isEmpty() const {
+	return mVotes.empty();
+}
+
+void PixelVotes::setRawVotes(const cv::Mat & rawVotes) {
+
+	if (rawVotes.empty())
+		return;
+
+	mVotes = cv::Mat(1, mManager.size(), CV_32FC1, cv::Scalar(0));
+
+	const float* rvp = rawVotes.ptr<float>();
+	float* vp = mVotes.ptr<float>();
+
+	for (int rIdx = 0; rIdx < rawVotes.cols; rIdx++) {
+
+		int cl = qRound(rvp[rIdx]);
+		int labelIndex = mManager.indexOf(cl);
+
+		if (labelIndex != -1) {
+
+			assert(labelIndex >= 0 && labelIndex < mVotes.cols);
+			vp[labelIndex] += 1;
+		}
+		else
+			qWarning() << "unknown class index: " << cl;
+	}
+
+	mNumTrees = cv::sum(mVotes)[0];
+
+	if (mNumTrees > 0)
+		mVotes /= mNumTrees;
+	else
+		qWarning() << "sum votes is zero - that's weird!";
+}
+
+cv::Mat PixelVotes::data() const {
+	return mVotes;
+}
+
+int PixelVotes::labelIndex() const {
+	return mManager.labelInfos()[maxVote()].id();
+}
+
+int PixelVotes::maxVote() const {
+	
+	cv::Point pMaxIdx;
+	cv::minMaxLoc(mVotes, 0, 0, 0, &pMaxIdx);
+	return pMaxIdx.x;
 }
 
 }

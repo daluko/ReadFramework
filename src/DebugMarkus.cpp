@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -40,6 +40,7 @@
 #include "ElementsHelper.h"
 #include "Settings.h"
 #include "GraphCut.h"
+#include "DeepMerge.h"
 
 #include "SuperPixelScaleSpace.h"
 #include "TabStopAnalysis.h"
@@ -48,7 +49,9 @@
 #include "SuperPixelClassification.h"
 #include "SuperPixelTrainer.h"
 #include "LayoutAnalysis.h"
+#include "EvaluationModule.h"
 #include "lsd/LSDDetector.h"
+#include "ScaleFactory.h"
 
 #pragma warning(push, 0)	// no warnings from includes
 #include <QDebug>
@@ -160,31 +163,10 @@ void LayoutTest::testComponents() {
 		qInfo() << mConfig.imagePath() << "NOT loaded...";
 
 
-	//QImage tp("C:/temp/chris/c12.png");
-	//cv::Mat tpc = Image::qImage2Mat(tp);
-	//
-	//cv::cvtColor(imgCv, imgCv, CV_RGB2GRAY);
-	//cv::cvtColor(tpc, tpc, CV_RGB2GRAY);
-	//imgCv.convertTo(imgCv, 1.0 / 255, CV_32FC1);
-	//tpc.convertTo(tpc, 1.0 / 255, CV_32FC1);
-
-	//int rc = imgCv.cols - tpc.cols + 1;
-	//int rr = imgCv.rows - tpc.rows + 1;
-	//cv::Mat r(rr, rc, CV_32FC1);
-	//Image::imageInfo(r, "template");
-	//Image::imageInfo(imgCv, "img");
-	//Image::imageInfo(tpc, "t");
-	//matchTemplate(imgCv, tpc, r, CV_TM_CCORR_NORMED);
-
-	//Image::imageInfo(r, "result");
-	////cv::normalize(r, r, 255.0, cv::NORM_MINMAX);
-	//Image::save(r, "C:/temp/chris/result2.png");
-
-
-
 	// switch tests
 	//testFeatureCollector(imgCv);
 	//testTrainer();
+	//testClassifier(imgCv);
 	//pageSegmentation(imgCv);
 	//testLayout(imgCv);
 	layoutToXml();
@@ -357,7 +339,7 @@ void LayoutTest::testFeatureCollector(const cv::Mat & src) const {
 	qInfo().noquote() << lm.toString();
 
 	// compute super pixels
-	GridSuperPixel sp(src);
+	SuperPixel sp(src);
 
 	if (!sp.compute())
 		qCritical() << "could not compute super pixels!";
@@ -398,8 +380,8 @@ void LayoutTest::testFeatureCollector(const cv::Mat & src) const {
 	//rImg = superPixel.drawSuperPixels(rImg);
 	//rImg = tabStops.draw(rImg);
 	rImg = spl.draw(rImg);
-	rImg = spf.draw(rImg);
-	QString dstPath = rdf::Utils::createFilePath(mConfig.outputPath(), "-textlines");
+	//rImg = spf.draw(rImg);
+	QString dstPath = rdf::Utils::createFilePath(mConfig.outputPath(), "-labels");
 	rdf::Image::save(rImg, dstPath);
 	qDebug() << "debug image saved: " << dstPath;
 
@@ -443,10 +425,118 @@ void LayoutTest::testTrainer() {
 	QSharedPointer<SuperPixelModel> model = SuperPixelModel::read(mConfig.classifierPath());
 
 	auto f = model->model();
-	if (f->isTrained())
+	if (f && f->isTrained())
 		qDebug() << "the classifier I loaded is trained...";
 	
 	//qDebug() << fcm.numFeatures() << "SuperPixels trained in" << dt;
+}
+
+void LayoutTest::testClassifier(const cv::Mat & src) const {
+
+	rdf::Timer dt;
+
+	// parse xml
+	PageXmlParser parser;
+	parser.read(mConfig.xmlPath());
+
+	auto pe = parser.page();
+
+	// -------------------------------------------------------------------- Generate Super Pixels 
+	rdf::SuperPixel gpm(src);
+
+	if (!gpm.compute())
+		qWarning() << "could not compute" << gpm;
+
+	auto pixels = gpm.pixelSet();
+
+	// -------------------------------------------------------------------- Label Pixels with GT 
+	// test loading of label lookup
+	rdf::LabelManager lm = rdf::LabelManager::read(mConfig.labelConfigPath());
+	qInfo().noquote() << lm.toString();
+
+	// feed the label lookup
+	rdf::SuperPixelLabeler spl(gpm.pixelSet(), rdf::Rect(src));
+	spl.setLabelManager(lm);
+	spl.setFilePath(mConfig.imagePath());	// parse filepath for gt
+
+											// set the ground truth
+	if (parser.page())
+		spl.setRootRegion(parser.page()->rootRegion());
+
+	if (!spl.compute())
+		qCritical() << "could not compute SuperPixel labeling!";
+
+	// -------------------------------------------------------------------- Label Pixels with GT 
+
+	QSharedPointer<rdf::SuperPixelModel> model = rdf::SuperPixelModel::read(mConfig.classifierPath());
+
+	auto f = model->model();
+	if (f && f->isTrained())
+		qDebug() << "the classifier I loaded is trained...";
+	else
+		qCritical() << "illegal classifier found in" << mConfig.classifierPath();
+
+	// -------------------------------------------------------------------- classify 
+	rdf::SuperPixelClassifier spc(src, gpm.pixelSet());
+	spc.setModel(model);
+
+	if (!spc.compute())
+		qWarning() << "could not classify SuperPixels";
+
+	qInfo() << "regions classified in" << dt;
+
+	// smooth estimation
+	rdf::GraphCutPixelLabel gpl(spc.pixelSet());	// ha: gpl
+	gpl.setLabelManager(model->manager());
+
+	if (!gpl.compute())
+		qWarning() << "could not compute set orientation";
+
+
+	// -------------------------------------------------------------------- Evaluate 
+	rdf::SuperPixelEval spe(gpm.pixelSet());
+
+	if (!spe.compute())
+		qWarning() << "could not evaluate SuperPixels";
+
+	auto ei = spe.evalInfo();
+	ei.setName(QFileInfo(mConfig.imagePath()).fileName());
+	qInfo().noquote() << ei;
+
+	// -------------------------------------------------------------------- drawing 
+	cv::Mat rImg = src.clone();
+
+	//rImg = gpl.draw(rImg);
+	rImg = spl.draw(rImg, false);
+	rImg = spe.draw(rImg);
+	QString dstPath = rdf::Utils::createFilePath(mConfig.outputPath(), "-eval");
+	rdf::Image::save(rImg, dstPath);
+	qDebug() << "debug image saved: " << dstPath;
+
+	rImg = src.clone();
+	rImg = spl.draw(rImg, false);
+	rImg = spc.draw(rImg);
+	dstPath = rdf::Utils::createFilePath(mConfig.outputPath(), "-superpixels");
+	rdf::Image::save(rImg, dstPath);
+	qDebug() << "debug image saved: " << dstPath;
+
+	// remove bg pixels
+	auto ps = spc.pixelSet();
+	PixelSet psf;
+	for (auto px : ps.pixels()) {
+
+		if (px->label()->predicted() != model->manager().backgroundLabel())
+			psf << px;
+	}
+
+	rImg = src.clone();
+	rdf::SuperPixelLabeler spld(psf, rdf::Rect(src));
+
+	rImg = spld.draw(rImg);
+	dstPath = rdf::Utils::createFilePath(mConfig.outputPath(), "-textpixels");
+	rdf::Image::save(rImg, dstPath);
+	qDebug() << "debug image saved: " << dstPath;
+
 }
 
 void LayoutTest::testLineDetector(const cv::Mat & src) const {
@@ -739,6 +829,71 @@ void LayoutTest::eval(const QString & toolPath, const QString & gtPath, const QS
 
 	// show the results
 	qDebug().noquote() << "/n" << eval.readAllStandardOutput();
+}
+
+// Layout Test --------------------------------------------------------------------
+DeepMergeTest::DeepMergeTest(const DebugConfig & config) {
+	mConfig = config;
+}
+
+void DeepMergeTest::run() {
+
+	Timer dt;
+
+	// test image loading
+	QImage img(mConfig.imagePath());
+	cv::Mat imgCv = Image::qImage2Mat(img);
+
+	if (!imgCv.empty())
+		qInfo() << mConfig.imagePath() << "loaded...";
+	else
+		qInfo() << mConfig.imagePath() << "NOT loaded...";
+
+
+	// merge the map
+	merge(imgCv);
+
+	qInfo() << "total computation time:" << dt;
+
+}
+
+void DeepMergeTest::merge(const cv::Mat & src) const {
+
+	// TODO: graph-cut on the image
+	Timer dt;
+
+	cv::Mat cImg = src.clone();
+
+	DeepMerge dm(cImg);
+
+	if (!dm.compute())
+		qWarning() << "could not compute DeepMerge";
+
+	cv::Mat rImg = dm.image();
+
+	QString imgPath = rdf::Utils::createFilePath(mConfig.outputPath(), "-grabcut");
+	rdf::Image::save(rImg, imgPath);
+	qDebug() << "results written to" << imgPath;
+
+	rImg = src.clone();
+	rImg = dm.draw(rImg);
+	imgPath = rdf::Utils::createFilePath(mConfig.outputPath(), "-regions");
+	rdf::Image::save(rImg, imgPath);
+	qDebug() << "regions written to" << imgPath;
+
+
+
+	//for (int idx = 1; idx < 255; idx += 20) {
+	//	rImg = dm.thresh(cImg, idx);
+
+	//	imgPath = rdf::Utils::createFilePath(mConfig.outputPath(), "-thresh-" + QString::number(idx));
+	//	rdf::Image::save(rImg, imgPath);
+	//}
+	//qDebug() << "results written to" << imgPath;
+
+
+
+	qInfo() << "maps merged in" << dt;
 }
 
 }

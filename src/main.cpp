@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -32,7 +32,7 @@
 
 
 #pragma warning(push, 0)	// no warnings from includes
-#include <QApplication>
+#include <QCoreApplication>
 #include <QCommandLineParser>
 #include <QDebug>
 #include <QImage>
@@ -65,19 +65,14 @@ int main(int argc, char** argv) {
 	qInfo().nospace() << "I am using OpenCV " << CV_MAJOR_VERSION << "." << CV_MINOR_VERSION << "." << CV_VERSION_REVISION;
 
 	QCoreApplication::setOrganizationName("TU Wien");
-	QCoreApplication::setOrganizationDomain("http://www.caa.tuwien.ac.at/cvl");
+	QCoreApplication::setOrganizationDomain("http://www.cvl.tuwien.ac.at/cvl");
 	QCoreApplication::setApplicationName("READ Framework");
 	rdf::Utils::instance().initFramework();
 
-#ifdef WIN32
-	QApplication app(argc, (char**)argv);		// enable QPainter
-#else
 	QCoreApplication app(argc, (char**)argv);	// enable headless
-#endif
 
 	// CMD parser --------------------------------------------------------------------
 	QCommandLineParser parser;
-
 
 	parser.setApplicationDescription("Welcome to the CVL READ Framework testing application.");
 	parser.addHelpOption();
@@ -126,17 +121,23 @@ int main(int argc, char** argv) {
 
 	// load settings
 	rdf::Config& config = rdf::Config::instance();
-	
+	rdf::FormFeaturesConfig fc;
+
 	// load user defined settings
 	if (parser.isSet(settingOpt)) {
 		QString sName = parser.value(settingOpt);
 		config.setSettingsFile(sName);
 		config.load();
+
+		QSettings s(sName, QSettings::IniFormat);
+		s.beginGroup("FormAnalysis");
+		fc.loadSettings(s);
+		s.endGroup();
 	}
 
 	// create debug config
 	rdf::DebugConfig dc;
-
+	
 	if (parser.positionalArguments().size() > 0)
 		dc.setImagePath(parser.positionalArguments()[0].trimmed());
 
@@ -161,8 +162,11 @@ int main(int argc, char** argv) {
 		dc.setLabelConfigPath(parser.value(labelConfigPathOpt));
 
 	// add table template
-	if (parser.isSet(xmlTableOpt))
+	if (parser.isSet(xmlTableOpt)) {
 		dc.setTableTemplate(parser.value(xmlTableOpt));
+	} else if (parser.isSet(settingOpt)) {
+		dc.setTableTemplate(fc.templDatabase());
+	}
 
 	// apply debug settings - convenience if you don't want to always change the cmd args
 	applyDebugSettings(dc);
@@ -180,19 +184,18 @@ int main(int argc, char** argv) {
 			qDebug() << "starting table matching ... (not yet)";
 			//TODO table
 			rdf::TableProcessing tableproc(dc);
+			tableproc.setTableConfig(fc);
 			tableproc.match();
-
 		}
 
 		// stefans section
 		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "stefan") {
-			// TODO do what ever you want
 			qDebug() << "loading stefan's debug code";
 
 			rdf::TestWriterRetrieval twr = rdf::TestWriterRetrieval();
 			twr.run();
 		}
-		// sebastians section
+		// layout section
 		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "layout") {
 			qDebug() << "Starting layout analysis...";
 
@@ -233,14 +236,15 @@ int main(int argc, char** argv) {
 		}
 		// my section
 		else {
-			qDebug() << "Hütt nett...";
-			
 			//rdf::XmlTest test(dc);
 			//test.parseXml();
 			//test.linesToXml();
 
 			//rdf::LayoutTest lt(dc);
 			//lt.testComponents();
+
+			rdf::DeepMergeTest dm(dc);
+			dm.run();
 		}
 
 	}
@@ -258,6 +262,14 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 
 	if (dc.imagePath().isEmpty()) {
 
+		dc.setImagePath("C:/read/test/sizes/synthetic-test-small.png");
+		dc.setImagePath("C:/read/test/sizes/synthetic-test.png");
+		dc.setImagePath("C:/read/test/d6.5/0056_S_Alzgern_011-01_0056-crop.JPG");
+		dc.setImagePath("C:/read/baseline-evaluation/BL_English/Images/ior!p!241!37_8_feb_1793_pp_594-610_f001v.jpg");
+
+		dc.setImagePath("C:/nextcloud/READ/basilis/merging/Mss_003357_0152_pag-047[051]-probs.png");
+		//dc.setImagePath("C:/nextcloud/READ/basilis/merging/_5269957-probs.png");
+
 		//dc.setImagePath("C:/read/test/sizes/synthetic-test-small.png");
 		//dc.setImagePath("C:/read/test/sizes/synthetic-test.png");
 		//dc.setImagePath("C:/read/test/d6.5/0056_S_Alzgern_011-01_0056-crop.JPG");
@@ -270,7 +282,6 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		dc.setImagePath("E:/data/test/HBR2013_training/00465433.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00485679.tif"); 
 		
-		
 		//dc.setImagePath("E:/data/test/HBR2013_training/00320909.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00425629.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00318461.tif");
@@ -280,29 +291,29 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 	}
 
 	if (dc.outputPath().isEmpty()) {
-		dc.setOutputPath(rdf::Utils::createFilePath(dc.imagePath(), "-result", "tif"));
+		dc.setOutputPath(rdf::Utils::createFilePath(dc.imagePath(), "-result", "png"));
 		qInfo() << dc.outputPath() << "added as output path";
 	}
 
 	if (dc.classifierPath().isEmpty()) {
-		dc.setClassifierPath("C:/read/configs/cBAD-model.json");
+		dc.setClassifierPath("C:/read/configs/test/test-two-classes/test-model.json");
 		qInfo() << dc.classifierPath() << "added as classifier path";
 	} 
 
 	if (dc.labelConfigPath().isEmpty()) {
-		dc.setLabelConfigPath("C:/read/configs/cBAD-config.json");
+		dc.setLabelConfigPath("C:/read/configs/test/test-two-classes/test-config.json");
 		qInfo() << dc.labelConfigPath() << "added as label config path";
 	} 
 
 	if (dc.featureCachePath().isEmpty()) {
-		dc.setFeatureCachePath("C:/read/configs/cBAD-features.json");
+		dc.setFeatureCachePath("C:/read/configs/test/test-two-classes/test-features.json");
 		qInfo() << dc.featureCachePath() << "added as feature cache path";
 	} 
 
 	if (dc.xmlPath().isEmpty()) {
 		QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(dc.imagePath());
-		//dc.setXmlPath(xmlPath);		// overwrite
-		dc.setXmlPath(rdf::Utils::createFilePath(xmlPath, "-result"));
+		dc.setXmlPath(xmlPath);		// overwrite
+		//dc.setXmlPath(rdf::Utils::createFilePath(xmlPath, "-result"));
 
 		//dc.setXmlPath("C:/temp/T_Aigen_am_Inn_001_0056.xml");
 		qInfo() << dc.xmlPath() << "added as XML path";

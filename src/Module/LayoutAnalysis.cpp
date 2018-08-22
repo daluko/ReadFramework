@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -125,11 +125,11 @@ LayoutAnalysis::LayoutAnalysis(const cv::Mat& img) {
 
 	mImg = img;
 
-	// initialize scale factory
-	ScaleFactory::instance().init(img.size());
-
 	mConfig = QSharedPointer<LayoutAnalysisConfig>::create();
 	mConfig->loadSettings();
+
+	// initialize scale factory
+	mScaleFactory = QSharedPointer<ScaleFactory>(new ScaleFactory(img.size()));
 }
 
 bool LayoutAnalysis::isEmpty() const {
@@ -153,13 +153,15 @@ bool LayoutAnalysis::compute() {
 	//	cv::medianBlur(img, img, 3);
 	//}
 
-	qDebug() << "scale factor dpi: " << ScaleFactory::scaleFactorDpi();
+	qDebug() << "scale factor dpi: " << mScaleFactory->scaleFactorDpi();
 
-	img = ScaleFactory::scaled(img);
+	img = mScaleFactory->scaled(img);
 	mImg = img;
 
+
 	// find super pixels
-	ScaleSpaceSuperPixel<GridSuperPixel> spM(mImg);
+	//ScaleSpaceSuperPixel<GridSuperPixel> spM(mImg);
+	ScaleSpaceSuperPixel<SuperPixel> spM(mImg);
 	//GridSuperPixel spM(img);
 	//SuperPixel spM(img);
 	//LineSuperPixel spM(img);
@@ -206,6 +208,7 @@ bool LayoutAnalysis::compute() {
 
 		if (!spc.compute())
 			qWarning() << "could not classify SuperPixels";
+		
 	}
 	else
 		qDebug() << "could not load classifier from " << config()->classifierPath();
@@ -237,6 +240,7 @@ bool LayoutAnalysis::compute() {
 
 			rdf::TextLineSegmentation tlM(sp);
 			tlM.addSeparatorLines(mStopLines);
+			tlM.config()->setScaleFactory(mScaleFactory);
 
 			if (!tlM.compute()) {
 				qWarning() << "could not compute text line segmentation!";
@@ -258,14 +262,15 @@ bool LayoutAnalysis::compute() {
 	mInfo << "Textlines computed in" << dtTl;
 
 	// scale back to original coordinates
-	ScaleFactory::scaleInv(mTextBlockSet);
+	mScaleFactory->scaleInv(mTextBlockSet);
 
 	for (Line& l : mStopLines)
-		l.scale(1.0 / ScaleFactory::scaleFactor());
+		l.scale(1.0 / mScaleFactory->scaleFactor());
 
 	// clean-up
 	if (config()->removeWeakTextLines()) {
 		mTextBlockSet.removeWeakTextLines();
+		qDebug() << "removing weak textlines...";
 	}
 
 	mInfo << "computed in" << dt;
@@ -301,7 +306,7 @@ cv::Mat LayoutAnalysis::draw(const cv::Mat & img, const QColor& col) const {
 			if (!col.isValid())
 				p.setPen(ColorManager::randColor());
 			p.setOpacity(0.5);
-			s[idx].draw(p, PixelSet::DrawFlags() | PixelSet::draw_pixels, Pixel::DrawFlags() | Pixel::draw_stats | Pixel::draw_ellipse);
+			s[idx].draw(p, PixelSet::DrawFlags() | PixelSet::draw_pixels, Pixel::DrawFlags() | Pixel::draw_stats | Pixel::draw_ellipse | Pixel::draw_label_colors);
 			//qDebug() << "scale" << idx << ":" << *s[idx];
 		}
 				
@@ -313,7 +318,9 @@ cv::Mat LayoutAnalysis::draw(const cv::Mat & img, const QColor& col) const {
 
 		tb->draw(p, TextBlock::draw_text_lines);
 	}
-	
+
+	//return tlM.draw(Image::qImage2Mat(qImg));
+
 	return Image::qImage2Mat(qImg);
 }
 
@@ -349,6 +356,10 @@ PixelSet LayoutAnalysis::pixels() const {
 	return set;
 }
 
+QSharedPointer<ScaleFactory> LayoutAnalysis::scaleFactory() const {
+	return mScaleFactory;
+}
+
 bool LayoutAnalysis::checkInput() const {
 
 	return !isEmpty();
@@ -363,7 +374,7 @@ TextBlockSet LayoutAnalysis::createTextBlocks() const {
 		textRegions << RegionManager::filter<Region>(mRoot, Region::type_table_cell);
 
 		TextBlockSet tbs(textRegions);
-		tbs.scale(ScaleFactory::scaleFactor());
+		tbs.scale(mScaleFactory->scaleFactor());
 
 		return tbs;
 	}
@@ -381,7 +392,7 @@ QVector<Line> LayoutAnalysis::createStopLines() const {
 
 		for (auto s : separators) {
 			Line sl = s->line();
-			sl.scale(ScaleFactory::scaleFactor());
+			sl.scale(mScaleFactory->scaleFactor());
 			stopLines << sl;
 		}
 	}
@@ -405,6 +416,8 @@ bool LayoutAnalysis::computeLocalStats(PixelSet & pixels) const {
 
 	// find local orientation per pixel
 	rdf::LocalOrientation lo(pixels);
+	lo.config()->setScaleFactory(mScaleFactory);
+
 	if (!lo.compute()) {
 		qWarning() << "could not compute local orientation";
 		return false;

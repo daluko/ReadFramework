@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -43,6 +43,7 @@
 #include <QFileInfo>
 #include <QPainter>
 #include <QUrl>
+#include <QDir>
 
 #include <opencv2/imgproc.hpp>
 #pragma warning(pop)
@@ -349,7 +350,53 @@ QJsonObject Image::matToJson(const cv::Mat & img, bool compress) {
 	return jo;
 }
 
-cv::Mat Image::jsonToMat(const QJsonObject & jo) {
+QJsonObject Image::matToJsonExtern(const cv::Mat & img, const QString& fileName, bool compress) {
+
+	QJsonObject jo;
+	jo.insert("rows", img.rows);
+	jo.insert("cols", img.cols);
+	jo.insert("type", img.type());
+	jo.insert("compressed", compress);
+	jo.insert("fileName", fileName);
+	jo.insert("data", "");
+
+	return jo;
+}
+
+bool Image::writeMat(const cv::Mat & img, const QString & filePath, bool compress) {
+	
+	if (filePath.isEmpty()) {
+		qCritical() << "cannot write Json, file path is empty...";
+		return 0;
+	}
+
+	QFile file(filePath);
+	if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+		QFileInfo fi(filePath);
+
+		if (!fi.exists())
+			qCritical() << "cannot open or write to" << filePath;
+
+		return 0;
+	}
+
+	QByteArray ba(img.ptr<const char>(), img.rows*img.cols*(int)img.elemSize());
+
+	// compress the data?
+	if (compress)
+		ba = qCompress(ba);
+
+	ba = ba.toBase64();
+
+	int64 nb = file.write(ba);
+
+	if (nb == -1)
+		qCritical() << "could not write data to" << filePath;
+
+	return nb != -1;
+}
+
+cv::Mat Image::jsonToMat(const QJsonObject & jo, const QString& filePath) {
 
 	int rows = jo.value("rows").toInt(-1);
 	int cols = jo.value("cols").toInt(-1);
@@ -361,10 +408,29 @@ cv::Mat Image::jsonToMat(const QJsonObject & jo) {
 		return cv::Mat();
 	}
 
-	// decode data
-	QByteArray ba = jo.value("data").toVariant().toByteArray();
-	ba = QByteArray::fromBase64(ba);
+	QByteArray ba;
+	QString fileName = jo.value("fileName").toString("");
+
+	// is the data embedded? (NOTE: only up to 40 MB)
+	if (fileName.isEmpty()) {
+		// decode data
+		ba = jo.value("data").toVariant().toByteArray();
+	}
+	// load the data from an external file
+	else {
+		QString fp = QFileInfo(filePath, fileName).absoluteFilePath();
+		QFile f(fp);
+
+		if (!f.open(QIODevice::ReadOnly)) {
+			qCritical() << "could not read data from" << fp;
+			return cv::Mat();
+		}
+
+		ba = f.readAll();
+	}
 	
+	ba = QByteArray::fromBase64(ba);
+
 	if (compressed)
 		ba = qUncompress(ba);
 

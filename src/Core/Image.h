@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -139,7 +139,11 @@ namespace Image {
 	DllCoreExport void imageInfo(const cv::Mat& img, const QString name);
 	DllCoreExport QString printImage(const cv::Mat& img, const QString name);
 	DllCoreExport QJsonObject matToJson(const cv::Mat& img, bool compress = true);
-	DllCoreExport cv::Mat jsonToMat(const QJsonObject& jo);
+	DllCoreExport cv::Mat jsonToMat(const QJsonObject& jo, const QString& filePath = "");
+
+	DllCoreExport QJsonObject matToJsonExtern(const cv::Mat& img, const QString& fileName, bool compress = true);
+	DllCoreExport bool writeMat(const cv::Mat& img, const QString& filePath, bool compress = true);
+
 
 	/// <summary>
 	/// Prints the values of a cv::Mat to copy it to Matlab.
@@ -165,7 +169,7 @@ namespace Image {
 				msg.append(QString::number(srcPtr[cIdx]));
 				msg.append( (cIdx < src.cols - 1) ? " " : "; " ); // next row matlab?
 
-				if (cnt % 7 == 0)
+				if (cnt % 7 == 0 && cnt > 0)
 					msg.append("...\n");
 			}
 

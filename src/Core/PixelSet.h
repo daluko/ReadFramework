@@ -1,9 +1,9 @@
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ. 
   
- Copyright (C) 2016 Markus Diem <diem@caa.tuwien.ac.at>
- Copyright (C) 2016 Stefan Fiel <fiel@caa.tuwien.ac.at>
- Copyright (C) 2016 Florian Kleber <kleber@caa.tuwien.ac.at>
+ Copyright (C) 2016 Markus Diem <diem@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Stefan Fiel <fiel@cvl.tuwien.ac.at>
+ Copyright (C) 2016 Florian Kleber <kleber@cvl.tuwien.ac.at>
 
  This file is part of ReadFramework.
 
@@ -24,7 +24,7 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.caa.tuwien.ac.at/cvl/
+ [1] http://www.cvl.tuwien.ac.at/cvl/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
  [4] http://nomacs.org
@@ -312,7 +312,13 @@ protected:
 namespace TextLineHelper {
 
 	QVector<QSharedPointer<TextLineSet> > filterLowDensity(const QVector<QSharedPointer<TextLineSet> >& textLines);
+	QVector<QSharedPointer<TextLineSet> > filterHeight(const QVector<QSharedPointer<TextLineSet> >& textLines, double minHeight = 5, double maxHeight = 5000);
 	QVector<QSharedPointer<TextLineSet> > filterAngle(const QVector<QSharedPointer<TextLineSet> >& textLines, double maxAngle = 4 * DK_DEG2RAD);
+
+	void mergeStableTextLines(QVector<QSharedPointer<TextLineSet> >& textLines);
+
+	QSharedPointer<TextLineSet> find(const QString& id, const QVector<QSharedPointer<TextLineSet> >& tl);
+	bool merge(const QSharedPointer<TextLineSet> & tl1, const QSharedPointer<TextLineSet> & tl2);
 
 }
 
@@ -350,6 +356,7 @@ public:
 	void setTextLines(const QVector<QSharedPointer<TextLineSet> >& textLines);
 	QVector<QSharedPointer<TextLineSet> > textLines() const;
 	bool remove(const QSharedPointer<TextLineSet>& tl);
+	void cleanTextLines();
 
 	QSharedPointer<Region> toTextRegion() const;
 
@@ -410,6 +417,7 @@ public:
 		sort_none,
 		sort_edges,
 		sort_line_edges,
+		sort_distance,	// euclidean
 
 		sort_end
 	};
