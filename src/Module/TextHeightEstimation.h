@@ -92,12 +92,23 @@ namespace rdf {
 		QString toString() const override;
 
 	private:
+		struct ImagePatch {
+			cv::Range xRange;
+			cv::Range yRange;
+			double textHeightEstimate;
+		};
+
 		bool checkInput() const override;
+		void subdivideImage(const cv::Mat img, int numSplitLevels);
+		QVector<cv::Range> splitRange(const cv::Range range) const;
+		void textHeightEstimation(const cv::Mat img, ImagePatch patch);
 
 		// input
 		cv::Mat mImg;
 
 		// output
+		QVector<QVector<ImagePatch>> imagePatches;
+		QSharedPointer<ScaleFactory> mScaleFactory;
 	};
 
 

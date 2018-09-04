@@ -51,9 +51,9 @@ target_include_directories(${RDF_BINARY_NAME} 		PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_include_directories(${RDF_TEST_NAME} 	    	PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_include_directories(${RDF_DLL_CORE_NAME} 	PRIVATE ${OpenCV_INCLUDE_DIRS})
 
-target_link_libraries(${RDF_BINARY_NAME} 		Qt5::Core Qt5::Network Qt5::Gui)
-target_link_libraries(${RDF_TEST_NAME} 			Qt5::Core Qt5::Network Qt5::Gui)
-target_link_libraries(${RDF_DLL_CORE_NAME} 	Qt5::Core Qt5::Network Qt5::Gui)
+target_link_libraries(${RDF_BINARY_NAME} 		Qt5::Core Qt5::Network Qt5::Gui Qt5::Widgets)
+target_link_libraries(${RDF_TEST_NAME} 			Qt5::Core Qt5::Network Qt5::Gui Qt5::Widgets)
+target_link_libraries(${RDF_DLL_CORE_NAME} 	Qt5::Core Qt5::Network Qt5::Gui Qt5::Widgets)
 
 # core flags
 set_target_properties(${RDF_DLL_CORE_NAME} PROPERTIES ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/libs/$<CONFIGURATION>)

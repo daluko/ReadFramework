@@ -148,6 +148,12 @@ WhiteSpaceAnalysis::WhiteSpaceAnalysis(const cv::Mat& img) {
 
 	mConfig = QSharedPointer<WhiteSpaceAnalysisConfig>::create();
 	mConfig->loadSettings();
+
+	mScaleFactory = QSharedPointer<ScaleFactory>(new ScaleFactory(img.size()));
+
+	auto sfConfig = mScaleFactory->config();
+	sfConfig->setMaxImageSide(config()->maxImgSide());
+	mScaleFactory->setConfig(sfConfig);
 }
 
 bool WhiteSpaceAnalysis::isEmpty() const {
@@ -158,7 +164,7 @@ bool WhiteSpaceAnalysis::compute() {
 	//TODO improve initial set of components used for text line formation 
 	//TODO use asssert() function to check input parameters and results
 	//TODO compute line spacing estimate only one time and for all modules
-
+	
 	qInfo()<< "Computing white space layout analysis...";
 
 	if (!checkInput())
@@ -167,15 +173,9 @@ bool WhiteSpaceAnalysis::compute() {
 	cv::Mat inputImg = mImg;
 	Timer dt;
 
-	ScaleFactory& sf  = ScaleFactory::instance();
-
 	if(config()->scaleInput()){
-		sf = ScaleFactory::instance();
-		sf.config()->setMaxImageSide(config()->maxImgSide());
-		sf.init(mImg.size());
-
-		qDebug() << "scale factor dpi: " << ScaleFactory::scaleFactorDpi();
-		mImg = ScaleFactory::scaled(inputImg);
+		qDebug() << "scale factor dpi: " << mScaleFactory->scaleFactorDpi();
+		mImg = mScaleFactory->scaled(inputImg);
 	}
 
 	//---------------------------------------------------------------------------------------------------------
@@ -262,11 +262,7 @@ bool WhiteSpaceAnalysis::compute() {
 
 	// scale back to original coordinates
 	if (config()->scaleInput()) {
-		sf = ScaleFactory::instance();
-		sf.config()->setMaxImageSide(config()->maxImgSide());
-		sf.init(inputImg.size());
-
-		sf.scaleInv(mTextBlockSet);
+		mScaleFactory->scaleInv(mTextBlockSet);
 	}
 
 	mTextBlockRegions = mTextBlockSet.toTextRegion();
@@ -320,6 +316,8 @@ bool WhiteSpaceAnalysis::computeLocalStats(PixelSet & pixels) const {
 
 	// find local orientation per pixel
 	rdf::LocalOrientation lo(pixels);
+	lo.config()->setScaleFactory(mScaleFactory);
+
 	if (!lo.compute()) {
 		qWarning() << "could not compute local orientation";
 		return false;
@@ -352,18 +350,6 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 	QVector<QString> removeIDs;
 
 	//filter pixels according to size constraints-------------------------------------
-
-	//QList<double> spacings;
-	//for (auto p : set.pixels()) {
-	//	spacings << p->bbox().height();
-	//}
-
-	//double ls = Algorithms::statMoment(spacings, 0.5);
-	////double ls = set.lineSpacing(0.5);
-	//double hLimit = 2 * ls;
-	//double wLimit = 2 * ls;
-
-	//qInfo() << "median text height = " << QString::number(ls);
 
 	//TODO fix parameters for estimating filter rects
 	QList<double> heights;
@@ -1214,6 +1200,7 @@ void TextLineHypothisizer::extractWhiteSpaces(QSharedPointer<WSTextLineSet>& tex
 
 	//compute approximate lower bound for size of bcr
 	double minBCRSize= textLine->pixelWidth()*0.5;
+	textLine->setMinBCRSize(minBCRSize);
 
 	//std::vector<float> data(ws_temp.size());
 	//for (int i = 0; i < ws_temp.size(); i++) {
@@ -1234,8 +1221,6 @@ void TextLineHypothisizer::extractWhiteSpaces(QSharedPointer<WSTextLineSet>& tex
 	//			maxWSSize = data.at(i);
 	//	}
 	//}
-
-	textLine->setMinBCRSize(minBCRSize);
 }
 
 int TextLineHypothisizer::findSetIndex(const QSharedPointer<Pixel> &pixel, const QVector<QSharedPointer<WSTextLineSet>> &sets) const{
@@ -1748,7 +1733,7 @@ bool WhiteSpaceSegmentation::compute() {
 		return false;
 	}
 	
-	cv::Mat initialTextLines = drawSplitTextLines(mImg);
+	//cv::Mat initialTextLines = drawSplitTextLines(mImg);
 
 	PixelGraph pg = computeSegmentationGraph();
 
@@ -1757,14 +1742,14 @@ bool WhiteSpaceSegmentation::compute() {
 	removeIsolatedBCR(pg);
 	processShortTextLines();
 
-	cv::Mat noIsolatedTextLines = drawSplitTextLines(mImg);
+	//cv::Mat noIsolatedTextLines = drawSplitTextLines(mImg);
 	
 	if (!findWhiteSpaceRuns(pg)) {
 		qInfo("Finished white space segmentation, no white space runs found.");
 		return true;
 	}
 
-	cv::Mat whiteSpaceRuns = drawWhiteSpaceRuns(mImg);
+	//cv::Mat whiteSpaceRuns = drawWhiteSpaceRuns(mImg);
 
 	bool updatedSegmentation = true;
 	while (updatedSegmentation) {
@@ -1776,7 +1761,7 @@ bool WhiteSpaceSegmentation::compute() {
 		updatedSegmentation = refineWhiteSpaceRuns();
 	}
 
-	cv::Mat finalTextLines = drawSplitTextLines(mImg);
+	//cv::Mat finalTextLines = drawSplitTextLines(mImg);
 
 	//TODO further refinement of text lines!?
 
@@ -1896,10 +1881,6 @@ bool WhiteSpaceSegmentation::splitTextLines(){
 }
 
 double WhiteSpaceSegmentation::computeLineSpacing() const{
-	//QList<double> spacings;
-	//for (auto tl : mTlsM) {
-	//	spacings << tl->lineSpacing();
-	//}
 
 	QList<double> spacings;
 	for (auto tl : mTlsM) {

@@ -96,11 +96,10 @@ namespace rdf {
 		mImg = img;
 		mTextLines = textLines;
 
-		// initialize scale factory
-		ScaleFactory::instance().init(img.size());
-
 		mConfig = QSharedPointer<FontStyleClassificationConfig>::create();
 		mConfig->loadSettings();
+
+		mScaleFactory = QSharedPointer<ScaleFactory>(new ScaleFactory(img.size()));
 	}
 
 	bool FontStyleClassification::isEmpty() const {

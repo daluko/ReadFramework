@@ -274,8 +274,8 @@ namespace rdf {
 
 		bool mScaleInput = true;
 
-		bool mDebugDraw = false;
-		//bool mDebugDraw = true;
+		//bool mDebugDraw = false;
+		bool mDebugDraw = true;
 		QString mDebugPath = "E:/data/test/HBR2013_training";
 	};
 	
@@ -297,16 +297,6 @@ namespace rdf {
 		QString toString() const override;
 
 	protected:
-		bool checkInput() const override;
-		SuperPixel computeSuperPixels(const cv::Mat & img);
-		bool computeLocalStats(PixelSet & pixels) const;
-		Rect filterPixels(PixelSet& pixels);
-		QVector<QVector<QSharedPointer<rdf::Pixel>>> findPixelGroups(PixelSet& set);
-
-		void drawDebugImages(const cv::Mat& img);
-		cv::Mat drawWhiteSpaces(const cv::Mat& img);
-		cv::Mat drawFilteredPixels(const cv::Mat& img);
-
 		// input
 		cv::Mat mImg;
 		int mMinPixelsPerBlock;
@@ -318,9 +308,20 @@ namespace rdf {
 
 		// output
 		PixelSet pSet;
+		QSharedPointer<ScaleFactory> mScaleFactory;
 		QVector<QSharedPointer<WSTextLineSet>> mTextLineHypotheses;
 		QVector<QSharedPointer<WSTextLineSet>> mWSTextLines;
 		QSharedPointer<Region>mTextBlockRegions;
 		TextBlockSet mTextBlockSet;
+
+		bool checkInput() const override;
+		SuperPixel computeSuperPixels(const cv::Mat & img);
+		bool computeLocalStats(PixelSet & pixels) const;
+		Rect filterPixels(PixelSet& pixels);
+		QVector<QVector<QSharedPointer<rdf::Pixel>>> findPixelGroups(PixelSet& set);
+
+		void drawDebugImages(const cv::Mat& img);
+		cv::Mat drawWhiteSpaces(const cv::Mat& img);
+		cv::Mat drawFilteredPixels(const cv::Mat& img);
 	};
 }

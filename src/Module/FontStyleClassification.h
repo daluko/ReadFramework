@@ -92,13 +92,14 @@ namespace rdf {
 		QString toString() const override;
 
 	private:
-		bool checkInput() const override;
-
 		// input
 		cv::Mat mImg;
 		QVector<QSharedPointer<TextLine>> mTextLines;
 
 		// output
+		QSharedPointer<ScaleFactory> mScaleFactory;
+
+		bool checkInput() const override;
 	};
 
 

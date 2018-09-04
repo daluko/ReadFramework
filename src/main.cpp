@@ -32,6 +32,7 @@
 
 
 #pragma warning(push, 0)	// no warnings from includes
+#include <QApplication>
 #include <QCoreApplication>
 #include <QCommandLineParser>
 #include <QDebug>
@@ -69,7 +70,11 @@ int main(int argc, char** argv) {
 	QCoreApplication::setApplicationName("READ Framework");
 	rdf::Utils::instance().initFramework();
 
+#ifdef WIN32
+	QApplication app(argc, (char**)argv);		// enable QPainter
+#else
 	QCoreApplication app(argc, (char**)argv);	// enable headless
+#endif
 
 	// CMD parser --------------------------------------------------------------------
 	QCommandLineParser parser;
@@ -213,21 +218,21 @@ int main(int argc, char** argv) {
 
 			qDebug() << "loading david's debug code";
 			
-			//rdf::TextHeightEstimationTest thet(dc);
-			//thet.run();
+			rdf::TextHeightEstimationTest thet(dc);
+			thet.run();
 
-			rdf::WhiteSpaceTest wst(dc);
-			
-			QString dirPath;
-			//dirPath = "E:/data/test/HBR13_test";
-			//dirPath = "E:/data/test/HBR2013_training/training";
-			//dirPath = "E:/data/test/HBR2013_training/test";
-			
-			if(!dirPath.isEmpty())
-				wst.processDirectory(dirPath);
-			else {
-				wst.run();	
-			}
+			//rdf::WhiteSpaceTest wst(dc);
+			//
+			//QString dirPath;
+			////dirPath = "E:/data/test/HBR13_test";
+			////dirPath = "E:/data/test/HBR2013_training/training";
+			////dirPath = "E:/data/test/HBR2013_training/test";
+			//
+			//if(!dirPath.isEmpty())
+			//	wst.processDirectory(dirPath);
+			//else {
+			//	wst.run();	
+			//}
 
 			//Font style classification test
 			//rdf::FontClassificationTest fct(dc);
