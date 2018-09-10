@@ -86,6 +86,7 @@ namespace rdf {
 
 		bool isEmpty() const override;
 		bool compute() override;
+		int textHeightEstimate();
 		QSharedPointer<TextHeightEstimationConfig> config() const;
 
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
@@ -95,20 +96,22 @@ namespace rdf {
 		struct ImagePatch {
 			cv::Range xRange;
 			cv::Range yRange;
-			double textHeightEstimate;
 		};
 
 		bool checkInput() const override;
 		void subdivideImage(const cv::Mat img, int numSplitLevels);
 		QVector<cv::Range> splitRange(const cv::Range range) const;
-		void textHeightEstimation(const cv::Mat img, ImagePatch patch);
+		cv::Mat nacf(const cv::Mat img);
+		cv::Mat computePMF(int tMax, double w, double m, double sig);
+		void fftShift(cv::Mat _out);
 
 		// input
 		cv::Mat mImg;
 
 		// output
-		QVector<QVector<ImagePatch>> imagePatches;
+		QVector<QVector<QSharedPointer<ImagePatch>>> imagePatches;
 		QSharedPointer<ScaleFactory> mScaleFactory;
+		int thEstimate = -1;
 	};
 
 
