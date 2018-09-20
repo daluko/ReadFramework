@@ -217,27 +217,41 @@ int main(int argc, char** argv) {
 		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "david") {
 
 			qDebug() << "loading david's debug code";
-			
-			rdf::TextHeightEstimationTest thet(dc);
-			thet.run();
 
-			//rdf::WhiteSpaceTest wst(dc);
-			//
-			//QString dirPath;
+			QString dirPath;
 			////dirPath = "E:/data/test/HBR13_test";
 			////dirPath = "E:/data/test/HBR2013_training/training";
 			////dirPath = "E:/data/test/HBR2013_training/test";
-			//
-			//if(!dirPath.isEmpty())
-			//	wst.processDirectory(dirPath);
-			//else {
-			//	wst.run();	
-			//}
+			////dirPath = "E:/data/test/HBR2013_training/THE problems";
 
-			//Font style classification test
-			//rdf::FontClassificationTest fct(dc);
-			//fct.run();
+			bool testTHE = false;
+			bool testWSA = true;
+			bool testFSC = false;
 
+			if (testTHE) {
+				rdf::TextHeightEstimationTest thet(dc);
+
+				if (!dirPath.isEmpty())
+					thet.processDirectory(dirPath);
+				else {
+					thet.run();
+				}
+			}
+
+			if (testWSA) {
+				rdf::WhiteSpaceTest wst(dc);
+
+				if (!dirPath.isEmpty())
+					wst.processDirectory(dirPath);
+				else {
+					wst.run();
+				}
+			}
+
+			if (testWSA) {
+				rdf::FontClassificationTest fct(dc);
+				fct.run();
+			}
 		}
 		// my section
 		else {
@@ -291,6 +305,22 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		//dc.setImagePath("E:/data/test/HBR2013_training/00425629.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00318461.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00451901.tif");
+
+		//0 or inf
+		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00042928.tif"); 
+		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00042929.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00107400.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00465675.tif");
+
+		//too big or else
+		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00465675.tif"); 
+		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00425137.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00441834.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00425137.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00672923.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00672924.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00528155.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00319983.tif");
 
 		qInfo() << dc.imagePath() << "added as image path";
 	}

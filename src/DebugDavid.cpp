@@ -62,9 +62,10 @@ TextHeightEstimationTest::TextHeightEstimationTest(const DebugConfig & config) {
 }
 
 void TextHeightEstimationTest::run() {
+	
+	bool debugDraw = true;
 
 	qDebug() << "Running text height estimation test...";
-
 	Timer dt;
 
 	QImage qImg(mConfig.imagePath());
@@ -76,11 +77,48 @@ void TextHeightEstimationTest::run() {
 	}
 
 	TextHeightEstimation the(imgCv);
+
+	if(debugDraw)
+		the.config()->setDebugDraw(true);
+
 	the.compute();
 
 	cv::Mat img_result = the.draw(imgCv);
-	QString imgPath = Utils::createFilePath(mConfig.imagePath(), "_the_results", "png");
+	QString resultVals = QString::number(the.textHeightEstimate())+ "_" + QString::number(the.confidence()) + "_" + QString::number(the.coverage()) + "_" + QString::number(the.relCoverage());
+	QString imgPath = Utils::createFilePath(mConfig.imagePath(), "_the_result_" + resultVals, "png");
 	Image::save(img_result, imgPath);
+	
+	if (debugDraw)
+		the.drawDebugImages(mConfig.imagePath());
+
+}
+
+void TextHeightEstimationTest::processDirectory(QString dirPath) {
+
+	QDir dir(dirPath);
+	if (!dir.exists()) {
+		qWarning() << "Directory does not exist!";
+		return;
+	}
+
+	qInfo() << "Running Text Height Estimation test on all .tif images in directory: ";
+	qInfo() << dirPath;
+
+	Timer dt;
+
+	QStringList filters;
+	filters << "*.tif";
+	QFileInfoList fileInfoList = dir.entryInfoList(filters, QDir::Files | QDir::NoDotAndDotDot);
+
+	int i = 0;
+	for (auto f : fileInfoList) {
+		++i;
+		qDebug() << "processing image #" << QString::number(i) << " : " << f.absoluteFilePath();
+		mConfig.setImagePath(f.absoluteFilePath());
+		run();
+	}
+
+	qInfo() << "Directory processed in " << dt;
 }
 	
 WhiteSpaceTest::WhiteSpaceTest(const DebugConfig & config) {
@@ -176,7 +214,7 @@ void WhiteSpaceTest::processDirectory(QString dirPath) {
 		return;
 	}
 
-	qInfo() << "Running White Space Analysis test on all images in directory: ";
+	qInfo() << "Running White Space Analysis test on all .tif images in directory: ";
 	qInfo() << dirPath;
 
 	Timer dt;

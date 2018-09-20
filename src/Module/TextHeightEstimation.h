@@ -60,23 +60,25 @@ namespace rdf {
 
 		virtual QString toString() const override;
 
-		void setTestBool(bool remove);
-		bool testBool() const;
+		void setDebugDraw(bool remove);
+		bool debugDraw() const;
 
-		void setTestInt(int minPx);
-		int testInt() const;
+		void setNumSplitLevels(int nsl);
+		int numSplitLevels() const;
 
-		void setTestPath(const QString& cp);
-		QString testPath() const;
+		void setDebugPath(const QString& cp);
+		QString debugPath() const;
 
 	protected:
 
 		void load(const QSettings& settings) override;
 		void save(QSettings& settings) const override;
 
-		bool mTestBool = true;
-		int mTestInt = 15;
-		QString mTestPath = "";
+		bool mDebugDraw = false;
+
+		int mNumSplitLevels = 5;
+
+		QString mDebugPath = "";
 	};
 
 	class DllCoreExport TextHeightEstimation : public Module {
@@ -87,9 +89,13 @@ namespace rdf {
 		bool isEmpty() const override;
 		bool compute() override;
 		int textHeightEstimate();
+		double coverage();
+		double relCoverage();
+		double confidence();
 		QSharedPointer<TextHeightEstimationConfig> config() const;
 
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
+		void drawDebugImages(QString input_path) const;
 		QString toString() const override;
 
 	private:
@@ -101,17 +107,27 @@ namespace rdf {
 		bool checkInput() const override;
 		void subdivideImage(const cv::Mat img, int numSplitLevels);
 		QVector<cv::Range> splitRange(const cv::Range range) const;
+		cv::Mat processImagePatches(cv::Mat img);
+		cv::Mat processImagePatchesDebug(cv::Mat img);
 		cv::Mat nacf(const cv::Mat img);
 		cv::Mat computePMF(int tMax, double w, double m, double sig);
 		void fftShift(cv::Mat _out);
+		void computeConfidence(cv::Mat accPMF);
 
 		// input
 		cv::Mat mImg;
 
 		// output
 		QVector<QVector<QSharedPointer<ImagePatch>>> imagePatches;
-		QSharedPointer<ScaleFactory> mScaleFactory;
 		int thEstimate = -1;
+		double theConfidence = 0;
+		double meanCoverage = 0;
+		double meanRelativeCoverage = 0;
+
+		//debug output
+		QVector<cv::Mat> nacImages;
+		QVector<cv::Mat> magImages;
+		cv::Mat accPMFImg;
 	};
 
 

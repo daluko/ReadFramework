@@ -75,6 +75,7 @@ public:
 	TextHeightEstimationTest(const DebugConfig& config = DebugConfig());
 
 	void run();
+	void processDirectory(QString dirPath);
 
 protected:
 	DebugConfig mConfig;

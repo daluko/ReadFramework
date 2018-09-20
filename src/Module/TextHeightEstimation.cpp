@@ -37,6 +37,8 @@ related links:
 #include "Elements.h"
 
 #pragma warning(push, 0)	// no warnings from includes
+#include <QFileInfo>
+#include <QDir>
 #include <QPainter>
 #include "opencv2/imgproc.hpp"
 #pragma warning(pop)
@@ -52,42 +54,42 @@ namespace rdf {
 		return ModuleConfig::toString();
 	}
 
-	void TextHeightEstimationConfig::setTestBool(bool testBool) {
-		mTestBool = testBool;
+	void TextHeightEstimationConfig::setDebugDraw(bool dd) {
+		mDebugDraw = dd;
 	}
 
-	bool TextHeightEstimationConfig::testBool() const {
-		return mTestBool;
+	bool TextHeightEstimationConfig::debugDraw() const {
+		return mDebugDraw;
 	}
 
-	void TextHeightEstimationConfig::setTestInt(int testInt) {
-		mTestInt = testInt;
+	void TextHeightEstimationConfig::setNumSplitLevels(int nsl) {
+		mNumSplitLevels = nsl;
 	}
 
-	int TextHeightEstimationConfig::testInt() const {
-		return ModuleConfig::checkParam(mTestInt, 0, INT_MAX, "testInt");
+	int TextHeightEstimationConfig::numSplitLevels() const {
+		return ModuleConfig::checkParam(mNumSplitLevels, 2, INT_MAX, "numSplitLevels");
 	}
 
-	void TextHeightEstimationConfig::setTestPath(const QString & tp) {
-		mTestPath = tp;
+	void TextHeightEstimationConfig::setDebugPath(const QString & dp) {
+		mDebugPath = dp;
 	}
 
-	QString TextHeightEstimationConfig::testPath() const {
-		return mTestPath;
+	QString TextHeightEstimationConfig::debugPath() const {
+		return mDebugPath;
 	}
 
 	void TextHeightEstimationConfig::load(const QSettings & settings) {
 
-		mTestBool = settings.value("testBool", testBool()).toBool();
-		mTestInt = settings.value("testInt", testInt()).toInt();		
-		mTestPath = settings.value("classifierPath", testPath()).toString();
+		mDebugDraw = settings.value("debugDraw", debugDraw()).toBool();
+		mNumSplitLevels = settings.value("numSplitLevels", numSplitLevels()).toInt();
+		mDebugPath = settings.value("classifierPath", debugPath()).toString();
 	}
 
 	void TextHeightEstimationConfig::save(QSettings & settings) const {
 
-		settings.setValue("testBool", testBool());
-		settings.setValue("testInt", testInt());
-		settings.setValue("testPath", testPath());
+		settings.setValue("debugDraw", debugDraw());
+		settings.setValue("numSplitLevels", numSplitLevels());
+		settings.setValue("debugDraw", debugPath());
 	}
 
 	// TextHeightEstimation --------------------------------------------------------------------
@@ -97,8 +99,6 @@ namespace rdf {
 
 		mConfig = QSharedPointer<TextHeightEstimationConfig>::create();
 		mConfig->loadSettings();
-
-		mScaleFactory = QSharedPointer<ScaleFactory>(new ScaleFactory(img.size()));
 	}
 
 	bool TextHeightEstimation::isEmpty() const {
@@ -108,6 +108,8 @@ namespace rdf {
 	bool TextHeightEstimation::compute() {
 
 		//TODO fix parameters
+		//TODO clean up code
+		//TODO check weights of PMFs (lower level PMFs seem to have large influence -> results of higher levels will be ignored)
 
 		if (!checkInput())
 			return false;
@@ -116,105 +118,36 @@ namespace rdf {
 
 		Timer dt;
 
-		int numSplitLevels = 5;
+		int numSplitLevels = config()->numSplitLevels();
 		imagePatches = QVector<QVector<QSharedPointer<ImagePatch>>>(numSplitLevels);
-
-		cv::Mat img = mImg;
 		cv::Mat img_gray;
-		cv::cvtColor(img, img_gray, cv::COLOR_BGR2GRAY);
+
+		//convert input image to gray scale if needed
+		if (mImg.channels() == 1)
+			img_gray = mImg;
+		else if(mImg.channels() == 3 || mImg.channels() == 4)
+			cv::cvtColor(mImg, img_gray, cv::COLOR_BGR2GRAY);
+		else
+			return false;
 
 		//saves split image patches of input image in imagePatches variable
 		subdivideImage(img_gray, numSplitLevels);
-
-		//text height estimation
-		cv::Mat accPMF = cv::Mat::zeros(1, ceil(img_gray.rows / 2.0), CV_32F);
-		for (int i = 1; i < imagePatches.size(); ++i) {	//discard level 0 -> contribution is very poor according to Pintus et al.
-
-			auto layer = imagePatches[i];
-			cv::Mat maxMagHist = cv::Mat::zeros(100, 1, CV_32F);
-			cv::Mat maxMagCount = cv::Mat::zeros(100, 1, CV_8U);
-
-			for (auto pi : layer) {
-				
-				cv::Mat patch = img_gray(pi->yRange, pi->xRange).clone();
-
-				//compute normalize auto correlation
-				cv::Mat nacImg = nacf(patch);
-
-				//compute vertical projection profile of nac image
-				cv::Mat vPP;
-				reduce(nacImg, vPP, 1, CV_REDUCE_SUM, CV_32F);
-
-				////draw vertical projection profile within dft image
-				//cv::Mat outputImg;
-				//nacImg.convertTo(outputImg, CV_8U, 255);
-
-				//int max_x = outputImg.cols - 1;
-				//for (int i = 1; i < vPP.rows; i++) {
-				//	cv::Point p1 = cv::Point(max_x - vPP.at<float>(i - 1), i - 1);
-				//	cv::Point p2 = cv::Point(max_x - vPP.at<float>(i), i);
-				//	cv::line(outputImg, p1, p2, cv::Scalar(255), 2, 8, 0);
-				//}
-
-				//compute DFT of PP and magnitudes of the DFT coefficients
-				cv::Mat vPPdft, mag;
-				cv::dft(vPP, vPPdft, cv::DFT_COMPLEX_OUTPUT);
-				
-				std::vector<cv::Mat> planes;
-				split(vPPdft, planes);
-				magnitude(planes[0], planes[1], mag);
-				
-				////use logarithmic scale log(1 + magnitude), used for debugging -> visual output
-				//log(mag + 1.0, mag);
-				//normalize(mag, mag, 0, 1, CV_MINMAX);
-
-				//find index of coefficient with max magnitude
-				mag.at<float>(0, 0) = 0;	//discard contant compoent (0 index coefficient)
-				mag = mag(cv::Range(0, std::min(mag.rows / 2, 100)), cv::Range(0, 1));	//ignore coefficients with index > 100 (assumption -> max 100 lines per page)
-
-				double maxVal;
-				cv::Point maxLoc;
-				cv::minMaxLoc(mag, NULL, &maxVal, NULL, &maxLoc);
-				
-				//save max magnitude to magnitude histogram of this patch layer
-				if (maxLoc.y > 1) {	//outlier pruning: index <= 1 likely to be figure or sparse patch
-					maxMagHist.at<float>(maxLoc) += (float)maxVal;
-					maxMagCount.at<uchar>(maxLoc) += 1;
-				}
-
-				////text heigh estimate value
-				//double estimate = patch.rows / (double)(maxLoc.y);
-
-				//cv::rectangle(img, cv::Rect(0, 0, estimate, estimate), cv::Scalar(255), 2, 8, 0);
-				//qDebug() << "Text height estimate = " << QString::number(estimate);
-			}
-
-			//find index max magnitude
-			cv::Point maxLoc;
-			cv::minMaxLoc(maxMagHist, NULL, NULL, NULL, &maxLoc);
-			int thIdx = maxLoc.y;
-
-			//compute probability mass function of text height random variable and accumulate it for all levels
-			double patchHeight = layer[0]->yRange.size();
-			double patchWidth = layer[0]->xRange.size();
-
-			double An = maxMagHist.at<float>(thIdx);
-			double Cn = maxMagCount.at<uchar>(thIdx);
-
-			double thMin = patchHeight / ((double)thIdx + 0.5);
-			double thMax = patchHeight / ((double)thIdx - 0.5);
-
-			double m = (thMin + thMax) / 2;
-			double sig = pow(thMax - m, 2);
-			double w = 1 / (patchWidth*Cn) * An;
-
-			int tMax = accPMF.cols;
-			accPMF += computePMF(tMax, w, m, sig);
-		}
 		
+		//process text patches and get the probability mass function (PMF) of the text height random variable
+		cv::Mat accPMF;
+		if(!config()->debugDraw())
+			accPMF = processImagePatches(img_gray);
+		else
+			accPMF = processImagePatchesDebug(img_gray);
+
+		//find final estimate for text height (max of PMF)
 		cv::Point maxLoc;
-		cv::minMaxLoc(accPMF, NULL, NULL, NULL, &maxLoc);
+		double maxVal;
+		cv::minMaxLoc(accPMF, NULL, &maxVal, NULL, &maxLoc);
 		thEstimate = maxLoc.x;
+
+		//get estimate for confidence of THE result
+		computeConfidence(accPMF);
 
 		qInfo() << "Estimated text height = " << QString::number(thEstimate);
 		qInfo() << "Finished text height estimation. Computation took: " << dt.getTotal();
@@ -271,6 +204,240 @@ namespace rdf {
 		}
 
 		return splitRanges;
+	}
+
+	cv::Mat TextHeightEstimation::processImagePatches(cv::Mat img){
+
+		cv::Mat accPMF = cv::Mat::zeros(1, ceil(img.rows / 2.0), CV_32F);
+
+		//process each layer
+		for (int i = 1; i < imagePatches.size(); ++i) {	//discard level 0 -> contribution is very poor according to Pintus et al.
+
+			auto layer = imagePatches[i];
+			cv::Mat maxMagHist = cv::Mat::zeros(100, 1, CV_32F);
+			cv::Mat maxMagCount = cv::Mat::zeros(100, 1, CV_8U);
+			
+			//process each patche of current layer
+			for (auto pi : layer) {
+
+				cv::Mat patch = img(pi->yRange, pi->xRange).clone();
+				cv::Mat nacImg = nacf(patch); //compute normalize auto correlation
+				cv::Mat vPP, vPPdft, mag;
+
+				//compute vertical projection profile of nac image
+				reduce(nacImg, vPP, 1, CV_REDUCE_SUM, CV_32F);
+
+				//compute DFT of PP and magnitudes of the DFT coefficients
+				cv::dft(vPP, vPPdft, cv::DFT_COMPLEX_OUTPUT);
+
+				std::vector<cv::Mat> planes;
+				split(vPPdft, planes);
+				magnitude(planes[0], planes[1], mag);
+
+				//find index of coefficient with max magnitude
+				mag.at<float>(0, 0) = 0;	//discard contant compoent (0 index coefficient)
+				mag = mag(cv::Range(0, std::min(mag.rows / 2, 100)), cv::Range(0, 1));	//ignore coefficients with index > 100 (assumption -> max 100 lines per page)
+
+				double maxVal;
+				cv::Point maxLoc;
+				cv::minMaxLoc(mag, NULL, &maxVal, NULL, &maxLoc);
+
+				//save max magnitude to magnitude histogram of this patch layer
+				if (maxLoc.y > 1) {	//outlier pruning: index <= 1 likely to be figure or sparse patch
+					maxMagHist.at<float>(maxLoc) += (float)maxVal;
+					maxMagCount.at<uchar>(maxLoc) += 1;
+				}
+			}
+
+			if (cv::sum(maxMagCount)[0] == 0) {
+				qDebug() << "Layer does not contain relevant coefficients";
+				continue;
+			}
+
+			//find index of max magnitude of this layer
+			cv::Point maxLoc;
+			cv::minMaxLoc(maxMagCount, NULL, NULL, NULL, &maxLoc);
+			int thIdx = maxLoc.y;
+
+			//compute probability mass function of text height random variable and accumulate it for all levels
+			double patchHeight = layer[0]->yRange.size();
+			double patchWidth = layer[0]->xRange.size();
+
+			double An = maxMagHist.at<float>(thIdx);
+			double Cn = maxMagCount.at<uchar>(thIdx);
+
+			double thMin = patchHeight / ((double)thIdx + 0.5);
+			double thMax = patchHeight / ((double)thIdx - 0.5);
+
+			double m = (thMin + thMax) / 2;
+			double sig = pow(thMax - m, 2);
+			double w = (1 / (patchWidth*Cn)) * An;
+
+			int tMax = accPMF.cols;
+
+			accPMF += computePMF(tMax, w, m, sig);
+
+			double coverage = cv::sum(maxMagCount)[0] / (double)layer.size();
+			meanCoverage += coverage / (imagePatches.size() - 1);
+
+			double relativeCoverage = Cn / cv::sum(maxMagCount)[0];
+			meanRelativeCoverage += relativeCoverage / (imagePatches.size() - 1);
+		}
+
+		return accPMF;
+	}
+
+	cv::Mat TextHeightEstimation::processImagePatchesDebug(cv::Mat img){
+
+		cv::Mat accPMF = cv::Mat::zeros(1, ceil(img.rows / 2.0), CV_32F);
+
+		for (int i = 1; i < imagePatches.size(); ++i) {	//discard level 0 -> contribution is very poor according to Pintus et al.
+
+			auto layer = imagePatches[i];
+			cv::Mat maxMagHist = cv::Mat::zeros(100, 1, CV_32F);
+			cv::Mat maxMagCount = cv::Mat::zeros(100, 1, CV_8U);
+
+			//debug output
+			cv::Mat nacLayer = img.clone();
+
+			for (auto pi : layer) {
+
+				cv::Mat patch = img(pi->yRange, pi->xRange).clone();
+				cv::Mat nacImg = nacf(patch); //compute normalize auto correlation
+				cv::Mat vPP, vPPdft, mag;
+
+				//compute vertical projection profile of nac image
+				reduce(nacImg, vPP, 1, CV_REDUCE_SUM, CV_32F);
+
+				//compute DFT of PP and magnitudes of the DFT coefficients
+				cv::dft(vPP, vPPdft, cv::DFT_COMPLEX_OUTPUT);
+
+				std::vector<cv::Mat> planes;
+				split(vPPdft, planes);
+				magnitude(planes[0], planes[1], mag);
+
+				//find index of coefficient with max magnitude
+				mag.at<float>(0, 0) = 0;	//discard contant compoent (0 index coefficient)
+				mag = mag(cv::Range(0, std::min(mag.rows / 2, 100)), cv::Range(0, 1));	//ignore coefficients with index > 100 (assumption -> max 100 lines per page)
+
+				double maxVal;
+				cv::Point maxLoc;
+				cv::minMaxLoc(mag, NULL, &maxVal, NULL, &maxLoc);
+
+				//save max magnitude to magnitude histogram of this patch layer
+				if (maxLoc.y > 1) {	//outlier pruning: index <= 1 likely to be figure or sparse patch
+					maxMagHist.at<float>(maxLoc) += (float)maxVal;
+					maxMagCount.at<uchar>(maxLoc) += 1;
+				}
+
+				//debug draw-------------------------------------------------------------------------------------------------------------------------
+				//draw vertical projection profile within dft image
+				nacImg.convertTo(nacImg, CV_8U, 255);
+
+				int max_x = nacImg.cols - 1;
+				for (int j = 1; j < vPP.rows; j++) {
+					cv::Point p1 = cv::Point(max_x - vPP.at<float>(j - 1), j - 1);
+					cv::Point p2 = cv::Point(max_x - vPP.at<float>(j), j);
+					cv::line(nacImg, p1, p2, cv::Scalar(255), 2, 8, 0);
+				}
+
+				//draw magnitudes
+				normalize(mag, mag, 0, nacImg.cols/2.0, CV_MINMAX);
+				for (int j = 0; j < mag.rows; j++) {
+					cv::Point p1 = cv::Point(0, j);
+					cv::Point p2 = cv::Point(mag.at<float>(j), j);
+					cv::line(nacImg, p1, p2, cv::Scalar(255), 1, 8, 0);
+				}
+
+				//draw patch and result values in original image
+				QImage qImg = Image::mat2QImage(nacImg, true);
+				QPainter painter(&qImg);
+				painter.setPen(QColor(150,150,150,255));
+				QString outText = "maxMagIndex=" + QString::number(maxLoc.y) + "\n" + "maxMag=" + QString::number(maxVal);
+				painter.drawText(qImg.rect(), QTextOption::WrapAtWordBoundaryOrAnywhere || Qt::AlignTop || Qt::AlignLeft, outText);
+				nacImg = Image::qImage2Mat(qImg);
+				cv::cvtColor(nacImg, nacImg, cv::COLOR_BGR2GRAY);
+				nacImg.copyTo(nacLayer(pi->yRange, pi->xRange));
+				//debug draw-------------------------------------------------------------------------------------------------------------------------
+			}
+
+			if (cv::sum(maxMagCount)[0] == 0) {
+				qDebug() << "Layer does not contain relevant coefficients";
+				continue;
+			}
+
+			//find index max magnitude
+			cv::Point maxLoc;
+			cv::minMaxLoc(maxMagCount, NULL, NULL, NULL, &maxLoc);
+			int thIdx = maxLoc.y;
+
+			//compute probability mass function of text height random variable and accumulate it for all levels
+			double patchHeight = layer[0]->yRange.size();
+			double patchWidth = layer[0]->xRange.size();
+
+			double An = maxMagHist.at<float>(thIdx);
+			double Cn = maxMagCount.at<uchar>(thIdx);
+
+			double thMin = patchHeight / ((double)thIdx + 0.5);
+			double thMax = patchHeight / ((double)thIdx - 0.5);
+
+			double m = (thMin + thMax) / 2;
+			double sig = pow(thMax - m, 2);
+			double w = (1 / (patchWidth*Cn)) * An;
+
+			int tMax = accPMF.cols;
+
+			accPMF += computePMF(tMax, w, m, sig);
+
+			double coverage = cv::sum(maxMagCount)[0] / (double)layer.size();
+			meanCoverage += coverage / (imagePatches.size() - 1);
+
+			double relativeCoverage = Cn / cv::sum(maxMagCount)[0];
+			meanRelativeCoverage += relativeCoverage / (imagePatches.size() - 1);
+
+			//debug draw-------------------------------------------------------------------------------------------------------------------------
+			//draw the magnitude histogram of the current layer
+			cv::Mat normMMH;
+			cv::Mat magImg = cv::Mat::zeros(255, maxMagHist.rows, CV_8U);
+			normalize(maxMagHist, normMMH, 0, 255, CV_MINMAX);
+			normMMH.convertTo(normMMH, CV_8U);
+
+			for (int j = 0; j < maxMagHist.rows; j++) {
+				cv::Point p1 = cv::Point(j, magImg.rows-1);
+				cv::Point p2 = cv::Point(j, (magImg.rows - 1)- normMMH.at<uchar>(j));
+				cv::line(magImg, p1, p2, cv::Scalar(255), 1, 8, 0);
+
+				p1 = cv::Point(j, magImg.rows - 1);
+				p2 = cv::Point(j, (magImg.rows - 1) - maxMagCount.at<uchar>(j));
+				cv::line(magImg, p1, p2, cv::Scalar(130), 1, 8, 0);
+			}
+
+			//print magnitude results to debug image
+			QImage qImg = Image::mat2QImage(magImg, true);
+			QPainter painter(&qImg);
+			painter.setPen(QColor(130, 130, 130, 255));
+			QString outText = "maxMagIdx=" + QString::number(thIdx) + "\n" + "maxMag=" + QString::number(An) + "\n" + "maxMagCount=" + QString::number(Cn) + "\n" + "meanTH=" + QString::number(m);
+			painter.drawText(qImg.rect(), QTextOption::WrapAtWordBoundaryOrAnywhere || Qt::AlignTop || Qt::AlignLeft, outText);
+			magImg = Image::qImage2Mat(qImg);
+			cv::cvtColor(magImg, magImg, cv::COLOR_BGR2GRAY);
+
+			cv::Mat normAccPMF;
+			accPMFImg = cv::Mat::zeros(255, accPMF.cols, CV_8U);
+			normalize(accPMF, normAccPMF, 0, 255, CV_MINMAX);
+			normAccPMF.convertTo(normAccPMF, CV_8U);
+
+			for (int j = 0; j < accPMFImg.cols; j++) {
+				cv::Point p1 = cv::Point(j, accPMFImg.rows - 1);
+				cv::Point p2 = cv::Point(j, (accPMFImg.rows - 1) - normAccPMF.at<uchar>(j));
+				cv::line(accPMFImg, p1, p2, cv::Scalar(255), 1, 8, 0);
+			}
+
+			nacImages << nacLayer;
+			magImages << magImg;
+			//debug draw-------------------------------------------------------------------------------------------------------------------------
+		}
+
+		return accPMF;
 	}
 
 	cv::Mat TextHeightEstimation::nacf(const cv::Mat patchImg) {
@@ -373,8 +540,44 @@ namespace rdf {
 		merge(planes, out);
 	}
 
+	void TextHeightEstimation::computeConfidence(cv::Mat accPMF){
+
+		//compute standard deviation of accumulated PMF -> giving approximate confidence of THE results
+		cv::Mat xi = cv::Mat::zeros(accPMF.size(), CV_32F);
+		for (int i = 0; i < accPMF.cols; ++i) {
+			xi.at<float>(i) = i;
+		}
+
+		double sumVal = cv::sum(accPMF)[0];
+		cv::Mat normPMF = accPMF / sumVal;
+
+		cv::Mat mi = xi.mul(normPMF);
+		double m = cv::sum(mi)[0];
+
+		xi = xi - m;
+		xi = (xi).mul(xi);
+		xi = xi.mul(normPMF);
+
+		double sig = cv::sum(xi)[0];
+		sig = sqrt(sig);
+
+		theConfidence = 1 - (sig / m);
+	}
+
 	int TextHeightEstimation::textHeightEstimate() {
 		return thEstimate;
+	}
+
+	double TextHeightEstimation::coverage(){
+		return std::floor(meanCoverage * 100) / 100.0;
+	}
+
+	double TextHeightEstimation::relCoverage(){
+		return std::floor(meanRelativeCoverage * 100) / 100.0;
+	}
+
+	double TextHeightEstimation::confidence(){
+		return std::floor(theConfidence * 100) / 100.0;
 	}
 
 	cv::Mat TextHeightEstimation::draw(const cv::Mat & img, const QColor& col) const {
@@ -382,7 +585,45 @@ namespace rdf {
 		QImage qImg = Image::mat2QImage(img, true);
 		QPainter painter(&qImg);
 
+		painter.drawRect(QRect(0,0,thEstimate,thEstimate));
+		QString outText = "th=" + QString::number(thEstimate) + "\n" + "conf=" + QString::number(theConfidence) + "\n" + "cover=" + QString::number(meanCoverage) + "\n" + "relCover=" + QString::number(meanRelativeCoverage);
+		//QString outText = "th=" + QString::number(thEstimate) + "\n" + "conf=" + QString::number(theConfidence);
+		painter.drawText(QRect(0, 0, thEstimate, thEstimate), QTextOption::WrapAtWordBoundaryOrAnywhere || Qt::AlignTop || Qt::AlignLeft, outText);
+
 		return Image::qImage2Mat(qImg);
+	}
+
+	void TextHeightEstimation::drawDebugImages(QString input_path) const{
+		
+		input_path = QDir::cleanPath(input_path);
+		QFileInfo pathInfo(input_path);
+		pathInfo = QFileInfo(input_path);
+
+		if (!pathInfo.exists()) {
+			qWarning() << "Output path for debug images does not exist.";
+			return;
+		} else {
+			if (pathInfo.isDir())
+				input_path += "/result.png";
+		}
+
+		if (accPMFImg.empty() || magImages.isEmpty() || nacImages.isEmpty()) {
+			qWarning() << "Debug images could not be found. Make sure the 'debugDraw' option is set to true and the results have been computed in advance.";
+			return;
+		}
+
+		QString debugPath = Utils::createFilePath(input_path, "_THE_accPMF");
+		Image::save(accPMFImg, debugPath);
+
+		for (int i = 0; i < nacImages.size(); ++i) {
+			debugPath = Utils::createFilePath(input_path, "_THE_nac"+QString::number(i));
+			Image::save(nacImages[i], debugPath);
+		}
+
+		for (int i = 0; i < magImages.size(); ++i) {
+			debugPath = Utils::createFilePath(input_path, "_THE_mag" + QString::number(i));
+			Image::save(magImages[i], debugPath);
+		}
 	}
 
 	QString TextHeightEstimation::toString() const {
