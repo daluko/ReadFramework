@@ -219,10 +219,10 @@ int main(int argc, char** argv) {
 			qDebug() << "loading david's debug code";
 
 			QString dirPath;
-			////dirPath = "E:/data/test/HBR13_test";
-			////dirPath = "E:/data/test/HBR2013_training/training";
-			////dirPath = "E:/data/test/HBR2013_training/test";
-			////dirPath = "E:/data/test/HBR2013_training/THE problems";
+			//dirPath = "E:/data/test/HBR13_test";
+			//dirPath = "E:/data/test/HBR2013_training/training";
+			//dirPath = "E:/data/test/HBR2013_training/test";
+			//dirPath = "E:/data/test/HBR2013_training/THE problems";
 
 			bool testTHE = false;
 			bool testWSA = true;
@@ -248,7 +248,7 @@ int main(int argc, char** argv) {
 				}
 			}
 
-			if (testWSA) {
+			if (testFSC) {
 				rdf::FontClassificationTest fct(dc);
 				fct.run();
 			}
@@ -298,14 +298,14 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		//dc.setImagePath("E:/data/test/HBR2013_training/00451351.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00452456.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00456592.tif");
-		dc.setImagePath("E:/data/test/HBR2013_training/00465433.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/00465433.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00485679.tif"); 
 		
 		//dc.setImagePath("E:/data/test/HBR2013_training/00320909.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00425629.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00318461.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00451901.tif");
-
+		
 		//0 or inf
 		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00042928.tif"); 
 		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00042929.tif");
@@ -320,7 +320,7 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00672923.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00672924.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00528155.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00319983.tif");
+		dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00319983.tif");
 
 		qInfo() << dc.imagePath() << "added as image path";
 	}

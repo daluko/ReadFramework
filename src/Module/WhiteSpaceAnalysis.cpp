@@ -34,6 +34,7 @@
 #include "Image.h"
 #include "Drawer.h"
 #include "SuperPixelScaleSpace.h"
+#include "TextHeightEstimation.h"
 #include "SuperPixelClassification.h"
 #include "ScaleFactory.h"
 #include "GraphCut.h"
@@ -68,22 +69,6 @@ namespace rdf {
 
 	int WhiteSpaceAnalysisConfig::numErosionLayers() const {
 		return ModuleConfig::checkParam(mNumErosionLayers, 0, INT_MAX, "numErosionLayers");
-	}
-
-	void WhiteSpaceAnalysisConfig::setMserMinArea(int mserMinArea) {
-		mMserMinArea = mserMinArea;
-	}
-
-	int WhiteSpaceAnalysisConfig::mserMinArea() const {
-		return ModuleConfig::checkParam(mMserMinArea, 0, INT_MAX, "mserMinArea");
-	}
-
-	void WhiteSpaceAnalysisConfig::setMserMaxArea(int mserMaxArea) {
-		mMserMaxArea = mserMaxArea;
-	}
-
-	int WhiteSpaceAnalysisConfig::mserMaxArea() const {
-		return ModuleConfig::checkParam(mMserMaxArea, 0, INT_MAX, "mserMaxArea");
 	}
 
 	void WhiteSpaceAnalysisConfig::setMaxImgSide(int maxImgSide) {
@@ -121,8 +106,6 @@ namespace rdf {
 	void WhiteSpaceAnalysisConfig::load(const QSettings & settings) {
 
 		mNumErosionLayers = settings.value("numErosionLayers", numErosionLayers()).toInt();
-		mMserMinArea = settings.value("mserMinArea", mserMinArea()).toInt();
-		mMserMaxArea = settings.value("mserMaxArea", mserMaxArea()).toInt();
 		mMaxImgSide  = settings.value("maxImgSide", maxImgSide()).toInt();
 		mScaleInput  = settings.value("scaleInput", scaleInput()).toBool();
 		mDebugDraw   = settings.value("debugDraw", debugDraw()).toBool();
@@ -132,8 +115,6 @@ namespace rdf {
 	void WhiteSpaceAnalysisConfig::save(QSettings & settings) const {
 
 		settings.setValue("numErosionLayers", numErosionLayers());
-		settings.setValue("mserMinArea", mserMinArea());
-		settings.setValue("mserMaxArea", mserMaxArea());
 		settings.setValue("maxImgSide", maxImgSide());
 		settings.setValue("scaleInput", scaleInput());
 		settings.setValue("debugDraw", debugDraw());
@@ -164,23 +145,42 @@ bool WhiteSpaceAnalysis::compute() {
 	//TODO improve initial set of components used for text line formation 
 	//TODO use asssert() function to check input parameters and results
 	//TODO compute line spacing estimate only one time and for all modules
-	
+
 	qInfo()<< "Computing white space layout analysis...";
+	Timer dt;
 
 	if (!checkInput())
 		return false;
 
-	cv::Mat inputImg = mImg;
-	Timer dt;
+	cv::Mat inputImg = mImg;	//not scaled
 
-	if(config()->scaleInput()){
-		qDebug() << "scale factor dpi: " << mScaleFactory->scaleFactorDpi();
-		mImg = mScaleFactory->scaled(inputImg);
-	}
+	//---------------------------------------------------------------------------------------------------------
+	// PREPROCESSING: compute text height estimate, scale and deskew input image according to config options
+
+	//test height estimation
+	TextHeightEstimation the(inputImg);
+
+	//if (the.compute()) {
+	//	if (the.confidence() > 0.75) {
+	//		mtextHeightEstimate = the.textHeightEstimate();
+	//		qInfo() << "Text height estimation sucessfull."; 
+	//		qInfo() << "Estimated text line size = " << QString::number(mtextHeightEstimate);
+	//	}
+	//}
+
+	//scaling of input image (if enabled: super pixels will be computed in advance)l	if(config()->scaleInput()){
+	if (mtextHeightEstimate > 0) {
+		double sf = (double)mMinTextHeight / (double)mtextHeightEstimate;
+		scaleInputImage(sf);
+	} 
+	else
+		scaleInputImage();
 
 	//---------------------------------------------------------------------------------------------------------
 	// SUPER PIXEL EXTRACTION: compute initial set of text components (super pixels)
-	
+	Timer dt1;
+	//TODO avoid recomputation of MSER regions
+
 	SuperPixel sp = computeSuperPixels(mImg);
 	pSet = sp.pixelSet();
 
@@ -196,10 +196,11 @@ bool WhiteSpaceAnalysis::compute() {
 	}
 
 	filterRect = filterPixels(pSet);
-	qInfo() << "Finished super pixel extraction. Computation took: " << QString::number(dt.elapsed());
+	qInfo() << "Finished super pixel extraction. Computation took: " << dt1;
 
 	//---------------------------------------------------------------------------------------------------------
 	// TEXT LINE HYPOTHIISIZER: compute initial text lines
+	Timer dt2;
 
 	TextLineHypothisizer tlh(mImg, pSet);
 	// TODO add separator computation and use them in segementation process
@@ -214,20 +215,19 @@ bool WhiteSpaceAnalysis::compute() {
 	mTextLineHypotheses = textLines;
 	//cv::Mat imgDebugWhiteSpaces = drawWhiteSpaces(img);	//based on mTextLineHypotheses and computed white spaces
 
-	qInfo() << "Finished text line hypotheses. Computation took: " << QString::number(dt.elapsed());
-	qInfo() << "Number of found text lines is " << tlh.textLineSets().size();
+	qInfo() << "Found " << tlh.textLineSets().size() << " text lines.";
+	qInfo() << "Finished text line hypotheses. Computation took: " << dt2;
 
 	//---------------------------------------------------------------------------------------------------------
 	// WHITE SPACE SEGMENTATION: compute white space segmentation for estimated text lines
-	
+	Timer dt3;
+
 	WhiteSpaceSegmentation wss(mImg, textLines);
 	
 	if (!wss.compute()) {
 		qWarning() << "Could not compute white space segmentation!";
 		return false;
 	}
-
-	qInfo() << "Finished white space segmentation. Computation took: " << QString::number(dt.elapsed());
 
 	//get segmented text lines
 	mWSTextLines = wss.textLineSets();
@@ -239,10 +239,12 @@ bool WhiteSpaceAnalysis::compute() {
 		Image::save(wss.drawSplitTextLines(mImg), imgPath);
 	}
 
+	qInfo() << "Finished white space segmentation. Computation took: " << dt3;
 
 	//---------------------------------------------------------------------------------------------------------
 	// TEXT BLOCK FORMATION: compute text blocks formed by previously detected text lines
-	
+	Timer dt4;
+
 	TextBlockFormation tbf(mImg, mWSTextLines);
 
 	if (!tbf.compute()) {
@@ -251,11 +253,8 @@ bool WhiteSpaceAnalysis::compute() {
 	}
 
 	mTextBlockSet = tbf.textBlockSet();
+	qInfo() << "Finished text block formation. Computation took: " << dt4;
 
-	qInfo() << "Finished text block formation. Computation took: " << QString::number(dt.elapsed());
-
-	mInfo << "white space layout analysis computed in: " << dt;
-	mInfo << "white space layout analysis computed in: " << dt.getTotal();
 
 	if (config()->debugDraw())
 		drawDebugImages(mImg);
@@ -266,6 +265,8 @@ bool WhiteSpaceAnalysis::compute() {
 	}
 
 	mTextBlockRegions = mTextBlockSet.toTextRegion();
+	
+	mInfo << "white space layout analysis computed in: " << dt;
 
 	return true;
 }
@@ -276,21 +277,11 @@ QSharedPointer<WhiteSpaceAnalysisConfig> WhiteSpaceAnalysis::config() const {
 
 SuperPixel WhiteSpaceAnalysis::computeSuperPixels(const cv::Mat & img){
 
-	//TODO FIX PARAMETERS
-	//TODO check if preprocessing image in super pixel class should be changed
+	//TODO Check choice/influence of MSER max/min parameters (for different image sizes)
+	//TODO use additional flag for processing black/white/both pixels
 
-	int maxImgSide = config()->maxImgSide();
-	int mserMinArea = config()->mserMinArea();
-	int mserMaxArea = config()->mserMaxArea();
-
-	if (img.rows < maxImgSide) {
-		
-		double maxRatio = maxImgSide / mserMaxArea;
-		mserMaxArea = (int)std::round((double)img.rows / maxRatio);
-
-		double minRatio = maxImgSide / mserMinArea;
-		mserMinArea = (int)std::round((double)img.rows / minRatio);
-	}
+	int mserMaxArea = (int)std::round(img.rows / 1.5);
+	int mserMinArea = (int)std::round(img.rows / 52);
 
 	//Text Spotter params
 	//MSER ms(10, (int)(0.00002*mser_img.cols*mser_img.rows), (int)(0.05*mser_img.cols*mser_img.rows), 1, 0.7);
@@ -377,8 +368,8 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 
 	Rect lbfR(0, 0, lbw, lbh);
 	Rect ubfR(0, 0, ubw, ubh);
-	qInfo() << "lower bound filter rect = " << lbfR.toString();
-	qInfo() << "upper bound filter rect = " << ubfR.toString();
+	//qInfo() << "lower bound filter rect = " << lbfR.toString();
+	//qInfo() << "upper bound filter rect = " << ubfR.toString();
 
 	//used for debug draw only - visualising filtering constraints
 	Rect lsR(lbw, lbh, ubw, ubh);
@@ -476,7 +467,7 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 		}
 	}
 
-	qDebug() << "Removing overlapping pixels t2: " << df.elapsed();
+	//qDebug() << "Removing overlapping pixels t2: " << df.elapsed();
 	isolatedPixels.clear();
 
 	//remove filtered pixels from set
@@ -485,9 +476,9 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 		set.remove(set.find(id));
 	}
 
-	qDebug() << "Removing overlapping pixels took: " << df.getTotal();
+	//qDebug() << "Removing overlapping pixels took: " << df.getTotal();
 	qDebug() << "Removed " << QString::number(removeIDs.size()) << "redundant pixel(s) by analysing overlapping regions.";
-	qDebug() << "The number of remaining rectangles is: " << QString::number(set.size());
+	//qDebug() << "The number of remaining rectangles is: " << QString::number(set.size());
 
 	return lsR;
 }
@@ -641,14 +632,6 @@ cv::Mat WhiteSpaceAnalysis::draw(const cv::Mat & img, const QColor& col) const {
 void WhiteSpaceAnalysis::drawDebugImages(const cv::Mat & img){
 
 	QString path = config()->debugPath();
-	//QFileInfo info(config()->debugPath());
-	//if (info.isDir()) {
-	//	path = info.absoluteFilePath() + "/debug.png";
-	//}
-	//else {
-	//	path = "debug.png";
-	//}
-
 	QImage qImg = Image::mat2QImage(img, true);
 	QPainter painter(&qImg);
 
@@ -769,6 +752,166 @@ QString WhiteSpaceAnalysis::toString() const {
 
 bool WhiteSpaceAnalysis::checkInput() const {
 	return !isEmpty();
+}
+
+void WhiteSpaceAnalysis::scaleInputImage(double sf){
+	
+	//TODO debug results and compare rough vs. precise text height estimate
+	//TODO test parameter choice for computing fitting of scale factor and for scale factor itself
+	
+	bool isRoughEstimate = false;
+	//use original scale to find suitable scale factor
+	if (sf == 1) {
+		
+		qInfo() << "Trying to find alternative rough text height estimate for scaling input image.";
+		isRoughEstimate = true;
+
+		SuperPixel sp = computeSuperPixels(mImg);
+		PixelSet tmpSet = sp.pixelSet();
+
+		if (tmpSet.size() < 20) {
+			qWarning()<< "Too low number of super pixels, input image will not be scaled.";
+			pSet = tmpSet;
+			return;
+		}
+
+		//compute median of pixel heights
+		QList<double> heights;
+		for (const QSharedPointer<Pixel>& px : tmpSet.pixels())
+			heights << px->bbox().height();
+
+		double medianHeight = Algorithms::statMoment(heights, 0.5);
+
+		//find new scale factor based on rough text height estimate
+		sf =  (double)mMinTextHeight / (medianHeight*2.5);
+
+		int maxImgSide = (sf < 1) ? round(mImg.rows * sf) : mImg.rows;
+		reconfigScaleFactory(maxImgSide);
+		cv::Mat scaledImg = mScaleFactory->scaled(mImg);
+
+		//TODO consider additional check for strong decrease in amout of super pixels
+		if (validateImageScale(scaledImg))
+			mImg = scaledImg;
+		else {
+			reconfigScaleFactory(mImg.rows);
+			pSet = tmpSet;
+
+			qWarning() << "Could not find suitable scale factor for input image.";
+			qInfo() << "Using full scale input image instead.";
+			return;
+		}
+	}
+	else {	//use specified sf to determine
+		
+		int maxImgSide = (sf < 1) ? round(mImg.rows * sf) : mImg.rows;
+		reconfigScaleFactory(maxImgSide);
+		cv::Mat scaledImg = mScaleFactory->scaled(mImg);
+
+		if (validateImageScale(scaledImg)) {
+			//qDebug() << "Scale factor for input image is valid.";
+			mImg = scaledImg;
+		}
+		else {
+			qWarning() << "Scaling based on precomputed text height estimate seems inappropriate .";
+			scaleInputImage();
+		}
+	}
+
+	//debug draw-----------------------------------------------------------------------------------
+	
+	//QImage qImg = Image::mat2QImage(mImg, true);
+	//QPainter painter(&qImg);
+
+	//for (auto p : pSet.pixels()) {
+
+	//	double h = p->bbox().height();
+
+	//	if (h >= (double)mMinTextHeight / 4.0 && h <= (double)mMinTextHeight)
+	//		painter.setPen(ColorManager::blue());
+	//	else
+	//		painter.setPen(ColorManager::red());
+
+	//	p->draw(painter);
+	//}
+
+	//painter.setPen(ColorManager::green());
+	//rdf::Rect(0, 0, std::round(mMinTextHeight / 4.0), std::round(mMinTextHeight / 4.0)).draw(painter);
+	//rdf::Rect(0, 0, std::round(mMinTextHeight), std::round(mMinTextHeight)).draw(painter);
+
+	//painter.drawText(QPoint(100, 50), QString::number(mScaleFactory->scaleFactorDpi()));
+
+	//QString path = config()->debugPath();
+	//QString imgPath;
+	//if (!isRoughEstimate)
+	//	imgPath = Utils::createFilePath(path, "_sf=" + QString::number(mScaleFactory->scaleFactor()), "png");
+	//else
+	//	imgPath = Utils::createFilePath(path, "_r_sf=" + QString::number(mScaleFactory->scaleFactor()), "png");
+
+	//cv::Mat debug_img = Image::qImage2Mat(qImg);
+	//Image::save(debug_img, imgPath);
+
+	//---------------------------------------------------------------------------------------------
+	qInfo() << "Input image is scaled by factor: " << mScaleFactory->scaleFactor();
+}
+
+bool WhiteSpaceAnalysis::validateImageScale(cv::Mat img){
+
+	SuperPixel sp = computeSuperPixels(img);
+	PixelSet tmpSet = sp.pixelSet();
+
+	if (tmpSet.size() < 20)
+		return false;
+
+	auto pixels = tmpSet.pixels();
+	int thCounter = 0;
+	
+	for (const QSharedPointer<Pixel>& px : pixels) {
+
+		double h = px->bbox().height();
+
+		if (h >= (double)mMinTextHeight / 4.0 && h <= (double)mMinTextHeight)
+			thCounter++;
+	}
+
+	double positiveRatio = (double)thCounter / pixels.size();
+	bool isValidScale = positiveRatio > 0.5;
+
+	pSet = tmpSet;
+
+	//debug draw-----------------------------------------------------------------------------------
+	//QImage qImg = Image::mat2QImage(img, true);
+	//QPainter painter(&qImg);
+
+	//for (auto p : pSet.pixels()) {
+
+	//	double h = p->bbox().height();
+
+	//	if (h >= (double)mMinTextHeight / 4.0 && h <= (double)mMinTextHeight)
+	//		painter.setPen(ColorManager::blue());
+	//	else
+	//		painter.setPen(ColorManager::red());
+
+	//	p->draw(painter);
+	//}
+
+	//painter.setPen(ColorManager::green());
+	//rdf::Rect(0, 0, std::round(mMinTextHeight / 4.0), std::round(mMinTextHeight / 4.0)).draw(painter);
+	//rdf::Rect(0, 0, std::round(mMinTextHeight), std::round(mMinTextHeight)).draw(painter);
+
+	//painter.drawText(QPoint(100, 50), QString::number(positiveRatio));
+
+	//cv::Mat debug_img = Image::qImage2Mat(qImg);
+		
+	//---------------------------------------------------------------------------------------------
+
+	return isValidScale;
+}
+
+void WhiteSpaceAnalysis::reconfigScaleFactory(int maxImgSide){
+
+	auto sfConfig = mScaleFactory->config();
+	sfConfig->setMaxImageSide(maxImgSide);
+	mScaleFactory->setConfig(sfConfig);
 }
 
 
@@ -1565,7 +1708,7 @@ void TextLineHypothisizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 		}
 	}
 
-	qInfo() << "Merged " << QString::number(numRemoved) << " unstable text lines.";
+	//qDebug() << "Merged " << QString::number(numRemoved) << " unstable text lines.";
 
 	QVector<QSharedPointer<WSTextLineSet>> unstableLines;
 
@@ -1600,7 +1743,7 @@ void TextLineHypothisizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 			textLines.remove(idx);
 	}
 
-	qInfo() << "Merged " << unstableLines.size() << " unstable text lines.";
+	//qDebug() << "Merged " << unstableLines.size() << " unstable text lines.";
 }
 
 void TextLineHypothisizer::removeShortTextLines() {
@@ -1733,7 +1876,7 @@ bool WhiteSpaceSegmentation::compute() {
 		return false;
 	}
 	
-	//cv::Mat initialTextLines = drawSplitTextLines(mImg);
+	cv::Mat initialTextLines = drawSplitTextLines(mImg);
 
 	PixelGraph pg = computeSegmentationGraph();
 
@@ -1759,6 +1902,9 @@ bool WhiteSpaceSegmentation::compute() {
 
 		//remove groups that represent non-bcr runs or are too short
 		updatedSegmentation = refineWhiteSpaceRuns();
+
+		//cv::Mat intermediateTextLines = drawSplitTextLines(mImg);
+		//cv::Mat intermediatewhiteSpaceRuns = drawWhiteSpaceRuns(mImg);
 	}
 
 	//cv::Mat finalTextLines = drawSplitTextLines(mImg);
@@ -1954,7 +2100,7 @@ void WhiteSpaceSegmentation::removeIsolatedBCR(PixelGraph pg) {
 	//remove isolated bcr (and merge neighboring text lines)
 	deleteBCR(isolatedBCR);
 
-	qInfo() << isolatedBCR.size() << " isolated white spaces have been removed";
+	//qInfo() << isolatedBCR.size() << " isolated white spaces have been removed";
 	//qInfo() << "there are " << mBcrM.size() << " white spaces remaining";
 }
 

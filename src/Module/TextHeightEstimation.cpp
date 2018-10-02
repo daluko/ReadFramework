@@ -108,8 +108,8 @@ namespace rdf {
 	bool TextHeightEstimation::compute() {
 
 		//TODO fix parameters
-		//TODO clean up code
 		//TODO check weights of PMFs (lower level PMFs seem to have large influence -> results of higher levels will be ignored)
+		//TODO check for run time problems (big difference on similar images)
 
 		if (!checkInput())
 			return false;
@@ -250,8 +250,7 @@ namespace rdf {
 			}
 
 			if (cv::sum(maxMagCount)[0] == 0) {
-				qDebug() << "Layer does not contain relevant coefficients";
-				continue;
+				continue;	//Layer does not contain relevant coefficients
 			}
 
 			//find index of max magnitude of this layer

@@ -243,12 +243,6 @@ namespace rdf {
 		void setNumErosionLayers(int numErosionLayers);
 		int numErosionLayers() const;
 
-		void setMserMinArea(int mserMinArea);
-		int mserMinArea() const;
-
-		void setMserMaxArea(int mserMaxArea);
-		int mserMaxArea() const;
-
 		void setMaxImgSide(int maxImgSide);
 		int maxImgSide() const;
 
@@ -269,13 +263,10 @@ namespace rdf {
 		//MSER & super pixel parameters
 		int mNumErosionLayers = 0;
 		int mMaxImgSide = 2000;
-		int mMserMaxArea = (int)std::round(mMaxImgSide/1.5);
-		int mMserMinArea = (int)std::round(mMserMaxArea/35);
 
 		bool mScaleInput = true;
 
-		//bool mDebugDraw = false;
-		bool mDebugDraw = true;
+		bool mDebugDraw = false;
 		QString mDebugPath = "E:/data/test/HBR2013_training";
 	};
 	
@@ -300,14 +291,16 @@ namespace rdf {
 		// input
 		cv::Mat mImg;
 		int mMinPixelsPerBlock;
+		int mMinTextHeight = 50;
 
-		//debug
+		//debug output
 		Rect filterRect = Rect();
 		QVector<QSharedPointer<Pixel>> removedPixels1;
 		QVector<QSharedPointer<Pixel>> removedPixels2;
 
 		// output
 		PixelSet pSet;
+		int mtextHeightEstimate = -1;
 		QSharedPointer<ScaleFactory> mScaleFactory;
 		QVector<QSharedPointer<WSTextLineSet>> mTextLineHypotheses;
 		QVector<QSharedPointer<WSTextLineSet>> mWSTextLines;
@@ -315,6 +308,9 @@ namespace rdf {
 		TextBlockSet mTextBlockSet;
 
 		bool checkInput() const override;
+		void scaleInputImage(double scaleFeactor = 1);
+		bool validateImageScale(cv::Mat img);
+		void reconfigScaleFactory(int maxImgSide);
 		SuperPixel computeSuperPixels(const cv::Mat & img);
 		bool computeLocalStats(PixelSet & pixels) const;
 		Rect filterPixels(PixelSet& pixels);
