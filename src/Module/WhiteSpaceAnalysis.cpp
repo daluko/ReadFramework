@@ -160,13 +160,13 @@ bool WhiteSpaceAnalysis::compute() {
 	//test height estimation
 	TextHeightEstimation the(inputImg);
 
-	//if (the.compute()) {
-	//	if (the.confidence() > 0.75) {
-	//		mtextHeightEstimate = the.textHeightEstimate();
-	//		qInfo() << "Text height estimation sucessfull."; 
-	//		qInfo() << "Estimated text line size = " << QString::number(mtextHeightEstimate);
-	//	}
-	//}
+	if (the.compute()) {
+		if (the.confidence() > 0.75) {
+			mtextHeightEstimate = the.textHeightEstimate();
+			qInfo() << "Text height estimation sucessfull."; 
+			qInfo() << "Estimated text line size = " << QString::number(mtextHeightEstimate);
+		}
+	}
 
 	//scaling of input image (if enabled: super pixels will be computed in advance)l	if(config()->scaleInput()){
 	if (mtextHeightEstimate > 0) {
