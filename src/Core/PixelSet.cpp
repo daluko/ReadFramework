@@ -282,6 +282,7 @@ Line PixelSet::fitLine(double offsetAngle) const {
 		return Line();
 	}
 
+	line.sortEndpoints();
 	line = line.extendBorder(boundingBox());
 
 	return line;
@@ -1901,14 +1902,15 @@ double WSTextLineSet::maxGap() const{
 	return mMaxGap;
 }
 
-bool WSTextLineSet::isShort(double minBCRSize) const{
+bool WSTextLineSet::isShort(double minWSSize) const{
 
-	if (minBCRSize == -1) {
-		minBCRSize = mMinBCRSize;
+	if (minWSSize == -1) {
+		minWSSize = mMinBCRSize*0.33;
 	}
 
-	//TODO consider max length for short lines (lines with small spacing might still be rather long)
-	if (mMaxGap < minBCRSize || mSet.size() < 3 || boundingBox().width() < minBCRSize * 7) {
+	//TODO minBCRSize * 5 -> minBCRSize ~ 1 char -> 2 words with 2 char + 1 whitespace
+	//TODO consider using a minLineLenght parameter in config
+	if ((mMaxGap < minWSSize && mSet.size() < 20) || mSet.size() < 5 || boundingBox().width() < mMinBCRSize * 5) {
 		return true;
 	}
 	else{

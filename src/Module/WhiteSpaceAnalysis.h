@@ -171,9 +171,9 @@ namespace rdf {
 		QVector<QSharedPointer<WSTextLineSet>> textLineSets() const;
 		void addSeparatorLines(const QVector<Line>& lines);
 
-		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor());
+		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
 		cv::Mat drawGraphEdges(const cv::Mat & img, const QColor & col = QColor());
-		cv::Mat drawTextLineHypotheses(const cv::Mat& img);
+		cv::Mat drawTextLineHypotheses(const cv::Mat& img) const;
 
 	protected:
 		double minAgreeRatio = 0.5;
@@ -212,20 +212,27 @@ namespace rdf {
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor());
 		cv::Mat drawSplitTextLines(const cv::Mat& img, const QColor& col = QColor());
 		cv::Mat drawWhiteSpaceRuns(const cv::Mat& img, const QColor& col = QColor());
+		cv::Mat drawPixelGraph(const cv::Mat& img, const QColor& col = QColor());
 
 	protected:
+		//input
 		cv::Mat  mImg;
+		QVector<QSharedPointer<WSTextLineSet> > mInitialTls;
+
+		//output
 		QVector<QSharedPointer<WSTextLineSet> > mTlsM;
 		QVector<QSharedPointer<WhiteSpacePixel>> mBcrM;
 		QMap<QString, QVector<QSharedPointer<WSTextLineSet>>> mBcrNeighbors;
 		QVector<QSharedPointer<WhiteSpaceRun>> mWsrM;
+		PixelGraph mPg;
 
 		bool checkInput() const override;
 		bool splitTextLines();
 		double computeLineSpacing() const;
 		PixelGraph computeSegmentationGraph() const;
-		void removeIsolatedBCR(const PixelGraph pg);
-		void processShortTextLines();
+		bool removeIsolatedBCR(const PixelGraph pg);
+		bool mergeShortTextLines();
+		bool refineTextLineResults();
 		void deleteBCR(const QVector<QSharedPointer<WhiteSpacePixel>>& bcrM);
 		void deleteBCR(const QSharedPointer<WhiteSpacePixel>& bcr);
 		bool findWhiteSpaceRuns(const PixelGraph pg);
