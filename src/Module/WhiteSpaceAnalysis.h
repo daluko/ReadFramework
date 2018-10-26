@@ -273,8 +273,8 @@ namespace rdf {
 
 		bool mScaleInput = true;
 
-		bool mDebugDraw = false;
-		QString mDebugPath = "E:/data/test/HBR2013_training";
+		bool mDebugDraw = true;
+		QString mDebugPath;
 	};
 	
 	class DllCoreExport WhiteSpaceAnalysis : public Module {

@@ -981,21 +981,20 @@ bool TextLineHypothisizer::compute() {
 	PixelGraph pg(mSet);
 	pg.connect(rnnpc, PixelGraph::sort_edges);
 	mPg = pg;
-
 	//cv::Mat results_pg = drawGraphEdges(mImg);
 
 	mTextLines = clusterTextLines(pg);
-
-	//cv::Mat results =  draw(mImg);
+	//cv::Mat results1 =  draw(mImg);
 
 	mergeUnstableTextLines(mTextLines);
+	cv::Mat results2 = draw(mImg);
+
 	removeShortTextLines();
+	cv::Mat results3 = draw(mImg);
 
 	for (auto tl : mTextLines) {
 		extractWhiteSpaces(tl);
 	}
-
-	//cv::Mat results_tl = draw(mImg);
 
 	return true;
 }
@@ -1513,7 +1512,6 @@ bool TextLineHypothisizer::mergeTextLines(const QSharedPointer<WSTextLineSet>& t
 		return	mergePixels(e);
 	}
 
-
 	// sort line pixels according to distance from center of the linked line
 	QVector<QSharedPointer<Pixel>> pixels1 = tls1->pixels();
 	Vector2D c1 = tls1->center();
@@ -1645,25 +1643,30 @@ bool TextLineHypothisizer::isContinuousMerge(const QSharedPointer<WSTextLineSet>
 void TextLineHypothisizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextLineSet>>& textLines) const {
 
 	//TODO fix parameters
-	//TODO check further text lines (short, unstable) not only overlapping ones
 
 	QVector<QSharedPointer<TextLineSet>> textLines_;
-
-	for (auto tl : textLines) {
+	for (auto tl : textLines)
 		textLines_.append(qSharedPointerCast<TextLineSet>(tl));
-	}
 
 	QVector<QSharedPointer<TextLineSet>> unstable = TextLineHelper::filterAngle(textLines_);
+
+	//QImage qImg = Image::mat2QImage(mImg, true);
+	//QPainter painter(&qImg);
+	//for (auto tl : unstable) {
+	//	painter.setPen(ColorManager::randColor());
+	//	tl->draw(painter, PixelSet::DrawFlags() | PixelSet::draw_poly | PixelSet::draw_pixels /*, Pixel::draw_stats*/);
+	//}
+	//cv::Mat ulImg = Image::qImage2Mat(qImg);
 	
 	//// parameter - how much do we extend the text line?
 	double tlExtFactor = 1.2;
 
-	// cache convex hulls
 	QVector<Polygon> polys;
 	for (const auto tl : textLines) {
 		polys << tl->convexHull();
 	}
 
+	//merge unstable Lines with existing text lines if they are close to each other
 	int numRemoved = 0;
 	for (int uIdx = 0; uIdx < unstable.size(); uIdx++) {
 
@@ -1716,27 +1719,62 @@ void TextLineHypothisizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 
 	//qDebug() << "Merged " << QString::number(numRemoved) << " unstable text lines.";
 
-	QVector<QSharedPointer<WSTextLineSet>> unstableLines;
 
+	//merge small text lines with others if they are covered by their convex hull
+	QVector<QSharedPointer<WSTextLineSet>> unstableLines;
 	for (auto tl1 : textLines) {
 		for (auto tl2 : textLines) {
 
 			if (tl1->id() == tl2->id())
 				continue;
 
-			if (tl1->boundingBox().area() > tl2->boundingBox().area()) {
-				if (tl1->boundingBox().intersects(tl2->boundingBox())) {
-					auto poly = tl1->convexHull();
-					int pCount = 0;
-					for (auto p : tl2->pixels()) {
-						if (poly.contains(p->center()))
-							pCount++;
-					}
-					double relOverlap = pCount / tl2->size();
-					if (relOverlap > 0.75) {
-						tl1->append(tl2->pixels());
+			Rect tl1R = tl1->boundingBox();
+			Rect tl2R = tl2->boundingBox();
+
+			//remove text lines if >75% of its area is covered by another line
+			if (tl1R.area() > tl2R.area()) {
+				if (tl1R.intersects(tl2R)) {
+
+					Polygon interPoly = Polygon(tl1->convexHull().polygon().intersected(tl2->convexHull().polygon()));
+					
+					if (interPoly.size() == 0)
+						continue;
+
+					cv::Mat mask(mImg.size(), CV_8UC1, cv::Scalar(0));
+					Rect interRect = tl1R.joined(tl2R);
+
+					std::vector<cv::Point>  pts_inter = interPoly.toCvPoints();
+					std::vector<cv::Point>  pts_tl2 = tl2->convexHull().toCvPoints();
+
+					cv::fillConvexPoly(mask, pts_tl2, cv::Scalar(1.0));
+					cv::fillConvexPoly(mask, pts_inter, cv::Scalar(2.0));
+					
+					mask = mask(interRect.toCvRect());
+					cv::Mat tl2_mask = mask > 0;
+					cv::Mat inter_mask = mask == 2;
+					
+					mask = tl2_mask/255*100;
+					mask = mask + inter_mask/255*150;
+
+					double coverage = cv::countNonZero(inter_mask)/(double) cv::countNonZero(tl2_mask);
+
+					if (coverage > 0.75) {
+						//tl1->append(tl2->pixels());
 						unstableLines << tl2;
+						continue;
 					}
+						
+					//Polygon poly = tl1->convexHull();
+					//int pCount = 0;
+					//for (auto p : tl2->pixels()) {
+					//	if (poly.contains(p->center()))
+					//		pCount++;
+					//}
+					//double relOverlap = pCount / tl2->size();
+					//if (relOverlap > 0.75) {
+					//	tl1->append(tl2->pixels());
+					//	unstableLines << tl2;
+					//}
 				}
 			}
 		}
@@ -1749,7 +1787,56 @@ void TextLineHypothisizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 			textLines.remove(idx);
 	}
 
-	//qDebug() << "Merged " << unstableLines.size() << " unstable text lines.";
+	//merge text lines if they are close to each other and have similar size and orientation
+	//QImage qImg = Image::mat2QImage(mImg, true);
+	//QPainter painter(&qImg);
+
+	for (int i = 0; i < textLines.size(); ++i) {
+		auto tl1 = textLines[i];
+
+		for (int j = i +1; j < textLines.size();) {
+			auto tl2 = textLines[j];
+
+			Rect tl1R = tl1->boundingBox();
+			Rect tl2R = tl2->boundingBox();
+
+			double overlap = std::min(tl1R.bottom(), tl2R.bottom()) - std::max(tl1R.top(), tl2R.top());
+			if (overlap > 0) {
+				double relOverlap = overlap / std::min(tl1R.height(), tl2R.height());
+				if (relOverlap > 0.5) {
+
+					//TODO also consider horizontal distance between lines and similarity in size before merging
+
+					double maxErr1 = std::max(tl1->error() * config()->errorMultiplier(), tl1->avgPixelHeight() / 2.0);
+					double maxErr2 = std::max(tl2->error() * config()->errorMultiplier(), tl2->avgPixelHeight() / 2.0);
+
+					double nErr1 = tl1->computeError(tl2->centers());
+					double nErr2 = tl2->computeError(tl1->centers());
+
+					if (nErr1 < maxErr1 && nErr2 < maxErr2) {
+						//auto tl1_ =  QSharedPointer<WSTextLineSet>::create(tl1->pixels());
+						//auto tl2_ = QSharedPointer<WSTextLineSet>::create(tl2->pixels());
+						
+						tl1->mergeWSTextLineSet(tl2);
+						textLines.remove(j);
+
+						//painter.setPen(ColorManager::lightGray(0.2));
+						//tl1->draw(painter, PixelSet::DrawFlags() | PixelSet::draw_poly | PixelSet::draw_pixels /*, Pixel::draw_stats*/);
+
+						//painter.setPen(ColorManager::blue());
+						//tl1_->draw(painter, PixelSet::DrawFlags() | PixelSet::draw_poly | PixelSet::draw_pixels /*, Pixel::draw_stats*/);
+						//painter.setPen(ColorManager::red());
+						//tl2_->draw(painter, PixelSet::DrawFlags() | PixelSet::draw_poly | PixelSet::draw_pixels /*, Pixel::draw_stats*/);
+
+						//cv::Mat mergedLinesImg = Image::qImage2Mat(qImg);
+						continue; //process next tls
+					}
+				}
+			}
+			j++;
+		}
+	}
+	qDebug() << "Finished";
 }
 
 void TextLineHypothisizer::removeShortTextLines() {

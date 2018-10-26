@@ -513,6 +513,7 @@ public:
 	QPolygonF polygon() const;
 	QPolygonF closedPolygon() const;
 	QVector<Vector2D> toPoints() const;
+	std::vector<cv::Point> toCvPoints() const;
 
 	static Polygon fromCvPoints(const std::vector<cv::Point2d>& pts);
 	static Polygon fromCvPoints(const std::vector<cv::Point2f>& pts);

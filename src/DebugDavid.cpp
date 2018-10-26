@@ -140,7 +140,9 @@ void WhiteSpaceTest::run() {
 		qInfo() << mConfig.imagePath() << "NOT loaded...";
 
 	WhiteSpaceAnalysis wsa(imgCv);
-	wsa.config()->setDebugPath(mConfig.imagePath());
+
+	if(wsa.config()->debugPath().isEmpty())
+		wsa.config()->setDebugPath(mConfig.imagePath());
 
 	wsa.compute();
 
@@ -187,6 +189,7 @@ void WhiteSpaceTest::run() {
 	//parser.write(xmlPath, xmlPage);
 
 	////-------------------------eval xml text block regions
+
 	//NOTE: produce eval xml at the end -> text lines (children) are removed from results
 	xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.imagePath());
 	xml_found = parser.read(xmlPath);

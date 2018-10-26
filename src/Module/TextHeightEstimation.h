@@ -75,9 +75,7 @@ namespace rdf {
 		void save(QSettings& settings) const override;
 
 		bool mDebugDraw = false;
-
 		int mNumSplitLevels = 5;
-
 		QString mDebugPath = "";
 	};
 

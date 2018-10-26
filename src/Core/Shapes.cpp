@@ -171,6 +171,15 @@ QVector<Vector2D> Polygon::toPoints() const {
 	return pts;
 }
 
+std::vector<cv::Point> Polygon::toCvPoints() const {
+
+	std::vector<cv::Point> pts;
+	for (const Vector2D& p : toPoints())
+		pts.push_back(p.toCvPoint());
+
+	return pts;
+}
+
 // BaseLine --------------------------------------------------------------------
 BaseLine::BaseLine(const QPolygonF & baseLine) {
 	mBaseLine = baseLine;

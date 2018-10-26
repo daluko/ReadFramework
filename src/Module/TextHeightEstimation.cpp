@@ -611,16 +611,16 @@ namespace rdf {
 			return;
 		}
 
-		QString debugPath = Utils::createFilePath(input_path, "_THE_accPMF");
+		QString debugPath = Utils::createFilePath(input_path, "_THE_accPMF", ".png");
 		Image::save(accPMFImg, debugPath);
 
 		for (int i = 0; i < nacImages.size(); ++i) {
-			debugPath = Utils::createFilePath(input_path, "_THE_nac"+QString::number(i));
+			debugPath = Utils::createFilePath(input_path, "_THE_nac"+QString::number(i), ".png");
 			Image::save(nacImages[i], debugPath);
 		}
 
 		for (int i = 0; i < magImages.size(); ++i) {
-			debugPath = Utils::createFilePath(input_path, "_THE_mag" + QString::number(i));
+			debugPath = Utils::createFilePath(input_path, "_THE_mag" + QString::number(i), ".png");
 			Image::save(magImages[i], debugPath);
 		}
 	}
