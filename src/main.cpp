@@ -302,11 +302,6 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		dc.setImagePath("E:/data/test/HBR2013_training/00465433.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/00485679.tif"); 
 		
-		//dc.setImagePath("E:/data/test/HBR2013_training/00320909.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/00425629.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/00318461.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/00451901.tif");
-		
 		//0 or inf
 		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00042928.tif"); 
 		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00042929.tif");
@@ -329,6 +324,10 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		//dc.setImagePath("E:/data/test/HBR2013_training/training/00452456.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/training/00485679.tif");
 		dc.setImagePath("E:/data/test/HBR2013_training/test/00046981.tif");
+		dc.setImagePath("E:/data/test/HBR2013_training/test/00318461.tif");
+		dc.setImagePath("E:/data/test/HBR2013_training/test/00441830.tif");
+
+
 
 		qInfo() << dc.imagePath() << "added as image path";
 	}

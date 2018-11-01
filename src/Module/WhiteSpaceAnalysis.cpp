@@ -156,7 +156,7 @@ bool WhiteSpaceAnalysis::compute() {
 
 	//---------------------------------------------------------------------------------------------------------
 	// PREPROCESSING: compute text height estimate, scale and deskew input image according to config options
-	
+	Timer dt0;
 	//scaling of input image (if enabled: super pixels will be computed in advance)	
 	if (config()->scaleInput()) {
 
@@ -179,6 +179,9 @@ bool WhiteSpaceAnalysis::compute() {
 			scaleInputImage();
 	}
 
+	QString tt0 = dt0.getTotal();
+	qInfo() << "Finished preprocessing. Computation took: " << tt0;
+
 	//---------------------------------------------------------------------------------------------------------
 	// SUPER PIXEL EXTRACTION: compute initial set of text components (super pixels)
 	Timer dt1;
@@ -200,13 +203,15 @@ bool WhiteSpaceAnalysis::compute() {
 	}
 
 	filterRect = filterPixels(pSet);
-	qInfo() << "Finished super pixel extraction. Computation took: " << dt1;
+
+	QString tt1 = dt1.getTotal();
+	qInfo() << "Finished super pixel extraction. Computation took: " << tt1;
 
 	//---------------------------------------------------------------------------------------------------------
 	// TEXT LINE HYPOTHIISIZER: compute initial text lines
 	Timer dt2;
 
-	TextLineHypothisizer tlh(mImg, pSet);
+	TextLinehypothesizer tlh(mImg, pSet);
 	// TODO add separator computation and use them in segementation process
 	//tlh.addSeparatorLines(mStopLines);
 
@@ -220,7 +225,9 @@ bool WhiteSpaceAnalysis::compute() {
 	//cv::Mat imgDebugWhiteSpaces = drawWhiteSpaces(img);	//based on mTextLineHypotheses and computed white spaces
 
 	qInfo() << "Found " << tlh.textLineSets().size() << " text lines.";
-	qInfo() << "Finished text line hypotheses. Computation took: " << dt2;
+	
+	QString tt2 = dt2.getTotal();
+	qInfo() << "Finished text line hypotheses. Computation took: " << tt2;
 
 	//---------------------------------------------------------------------------------------------------------
 	// WHITE SPACE SEGMENTATION: compute white space segmentation for estimated text lines
@@ -243,7 +250,8 @@ bool WhiteSpaceAnalysis::compute() {
 		Image::save(wss.drawSplitTextLines(mImg), imgPath);
 	}
 
-	qInfo() << "Finished white space segmentation. Computation took: " << dt3;
+	QString tt3 = dt3.getTotal();
+	qInfo() << "Finished white space segmentation. Computation took: " << tt3;
 
 	//---------------------------------------------------------------------------------------------------------
 	// TEXT BLOCK FORMATION: compute text blocks formed by previously detected text lines
@@ -257,7 +265,9 @@ bool WhiteSpaceAnalysis::compute() {
 	}
 
 	mTextBlockSet = tbf.textBlockSet();
-	qInfo() << "Finished text block formation. Computation took: " << dt4;
+
+	QString tt4 = dt4.getTotal();
+	qInfo() << "Finished text block formation. Computation took: " << tt4;
 
 
 	if (config()->debugDraw())
@@ -270,7 +280,9 @@ bool WhiteSpaceAnalysis::compute() {
 
 	mTextBlockRegions = mTextBlockSet.toTextRegion();
 	
+
 	mInfo << "white space layout analysis computed in: " << dt;
+	mInfo << "PP: " << tt0 << ", SPE: " << tt1 << ", TLH: " << tt2 << ", WSS: " << tt3 << ", TBF: " << tt4;
 
 	return true;
 }
@@ -812,7 +824,6 @@ void WhiteSpaceAnalysis::scaleInputImage(double sf){
 		cv::Mat scaledImg = mScaleFactory->scaled(mImg);
 
 		if (validateImageScale(scaledImg)) {
-			//qDebug() << "Scale factor for input image is valid.";
 			mImg = scaledImg;
 		}
 		else {
@@ -919,58 +930,58 @@ void WhiteSpaceAnalysis::reconfigScaleFactory(int maxImgSide){
 }
 
 
-// TextLineHypothisizerConfig ------------------------------------------------------------------------------
+// TextLinehypothesizerConfig ------------------------------------------------------------------------------
 
-TextLineHypothisizerConfig::TextLineHypothisizerConfig() : ModuleConfig("Text Line Hypothisizer Module") {
+TextLinehypothesizerConfig::TextLinehypothesizerConfig() : ModuleConfig("Text Line hypothesizer Module") {
 }
 
-QString TextLineHypothisizerConfig::toString() const {
+QString TextLinehypothesizerConfig::toString() const {
 	return ModuleConfig::toString();
 }
 
-void TextLineHypothisizerConfig::setMinLineLength(int length) {
+void TextLinehypothesizerConfig::setMinLineLength(int length) {
 	mMinLineLength = length;
 }
 
-int TextLineHypothisizerConfig::minLineLength() const {
+int TextLinehypothesizerConfig::minLineLength() const {
 	return mMinLineLength;
 }
 
-void TextLineHypothisizerConfig::setErrorMultiplier(double multiplier) {
+void TextLinehypothesizerConfig::setErrorMultiplier(double multiplier) {
 	mErrorMultiplier = multiplier;
 }
 
-double TextLineHypothisizerConfig::errorMultiplier() const {
+double TextLinehypothesizerConfig::errorMultiplier() const {
 	return checkParam(mErrorMultiplier, 0.0, DBL_MAX, "errorMultiplier");
 }
 
-QString TextLineHypothisizerConfig::debugPath() const {
+QString TextLinehypothesizerConfig::debugPath() const {
 	return mDebugPath;
 }
 
-void TextLineHypothisizerConfig::load(const QSettings & settings) {
+void TextLinehypothesizerConfig::load(const QSettings & settings) {
 	mMinLineLength = settings.value("minLineLength", mMinLineLength).toInt();
 	mErrorMultiplier = settings.value("errorMultiplier", errorMultiplier()).toDouble();
 	mDebugPath = settings.value("debugPath", debugPath()).toString();
 }
 
-void TextLineHypothisizerConfig::save(QSettings & settings) const {
+void TextLinehypothesizerConfig::save(QSettings & settings) const {
 	settings.setValue("minLineLength", mMinLineLength);
 	settings.setValue("errorMultiplier", errorMultiplier());
 	settings.setValue("debugPath", debugPath());
 }
 
 
-// TextLineHypothisizer -------------------------------------------------------------------------------------
+// TextLinehypothesizer -------------------------------------------------------------------------------------
 
-TextLineHypothisizer::TextLineHypothisizer(const cv::Mat img, const PixelSet& set){
+TextLinehypothesizer::TextLinehypothesizer(const cv::Mat img, const PixelSet& set){
 	mSet = set;
 	mImg = img;
-	mConfig = QSharedPointer<TextLineHypothisizerConfig>::create();
+	mConfig = QSharedPointer<TextLinehypothesizerConfig>::create();
 	mConfig->loadSettings();
 }
 
-bool TextLineHypothisizer::compute() {
+bool TextLinehypothesizer::compute() {
 
 	if (mSet.isEmpty())
 		return false;
@@ -987,10 +998,10 @@ bool TextLineHypothisizer::compute() {
 	//cv::Mat results1 =  draw(mImg);
 
 	mergeUnstableTextLines(mTextLines);
-	cv::Mat results2 = draw(mImg);
+	//cv::Mat results2 = draw(mImg);
 
 	removeShortTextLines();
-	cv::Mat results3 = draw(mImg);
+	//cv::Mat results3 = draw(mImg);
 
 	for (auto tl : mTextLines) {
 		extractWhiteSpaces(tl);
@@ -999,7 +1010,7 @@ bool TextLineHypothisizer::compute() {
 	return true;
 }
 
-QVector<QSharedPointer<WSTextLineSet>> TextLineHypothisizer::clusterTextLines(const PixelGraph & graph) const{
+QVector<QSharedPointer<WSTextLineSet>> TextLinehypothesizer::clusterTextLines(const PixelGraph & graph) const{
 
 	QVector<QSharedPointer<WSTextLineSet> > textLines;
 	QMap<QString, QVector<QString>> inEdges;
@@ -1029,7 +1040,7 @@ QVector<QSharedPointer<WSTextLineSet>> TextLineHypothisizer::clusterTextLines(co
 	return textLines;
 }
 
-bool TextLineHypothisizer::processEdge(const QSharedPointer<PixelEdge>& e, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat) const{
+bool TextLinehypothesizer::processEdge(const QSharedPointer<PixelEdge>& e, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat) const{
 
 	int psIdx1 = findSetIndex(e->first(), textLines);
 	int psIdx2 = findSetIndex(e->second(), textLines);
@@ -1067,7 +1078,7 @@ bool TextLineHypothisizer::processEdge(const QSharedPointer<PixelEdge>& e, QVect
 	return false;
 }
 
-bool TextLineHypothisizer::processEdgeDebug(const QSharedPointer<PixelEdge>& e, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat, Rect debugWindow) const {
+bool TextLinehypothesizer::processEdgeDebug(const QSharedPointer<PixelEdge>& e, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat, Rect debugWindow) const {
 
 	bool updated = false;
 
@@ -1216,7 +1227,7 @@ bool TextLineHypothisizer::processEdgeDebug(const QSharedPointer<PixelEdge>& e, 
 	return updated;
 }
 
-void TextLineHypothisizer::extractWhiteSpaces(QSharedPointer<WSTextLineSet>& textLine) const {
+void TextLinehypothesizer::extractWhiteSpaces(QSharedPointer<WSTextLineSet>& textLine) const {
 
 	//TODO simplify this section
 
@@ -1371,7 +1382,7 @@ void TextLineHypothisizer::extractWhiteSpaces(QSharedPointer<WSTextLineSet>& tex
 	textLine->setMinBCRSize(minBCRSize);
 }
 
-int TextLineHypothisizer::findSetIndex(const QSharedPointer<Pixel> &pixel, const QVector<QSharedPointer<WSTextLineSet>> &sets) const{
+int TextLinehypothesizer::findSetIndex(const QSharedPointer<Pixel> &pixel, const QVector<QSharedPointer<WSTextLineSet>> &sets) const{
 
 	assert(pixel);
 
@@ -1385,7 +1396,7 @@ int TextLineHypothisizer::findSetIndex(const QSharedPointer<Pixel> &pixel, const
 	return -1;
 }
 
-bool TextLineHypothisizer::mergePixels(const QSharedPointer<PixelEdge> &e) const {
+bool TextLinehypothesizer::mergePixels(const QSharedPointer<PixelEdge> &e) const {
 	
 	double maxHeightRatio = 3.0;
 	double minVertOverlapRatio = 0.4;
@@ -1416,7 +1427,7 @@ bool TextLineHypothisizer::mergePixels(const QSharedPointer<PixelEdge> &e) const
 
 }
 
-bool TextLineHypothisizer::addPixel(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<PixelEdge> &e, const QSharedPointer<Pixel> &p, double heat) const{
+bool TextLinehypothesizer::addPixel(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<PixelEdge> &e, const QSharedPointer<Pixel> &p, double heat) const{
 
 	if (set->size() < 10) {
 		return mergePixels(e);
@@ -1499,7 +1510,7 @@ bool TextLineHypothisizer::addPixel(QSharedPointer<WSTextLineSet> &set, const QS
 	return false;
 }
 
-bool TextLineHypothisizer::mergeTextLines(const QSharedPointer<WSTextLineSet>& tls1, const QSharedPointer<WSTextLineSet>& tls2, const QSharedPointer<PixelEdge> &e, double heat) const{
+bool TextLinehypothesizer::mergeTextLines(const QSharedPointer<WSTextLineSet>& tls1, const QSharedPointer<WSTextLineSet>& tls2, const QSharedPointer<PixelEdge> &e, double heat) const{
 
 	//TODO incorporate average size of lines in linking process
 	//TODO check continuity of text line after merging
@@ -1617,7 +1628,7 @@ bool TextLineHypothisizer::mergeTextLines(const QSharedPointer<WSTextLineSet>& t
 	return mergeLines;
 }
 
-bool TextLineHypothisizer::isContinuousMerge(const QSharedPointer<WSTextLineSet>& tls, const QVector<QSharedPointer<Pixel>>& pixels) const{
+bool TextLinehypothesizer::isContinuousMerge(const QSharedPointer<WSTextLineSet>& tls, const QVector<QSharedPointer<Pixel>>& pixels) const{
 
 	double agreements = 0;
 	double idxBound = std::min(5, pixels.size());
@@ -1640,7 +1651,7 @@ bool TextLineHypothisizer::isContinuousMerge(const QSharedPointer<WSTextLineSet>
 
 }
 
-void TextLineHypothisizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextLineSet>>& textLines) const {
+void TextLinehypothesizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextLineSet>>& textLines) const {
 
 	//TODO fix parameters
 
@@ -1731,15 +1742,29 @@ void TextLineHypothisizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 			Rect tl1R = tl1->boundingBox();
 			Rect tl2R = tl2->boundingBox();
 
-			//remove text lines if >75% of its area is covered by another line
 			if (tl1R.area() > tl2R.area()) {
 				if (tl1R.intersects(tl2R)) {
 
 					Polygon interPoly = Polygon(tl1->convexHull().polygon().intersected(tl2->convexHull().polygon()));
-					
+
 					if (interPoly.size() == 0)
 						continue;
 
+					//check if majority of centers is lying within current lines - check #1
+					Polygon poly = tl1->convexHull();
+					int pCount = 0;
+					for (auto p : tl2->pixels()) {
+						if (poly.contains(p->center()))
+							pCount++;
+					}
+					double coverage = pCount / tl2->size();
+					if (coverage > 0.75) {
+						tl1->append(tl2->pixels());
+						unstableLines << tl2;
+					}
+
+
+					//remove text lines if >75% of its area is covered by another line - - check #2
 					cv::Mat mask(mImg.size(), CV_8UC1, cv::Scalar(0));
 					Rect interRect = tl1R.joined(tl2R);
 
@@ -1756,25 +1781,13 @@ void TextLineHypothisizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 					mask = tl2_mask/255*100;
 					mask = mask + inter_mask/255*150;
 
-					double coverage = cv::countNonZero(inter_mask)/(double) cv::countNonZero(tl2_mask);
+					coverage = cv::countNonZero(inter_mask)/(double) cv::countNonZero(tl2_mask);
 
 					if (coverage > 0.75) {
-						//tl1->append(tl2->pixels());
+						tl1->append(tl2->pixels());
 						unstableLines << tl2;
 						continue;
 					}
-						
-					//Polygon poly = tl1->convexHull();
-					//int pCount = 0;
-					//for (auto p : tl2->pixels()) {
-					//	if (poly.contains(p->center()))
-					//		pCount++;
-					//}
-					//double relOverlap = pCount / tl2->size();
-					//if (relOverlap > 0.75) {
-					//	tl1->append(tl2->pixels());
-					//	unstableLines << tl2;
-					//}
 				}
 			}
 		}
@@ -1786,11 +1799,12 @@ void TextLineHypothisizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 		if (idx != -1)
 			textLines.remove(idx);
 	}
-
-	//merge text lines if they are close to each other and have similar size and orientation
+	
+	//debug
 	//QImage qImg = Image::mat2QImage(mImg, true);
 	//QPainter painter(&qImg);
 
+	//merge text lines if they are close to each other and have similar size and orientation
 	for (int i = 0; i < textLines.size(); ++i) {
 		auto tl1 = textLines[i];
 
@@ -1802,44 +1816,52 @@ void TextLineHypothisizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 
 			double overlap = std::min(tl1R.bottom(), tl2R.bottom()) - std::max(tl1R.top(), tl2R.top());
 			if (overlap > 0) {
-				double relOverlap = overlap / std::min(tl1R.height(), tl2R.height());
+				double relOverlap = overlap / std::max(tl1R.height(), tl2R.height());
+				//double relOverlap = overlap / std::min(tl1R.height(), tl2R.height());
+
 				if (relOverlap > 0.5) {
 
-					//TODO also consider horizontal distance between lines and similarity in size before merging
+					double xDistance = std::max(tl1R.left(), tl2R.left()) - std::min(tl1R.right(), tl2R.right());
+					double aph = (tl1->avgPixelHeight() + tl2->avgPixelHeight()) /2.0;
+					
+					//check horizontal distance of text lines
+					if (xDistance < (5 * aph)) {
+						double maxErr1 = std::max(tl1->error() * config()->errorMultiplier(), tl1->avgPixelHeight() / 2.0);
+						double maxErr2 = std::max(tl2->error() * config()->errorMultiplier(), tl2->avgPixelHeight() / 2.0);
 
-					double maxErr1 = std::max(tl1->error() * config()->errorMultiplier(), tl1->avgPixelHeight() / 2.0);
-					double maxErr2 = std::max(tl2->error() * config()->errorMultiplier(), tl2->avgPixelHeight() / 2.0);
+						double nErr1 = tl1->computeError(tl2->centers());
+						double nErr2 = tl2->computeError(tl1->centers());
 
-					double nErr1 = tl1->computeError(tl2->centers());
-					double nErr2 = tl2->computeError(tl1->centers());
-
-					if (nErr1 < maxErr1 && nErr2 < maxErr2) {
-						//auto tl1_ =  QSharedPointer<WSTextLineSet>::create(tl1->pixels());
-						//auto tl2_ = QSharedPointer<WSTextLineSet>::create(tl2->pixels());
-						
-						tl1->mergeWSTextLineSet(tl2);
-						textLines.remove(j);
-
-						//painter.setPen(ColorManager::lightGray(0.2));
-						//tl1->draw(painter, PixelSet::DrawFlags() | PixelSet::draw_poly | PixelSet::draw_pixels /*, Pixel::draw_stats*/);
-
+						//debug
 						//painter.setPen(ColorManager::blue());
-						//tl1_->draw(painter, PixelSet::DrawFlags() | PixelSet::draw_poly | PixelSet::draw_pixels /*, Pixel::draw_stats*/);
+						//tl1->draw(painter, PixelSet::DrawFlags() | PixelSet::draw_poly | PixelSet::draw_pixels /*, Pixel::draw_stats*/);
 						//painter.setPen(ColorManager::red());
-						//tl2_->draw(painter, PixelSet::DrawFlags() | PixelSet::draw_poly | PixelSet::draw_pixels /*, Pixel::draw_stats*/);
+						//tl2->draw(painter, PixelSet::DrawFlags() | PixelSet::draw_poly | PixelSet::draw_pixels /*, Pixel::draw_stats*/);
 
-						//cv::Mat mergedLinesImg = Image::qImage2Mat(qImg);
-						continue; //process next tls
+						//check if merge of lines is reasonable
+						if (nErr1 < maxErr1 && nErr2 < maxErr2) {
+
+							tl1->mergeWSTextLineSet(tl2);
+							textLines.remove(j);
+
+							//debug
+							//painter.setPen(ColorManager::lightGray(0.2));
+							//tl1->draw(painter, PixelSet::DrawFlags() | PixelSet::draw_poly | PixelSet::draw_pixels /*, Pixel::draw_stats*/);
+							//cv::Mat mergedLinesImg = Image::qImage2Mat(qImg);
+
+							continue; //process next tls
+						}
 					}
+					//debug
+					//cv::Mat mergedLinesImg = Image::qImage2Mat(qImg);
 				}
 			}
 			j++;
 		}
 	}
-	qDebug() << "Finished";
 }
 
-void TextLineHypothisizer::removeShortTextLines() {
+void TextLinehypothesizer::removeShortTextLines() {
 	//TODO fix parameter settings
 	int minTextLineSize = config()->minLineLength();
 
@@ -1856,7 +1878,7 @@ void TextLineHypothisizer::removeShortTextLines() {
 	}
 }
 
-QVector<QSharedPointer<TextLine>> TextLineHypothisizer::textLines() const {
+QVector<QSharedPointer<TextLine>> TextLinehypothesizer::textLines() const {
 
 	QVector<QSharedPointer<TextLine>> tls;
 	for (auto set : mTextLines)
@@ -1865,27 +1887,27 @@ QVector<QSharedPointer<TextLine>> TextLineHypothisizer::textLines() const {
 	return tls;
 }
 
-QVector<QSharedPointer<WSTextLineSet>> TextLineHypothisizer::textLineSets() const {
+QVector<QSharedPointer<WSTextLineSet>> TextLinehypothesizer::textLineSets() const {
 	return mTextLines;
 }
 
-bool TextLineHypothisizer::isEmpty() const{
+bool TextLinehypothesizer::isEmpty() const{
 	return mSet.isEmpty();
 }
 
-void TextLineHypothisizer::addSeparatorLines(const QVector<Line>& lines) {
+void TextLinehypothesizer::addSeparatorLines(const QVector<Line>& lines) {
 	mStopLines << lines;
 }
 
-bool TextLineHypothisizer::checkInput() const {
+bool TextLinehypothesizer::checkInput() const {
 	return !mSet.isEmpty();
 }
 
-QSharedPointer<TextLineHypothisizerConfig> TextLineHypothisizer::config() const {
-	return qSharedPointerDynamicCast<TextLineHypothisizerConfig>(mConfig);
+QSharedPointer<TextLinehypothesizerConfig> TextLinehypothesizer::config() const {
+	return qSharedPointerDynamicCast<TextLinehypothesizerConfig>(mConfig);
 }
 
-cv::Mat TextLineHypothisizer::draw(const cv::Mat& img, const QColor& col) const{
+cv::Mat TextLinehypothesizer::draw(const cv::Mat& img, const QColor& col) const{
 
 	QImage qImg = Image::mat2QImage(img, true);
 	cv::Mat img_final;
@@ -1902,7 +1924,7 @@ cv::Mat TextLineHypothisizer::draw(const cv::Mat& img, const QColor& col) const{
 	return img_final;
 }
 
-cv::Mat TextLineHypothisizer::drawGraphEdges(const cv::Mat& img, const QColor& col) {
+cv::Mat TextLinehypothesizer::drawGraphEdges(const cv::Mat& img, const QColor& col) {
 	
 	QImage qImg = Image::mat2QImage(img, true);
 	QPainter p(&qImg);
@@ -1913,7 +1935,7 @@ cv::Mat TextLineHypothisizer::drawGraphEdges(const cv::Mat& img, const QColor& c
 	return Image::qImage2Mat(qImg);
 }
 
-cv::Mat TextLineHypothisizer::drawTextLineHypotheses(const cv::Mat& img) const{
+cv::Mat TextLinehypothesizer::drawTextLineHypotheses(const cv::Mat& img) const{
 	QImage qImg = Image::mat2QImage(img, true);
 	QPainter painter(&qImg);
 
@@ -2827,14 +2849,13 @@ bool TextBlockFormation::compute() {
 
 	//TODO split text blocks into paragraphs
 
-	// TODO remove parentheses to please Aletheia and avoid errors
+
+	cv::Mat imgBf = draw(mImg);
+
+	//remove parentheses to please Aletheia and avoid errors
 	//tb->setPolygon(rdf::Polygon::fromRect(bb));
 	//tb->setId(tb->id().remove("{").remove("}"));	
 	//tb->setType(rdf::Region::type_text_region);
-
-	//cv::Mat imgBf = draw(mImg);
-	//QString imgPath = Utils::createFilePath("E:/data/test/HBR2013_training/debug.tif", "_blockFormation");
-	//Image::save(imgBf, imgPath);
 
 	return true;
 }
@@ -2849,6 +2870,7 @@ void TextBlockFormation::computeAdjacency() {
 
 		Rect r1 = mTextLines[i]->boundingBox();
 		Rect bnn1;
+		double textHeight = mTextLines[i]->pixelHeight();
 
 		for (int j = i + 1; j < mTextLines.length(); ++j) {
 			Rect r2 = mTextLines[j]->boundingBox();
@@ -2874,7 +2896,7 @@ void TextBlockFormation::computeAdjacency() {
 
 				double avgLineDist = (d1 + d2) / 2;
 
-				double textHeight = std::min(mTextLines[i]->pixelHeight(), mTextLines[j]->pixelHeight());
+				//double textHeight = std::min(mTextLines[i]->pixelHeight(), mTextLines[j]->pixelHeight());
 				double extFactor = 3.5;
 				
 				bool hasBigGap = false;
@@ -3105,6 +3127,11 @@ cv::Mat TextBlockFormation::draw(const cv::Mat & img, const QColor & col) {
 		auto tl = mTextLines[i];
 		Rect tlR = tl->boundingBox();
 		tlR.draw(painter);
+
+		for (int j : bnnIndices[i]) {
+			auto tl2 = mTextLines[j];
+			painter.drawLine(tl->center().toQPoint(), tl2->center().toQPoint());
+		}
 
 		QString bC = QString::number(bnnIndices[i].size());
 		QString aC = QString::number(annCount[i]);

@@ -135,10 +135,10 @@ namespace rdf {
 		double mLineSpacing = 0;
 	};
 
-	class DllCoreExport TextLineHypothisizerConfig : public ModuleConfig {
+	class DllCoreExport TextLinehypothesizerConfig : public ModuleConfig {
 
 	public:
-		TextLineHypothisizerConfig();
+		TextLinehypothesizerConfig();
 
 		virtual QString toString() const override;
 
@@ -159,13 +159,13 @@ namespace rdf {
 		void save(QSettings& settings) const override;
 	};
 
-	class DllCoreExport TextLineHypothisizer : public Module {
+	class DllCoreExport TextLinehypothesizer : public Module {
 	public:
-		TextLineHypothisizer(const cv::Mat img, const PixelSet& set = PixelSet());
+		TextLinehypothesizer(const cv::Mat img, const PixelSet& set = PixelSet());
 		
 		bool isEmpty() const override;
 		bool compute();
-		QSharedPointer<TextLineHypothisizerConfig> config() const;
+		QSharedPointer<TextLinehypothesizerConfig> config() const;
 
 		QVector<QSharedPointer<TextLine> > textLines() const;
 		QVector<QSharedPointer<WSTextLineSet>> textLineSets() const;
@@ -273,7 +273,7 @@ namespace rdf {
 
 		bool mScaleInput = true;
 
-		bool mDebugDraw = true;
+		bool mDebugDraw = false;
 		QString mDebugPath;
 	};
 	
