@@ -1391,6 +1391,26 @@ void TextLineSet::updateLine() {
 	mLineErr = computeError(ptSet);
 }
 
+QSharedPointer<Pixel> TextLineSet::convertToPixel() const {
+
+	Rect tlr = PixelSet::boundingBox();
+	Ellipse ellipse = PixelSet::fitEllipse();
+	//cv::Point2f tl = lsr.topLeft().toCvPoint2f();
+	//cv::Point2f tr = lsr.topRight().toCvPoint2f();
+	//cv::Point2f br = lsr.bottomRight().toCvPoint2f();
+	//Ellipse ellipse(cv::RotatedRect(tl, tr, br));
+
+	return QSharedPointer<Pixel>::create(ellipse, tlr);
+}
+
+//QSharedPointer<TextRegionPixel> TextLineSet::convertToTextRegionPixel() const {
+//
+//	Rect tlr = PixelSet::boundingBox();
+//	Ellipse ellipse = PixelSet::fitEllipse();
+//
+//	return QSharedPointer<TextRegionPixel>::create(this, ellipse, tlr);
+//}
+
 // TextBlock --------------------------------------------------------------------
 TextBlock::TextBlock(const Polygon & poly, const QString& id) : BaseElement(id) {
 	mPoly = poly;
@@ -1887,16 +1907,16 @@ void WSTextLineSet::mergeWSTextLineSet(const QSharedPointer<WSTextLineSet>& tls)
 	appendWhiteSpaces(tls->whiteSpacePixels());
 }
 
-QSharedPointer<TextRegionPixel> WSTextLineSet::convertToPixel() const{
-	
-	Rect slr = PixelSet::boundingBox();
-	cv::Point2f tl = slr.topLeft().toCvPoint2f();
-	cv::Point2f tr = slr.topRight().toCvPoint2f();
-	cv::Point2f br = slr.bottomRight().toCvPoint2f();
-	Ellipse ellipse(cv::RotatedRect(tl, tr, br));
-
-	return QSharedPointer<TextRegionPixel>::create(mMaxGap, ellipse);
-}
+//QSharedPointer<TextRegionPixel> WSTextLineSet::convertToPixel() const{
+//	
+//	Rect slr = PixelSet::boundingBox();
+//	cv::Point2f tl = slr.topLeft().toCvPoint2f();
+//	cv::Point2f tr = slr.topRight().toCvPoint2f();
+//	cv::Point2f br = slr.bottomRight().toCvPoint2f();
+//	Ellipse ellipse(cv::RotatedRect(tl, tr, br));
+//
+//	return QSharedPointer<TextRegionPixel>::create(mMaxGap, ellipse);
+//}
 
 double WSTextLineSet::maxGap() const{
 	return mMaxGap;

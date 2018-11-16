@@ -110,7 +110,6 @@ public:
 	virtual QVector<QSharedPointer<PixelEdge> > connect(const QVector<QSharedPointer<Pixel> >& pixels) const override;
 };
 
-
 /// <summary>
 /// Fully connected graph.
 /// Super pixels are connected with all other super pixels within a region.
@@ -268,6 +267,8 @@ public:
 	double error() const;
 	double computeError(const QVector<Vector2D>& pts) const;
 	double density() const;
+	QSharedPointer<Pixel> convertToPixel() const;
+	//QSharedPointer<TextRegionPixel> convertToTextRegionPixel() const;
 
 protected:
 	Line mLine;
@@ -290,7 +291,7 @@ public:
 	void appendWhiteSpaces(const QVector<QSharedPointer<WhiteSpacePixel>>& wsSet);
 	void addWhiteSpace(const QSharedPointer<WhiteSpacePixel>& ws);
 	void mergeWSTextLineSet(const QSharedPointer<WSTextLineSet>& tls);
-	QSharedPointer<TextRegionPixel> convertToPixel() const;
+	//QSharedPointer<TextRegionPixel> convertToPixel() const;
 	QVector<QSharedPointer<WhiteSpacePixel> > whiteSpacePixels() const {
 		return mWsSet;
 	};

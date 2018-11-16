@@ -326,6 +326,9 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		dc.setImagePath("E:/data/test/HBR2013_training/test/00046981.tif");
 		dc.setImagePath("E:/data/test/HBR2013_training/test/00318461.tif");
 		dc.setImagePath("E:/data/test/HBR2013_training/test/00441830.tif");
+		dc.setImagePath("E:/data/test/HBR2013_training/test/00439448.tif");
+		dc.setImagePath("E:/data/test/HBR2013_training/test/00438736.tif");
+		
 
 
 

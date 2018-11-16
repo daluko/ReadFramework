@@ -1654,6 +1654,8 @@ bool TextLinehypothesizer::isContinuousMerge(const QSharedPointer<WSTextLineSet>
 void TextLinehypothesizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextLineSet>>& textLines) const {
 
 	//TODO fix parameters
+	//TODO simplify merging of components that vertically overlapping and close to each other
+	//void TextLineHelper::mergeStableTextLines(QVector<QSharedPointer<TextLineSet>>& textLines)
 
 	QVector<QSharedPointer<TextLineSet>> textLines_;
 	for (auto tl : textLines)
@@ -1994,11 +1996,11 @@ bool WhiteSpaceSegmentation::compute() {
 		return false;
 	}
 	
-	//cv::Mat initialSplitLines = drawSplitTextLines(mImg);
+	//debug images
+	//cv::Mat graphResult, splitTextLines, noIsolatedTextLines, noShortTextLines, initialSplitLines;
+	//initialSplitLines = drawSplitTextLines(mImg);
 	
-	cv::Mat graphResult;
-	cv::Mat noIsolatedTextLines;
-	cv::Mat noShortTextLines;
+	
 
 	bool updatedTextLines = true;
 
@@ -2013,7 +2015,7 @@ bool WhiteSpaceSegmentation::compute() {
 		//noShortTextLines = drawSplitTextLines(mImg);
 	}
 
-	//cv::Mat splitTextLines = drawSplitTextLines(mImg);
+	//splitTextLines = drawSplitTextLines(mImg);
 
 	if (!findWhiteSpaceRuns(mPg)) {
 		qInfo("Finished white space segmentation, no white space runs found.");
@@ -2169,25 +2171,26 @@ PixelGraph WhiteSpaceSegmentation::computeSegmentationGraph() const{
 	//TODO check if distance between pixels could be reduced (only search for one line below/above)
 
 	// compute pixel graph for segmentation regions
-	PixelSet wsSet;
-	QVector<QSharedPointer<TextRegionPixel>> trSet;
+	PixelSet pgSet;
+	//QVector<QSharedPointer<Pixel>> trSet;
 
 	//create pixel set for white space computation (text regions + BCR)
 	for (auto sl : mTlsM) {
-		QSharedPointer<TextRegionPixel> trPixel = sl->convertToPixel();
-		trSet << trPixel;
-		wsSet.add(qSharedPointerCast<Pixel>(trPixel));
+		QSharedPointer<Pixel> trPixel = sl->convertToPixel();
+		//trSet << trPixel;
+		//wsSet.add(qSharedPointerCast<Pixel>(trPixel));
+		pgSet.add(trPixel);
 	}
 
 	for (auto bcr : mBcrM) {
-		wsSet.add(qSharedPointerCast<Pixel>(bcr));
+		pgSet.add(qSharedPointerCast<Pixel>(bcr));
 	}
 
 	//find horizontally overalapping white spaces
 	WSConnector wspc;
 	wspc.setLineSpacing(computeLineSpacing());
 
-	PixelGraph pg(wsSet);
+	PixelGraph pg(pgSet);
 	pg.connect(wspc);
 
 	return pg;
@@ -2743,8 +2746,8 @@ cv::Mat WhiteSpaceSegmentation::draw(const cv::Mat & img, const QColor & col) {
 }
 
 cv::Mat WhiteSpaceSegmentation::drawSplitTextLines(const cv::Mat & img, const QColor & col){
-	//QImage qImg(img.size().width, img.size().height, QImage::Format_ARGB32);	//blank image
-	QImage qImg = Image::mat2QImage(img, true);
+	QImage qImg(img.size().width, img.size().height, QImage::Format_ARGB32);	//blank image
+	//QImage qImg = Image::mat2QImage(img, true);
 	QPainter painter(&qImg);
 
 	for (auto tl : mTlsM) {
@@ -2836,6 +2839,8 @@ TextBlockFormation::TextBlockFormation(const cv::Mat img, const QVector<QSharedP
 
 bool TextBlockFormation::compute() {
 
+	//TODO use lpp for processing marignals - think about best place within pipeline
+
 	if (mTextLines.isEmpty())
 		return false;
 
@@ -2844,13 +2849,19 @@ bool TextBlockFormation::compute() {
 		return lhs->boundingBox().top() < rhs->boundingBox().top();
 	});
 
-	computeAdjacency();
-	formTextBlocks();
+	PixelSet pgSet;
+	for (auto tl : mTextLines) {
+		QSharedPointer<Pixel> tlPixel = tl->convertToPixel();
+		pgSet.add(tlPixel);
+		lineLookUp.insert(tlPixel->id(), tl);
+	}
+	
+	PixelGraph  pg = computeTextLinenGraph(pgSet);
 
-	//TODO split text blocks into paragraphs
+	computeTextBlocks(pg);
+	refineTextBlocks();
 
-
-	cv::Mat imgBf = draw(mImg);
+	//cv::Mat imgBf = draw(mImg);
 
 	//remove parentheses to please Aletheia and avoid errors
 	//tb->setPolygon(rdf::Polygon::fromRect(bb));
@@ -2860,167 +2871,211 @@ bool TextBlockFormation::compute() {
 	return true;
 }
 
-void TextBlockFormation::computeAdjacency() {
+PixelGraph TextBlockFormation::computeTextLinenGraph(PixelSet pgSet) {
+	// compute pixel graph for text line regions
 
-	//Compute below and above nearest neighbors for tlc
-	bnnIndices = QVector<QVector<int>>(mTextLines.length());
-	annCount = QVector<int>(mTextLines.length(), 0);
+	PixelGraph pg(pgSet);
+	
+	TLConnector tlpc = TLConnector(mImg);
+	pg.connect(tlpc);
 
-	for (int i = 0; i < mTextLines.length(); ++i) {
+	//debug
+	//QImage qImg = Image::mat2QImage(mImg, true);
+	//QPainter painter(&qImg);
+	//
+	//for (auto tl : mTextLines)
+	//	tl->draw(painter);
+	//
+	//pg.draw(painter);
+	//cv::Mat results = Image::qImage2Mat(qImg);
+	//debugEND
 
-		Rect r1 = mTextLines[i]->boundingBox();
-		Rect bnn1;
-		double textHeight = mTextLines[i]->pixelHeight();
+	return pg;
+}
 
-		for (int j = i + 1; j < mTextLines.length(); ++j) {
-			Rect r2 = mTextLines[j]->boundingBox();
+void TextBlockFormation::computeTextBlocks(PixelGraph pg) {
 
-			//check for x overlap of tlc
-			if (r1.left() <= r2.right() && r2.left() <= r1.right()) {
+	computeAdjacency(pg);
+	
+	//find lines at the beginning of a text block
+	QVector<QSharedPointer<WSTextLineSet>> startLines;	
+	for (auto tl : mTextLines) {
 
-				//TODO consider splitting into paragraphs accroding to average distance of a group
-				Line li = mTextLines[i]->fitLine();
-				Line lj = mTextLines[j]->fitLine();
-				
-				double d1, d2;
+		QString id = tl->id();
+		if (!annCount.contains(id) || annCount.value(id) != 1)
+			startLines << tl;
 
-				if (li.p1().x() > lj.p1().x())
-					d1 = lj.distance(li.p1());
-				else
-					d1 = li.distance(lj.p1());
+		if (bnnIndices.contains(id) && bnnIndices.value(id).size() > 1) {
+			for (int idx : bnnIndices.value(id))
+				startLines << mTextLines[idx];
+		}
+			
+	}
 
-				if (li.p2().x() < lj.p2().x())
-					d2 = lj.distance(li.p2());
-				else
-					d2 = li.distance(lj.p2());
+	//cluster lines together according to their adjacency relations
+	for (auto tl : startLines) {
+		QVector<QSharedPointer<rdf::TextLineSet>> textBlockLines;
+		textBlockLines << qSharedPointerCast<TextLineSet>(tl);
+		QString id = tl->id();
 
-				double avgLineDist = (d1 + d2) / 2;
+		if (bnnIndices.contains(id) &&  bnnIndices.value(id).length() == 1) {
 
-				//double textHeight = std::min(mTextLines[i]->pixelHeight(), mTextLines[j]->pixelHeight());
-				double extFactor = 3.5;
-				
-				bool hasBigGap = false;
-				if (avgLineDist > (textHeight * extFactor)) {
-					hasBigGap = true;
-				}
+			int nextIdx = bnnIndices.value(id)[0];
 
-				//QImage qImg = Image::mat2QImage(mImg, true);
-				//QPainter painter(&qImg);
+			while (true) {
 
-				//painter.setPen(ColorManager::blue());
-				//li.draw(painter);
-				//lj.draw(painter);
+				auto tmp = mTextLines[nextIdx];
+				auto tmpId = tmp->id();
 
-				//if (hasBigGap)
-				//	painter.setPen(ColorManager::red());
-
-				//if (li.p1().x() > lj.p1().x()) {
-				//	if (li.p1().y() > lj.p1().y()) {
-				//		Rect mergeR = Rect(li.p1()- Vector2D(0, textHeight*extFactor), Vector2D(textHeight*extFactor, textHeight*extFactor));
-				//		mergeR.draw(painter);
-				//		mergeR = Rect(li.p1() - Vector2D(0, textHeight*extFactor), Vector2D(textHeight, textHeight));
-				//		mergeR.draw(painter);
-				//	}
-				//	else {
-				//		Rect mergeR = Rect(li.p1(), Vector2D(textHeight*extFactor, textHeight*extFactor));
-				//		mergeR.draw(painter);
-				//		mergeR = Rect(li.p1(), Vector2D(textHeight, textHeight));
-				//		mergeR.draw(painter);
-				//	}
-				//}
-				//else {
-				//	if (lj.p1().y() > li.p1().y()) {
-				//		Rect mergeR = Rect(lj.p1() - Vector2D(0, textHeight*extFactor), Vector2D(textHeight*extFactor, textHeight*extFactor));
-				//		mergeR.draw(painter);
-				//		mergeR = Rect(lj.p1() - Vector2D(0, textHeight*extFactor), Vector2D(textHeight, textHeight));
-				//		mergeR.draw(painter);
-				//	}
-				//	else {
-				//		Rect mergeR = Rect(lj.p1(), Vector2D(textHeight*extFactor, textHeight*extFactor));
-				//		mergeR.draw(painter);
-				//		mergeR = Rect(lj.p1(), Vector2D(textHeight, textHeight));
-				//		mergeR.draw(painter);
-				//	}
-				//}
-
-				//cv::Mat results = Image::qImage2Mat(qImg);
-
-				if (hasBigGap)
+				if ((annCount.contains(tmpId) && annCount.value(tmpId) > 1))
 					break;
 
-				if (bnn1.isNull()) {
-					bnnIndices[i] = QVector<int>(1, j);
-					annCount[j] = annCount[j] + 1;
-					bnn1 = r2;
-				}
-				else {
-					//check for y overlap with previously found bnn
-					double overlap = std::min(bnn1.bottom(), r2.bottom()) - std::max(bnn1.top(), r2.top());
-					double relOverlap = overlap / std::min(bnn1.height(), r2.height());
-					if (overlap > 0 && relOverlap > 0.5) {
-						//if (bnn1.top() <= r2.bottom() && r2.top() <= bnn1.bottom()) {
-						bnnIndices[i] << j;
-						annCount[j] = annCount[j] + 1;
-					}
-					else {
-						break;
-					}
-				}
+				textBlockLines << tmp;	
+				
+				if (!bnnIndices.contains(tmpId) || bnnIndices.value(tmpId).length() != 1)
+					break;
+				
+				nextIdx = bnnIndices.value(tmpId)[0];
 			}
 		}
+
+		mTextBlockSet << createTextBlock(textBlockLines);
 	}
 }
 
-void TextBlockFormation::formTextBlocks() {
+void TextBlockFormation::computeAdjacency(PixelGraph pg) {
+	
+	//debug
+	//QImage qImg(mImg.size().width, mImg.size().height, QImage::Format_ARGB32);	//blank image
+	////QImage qImg = Image::mat2QImage(mImg, true);
+	//QPainter painter(&qImg);
+	//debug
 
-	//form text blocks by grouping text (line) regions
-	for (int i = 0; i < mTextLines.length(); ++i) {
+	for (auto pixel : pg.set().pixels()) {
 
-		if (annCount.at(i) != 1) {
-			QVector<QSharedPointer<rdf::TextLineSet>> textBlockLines;
-			textBlockLines << qSharedPointerCast<TextLineSet>(mTextLines[i]);
+		auto lineSet1 = lineLookUp.value(pixel->id());
+		QVector<int> eIndices = pg.edgeIndexes(pixel->id());
 
-			if (bnnIndices.at(i).length() == 1) {
-				appendTextLines(i, textBlockLines);
-			}
+		if (eIndices.isEmpty())
+			continue;
 
-			mTextBlockSet << createTextBlock(textBlockLines);
-		}
+		double minDist = DBL_MAX;
+		QSharedPointer<WSTextLineSet> nearestNeighbor;
+		QVector<QSharedPointer<WSTextLineSet>> neighbors;
 
-		if (bnnIndices.at(i).length() > 1) {
-			for (int idx : bnnIndices.at(i)) {
-				if (annCount[idx] == 1) {
-					QVector<QSharedPointer<rdf::TextLineSet>> textBlockLines;
-					textBlockLines << qSharedPointerCast<TextLineSet>(mTextLines[idx]);
+		//for each pixel find nearest neighbor having similar size
+		for (int idx : eIndices) {
 
-					if (bnnIndices.at(idx).length() == 1) {
-						appendTextLines(idx, textBlockLines);
-					}
+			auto lineSet2 = lineLookUp.value(pg.edges()[idx]->second()->id());
 
-					mTextBlockSet << createTextBlock(textBlockLines);
+			double mph1 = lineSet1->pixelHeight();
+			double mph2 = lineSet2->pixelHeight();
+			//double heightRatio = mph1 / mph2;
+			double heightRatio = std::min(mph1, mph2) / std::max(mph1, mph2);
+
+			// find nearest neighbor text line set having similar height
+			//if (0.75 < heightRatio && heightRatio < 1.25) {
+			if (0.7 < heightRatio) {
+
+				neighbors << lineSet2;
+				double dist = computeInterLineDistance(lineSet1, lineSet2);
+
+				if (dist < minDist) {
+					minDist = dist;
+					nearestNeighbor = lineSet2;
 				}
 			}
 		}
-	}
-}
 
-void TextBlockFormation::appendTextLines(int idx, QVector<QSharedPointer<TextLineSet> >& textLines) {
+		if (nearestNeighbor == NULL)
+			continue;
 
-	int nextIdx = bnnIndices.at(idx)[0];
-	while (true) {
+		//see if there are other neighboring text line sets aligned with the nearest neighbor
+		if (neighbors.size() > 1) {
 
-		if ((annCount.at(nextIdx) > 1)) {
-			break;
+			QVector<QSharedPointer<WSTextLineSet>> neighbors_final;
+			neighbors_final << nearestNeighbor;
+			Rect nnB = nearestNeighbor->boundingBox();
+
+			//TODO should check overlap with bboxes of all neighbors (neighbors_final)
+			for (auto n : neighbors) {
+
+				if (n == nearestNeighbor)
+					continue;
+
+				Rect cnB = n->boundingBox();
+				double overlap = std::min(nnB.bottom(), cnB.bottom()) - std::max(nnB.top(), cnB.top());
+				double relOverlap = overlap / std::max(nnB.height(), cnB.height());
+
+				if (overlap > 0 && relOverlap > 0.5)
+					neighbors_final << n;
+			}
+			neighbors = neighbors_final;
 		}
 
-		textLines << mTextLines[nextIdx];
+		//store adjacency relations of current pixel
+		for (auto n : neighbors) {
+			auto v1 = bnnIndices.value(lineSet1->id());
+			v1 << mTextLines.indexOf(n);
+			bnnIndices.insert(lineSet1->id(), v1);
 
-		if (bnnIndices.at(nextIdx).length() != 1) {
-			break;
+			if (annCount.contains(n->id()))
+				annCount.insert(n->id(), annCount.value(n->id()) + 1);
+			else
+				annCount.insert(n->id(), 1);
 		}
-		nextIdx = bnnIndices.at(nextIdx)[0];
 	}
+
+	//debug draw
+	//for (auto tl : mTextLines) {
+	//	painter.setPen(ColorManager::darkGray());
+	//	tl->draw(painter);
+	//	QString text = "annC = " + QString::number(annCount.value(tl->id())) + ", bnnC = " + QString::number(bnnIndices.value(tl->id()).size()) + ", pH = " + QString::number(tl->pixelHeight());
+	//	painter.drawText(tl->boundingBox().toQRect(), Qt::AlignCenter, text);
+	//	tl->draw(painter);
+	//
+	//	auto indices = bnnIndices.value(tl->id());
+	//	for (int i : indices) {
+	//		Line edge = Line(tl->center(),  mTextLines[i]->center());
+	//		edge.draw(painter);
+
+	//		double mph1 = tl->pixelHeight();
+	//		double mph2 = mTextLines[i]->pixelHeight();
+	//		double heightRatio = std::min(mph1, mph2) / std::max(mph1, mph2);
+	//		painter.drawText(edge.center().toQPoint(), QString::number(heightRatio));
+	//	}
+	//}
+
+	//cv::Mat results = Image::qImage2Mat(qImg);
+
+	//QImage qImg1 = Image::mat2QImage(mImg, true);
+	//QPainter painter1(&qImg1);
+
+	//painter1.setPen(ColorManager::darkGray());
+	//for (auto tl : mTextLines)
+	//	tl->draw(painter1);
+
+	//cv::Mat results1 = Image::qImage2Mat(qImg1);
+	//debugEND
+
 }
+
+//void TextBlockFormation::appendTextLines(int idx, QVector<QSharedPointer<TextLineSet> >& textLines) {
+//
+//	int nextIdx = bnnIndices.at(idx)[0];
+//	while (true) {
+//
+//		if ((annCount.at(nextIdx) > 1))
+//			break;
+//
+//		textLines << mTextLines[nextIdx];
+//
+//		if (bnnIndices.at(nextIdx).length() != 1)
+//			break;
+//		else
+//			nextIdx = bnnIndices.at(nextIdx)[0];
+//	}
+//}
 
 TextBlock TextBlockFormation::createTextBlock(const QVector<QSharedPointer<TextLineSet>>& lines) {
 	
@@ -3033,9 +3088,6 @@ TextBlock TextBlockFormation::createTextBlock(const QVector<QSharedPointer<TextL
 	QPainter painter(&qPolyImg);
 	painter.setPen(QColor(255, 255, 255));
 	painter.setBrush(QColor(255, 255, 255));
-	
-	//debug
-	cv::Mat  result3;
 	
 	for(int i = 0; i < lines.length(); i++){
 
@@ -3110,10 +3162,112 @@ TextBlock TextBlockFormation::createTextBlock(const QVector<QSharedPointer<TextL
 	return tb;
 }
 
+void TextBlockFormation::refineTextBlocks() {
+
+	//refine text blocks
+		//split text block if there are gaps that represent inter-paragraph distances or between headlines and paragraphs	
+		//merge neighboring lines that split paragraphs (l1 -> l2_1 - l2_2 -> l3)
+		//merge/ignore little lines entirely covered by other text blocks
+
+	////debug
+	////QImage qImg(mImg.size().width, mImg.size().height, QImage::Format_ARGB32);	//blank image
+	//QImage qImg = Image::mat2QImage(mImg, true);
+	//QPainter painter(&qImg);
+	//painter.setPen(ColorManager::blue());
+
+
+	//for(auto tb : mTextBlockSet.textBlocks()){
+
+	//	auto lines = tb->textLines();
+	//	
+	//	if (lines.isEmpty() || lines.length() <= 2)
+	//		continue;
+
+	//	PixelSet linePixelSet;
+	//	for (auto line : lines) {
+	//		auto lp = line->convertToPixel();
+	//		linePixelSet.add(lp);
+	//		
+	//		////debug
+	//		//lp->bbox().draw(painter);
+	//		//painter.drawText(lp->bbox().toQRect(), QString::number(lines.indexOf(line)));
+	//	}
+
+	//	auto linePixels = linePixelSet.pixels();
+	//	QVector<QSharedPointer<PixelEdge>> lpEdges;
+
+	//	for (int i = 1; i < linePixels.length(); ++i) {
+	//		lpEdges  << QSharedPointer<PixelEdge>::create(linePixels[i-1], linePixels[i]);
+	//		
+	//		////debug
+	//		//lpEdges.last()->edge().draw(painter);
+	//		//painter.drawText(lpEdges.last()->edge().center().toQPoint(), QString::number(i-1));
+	//	}
+
+	//	//check if link is valid by computing distance
+	//	QList<double> edgeDistances;
+	//	for (int i = 1; i < lines.length(); ++i) {
+
+	//		auto line1 = lines[i - 1];
+	//		auto line2 = lines[i];
+
+	//		double avgLineDist = computeInterLineDistance(line1, line2);
+
+	//		double aph1 = WSTextLineSet(line1->pixels()).avgPixelHeight();
+	//		double aph2 = WSTextLineSet(line2->pixels()).avgPixelHeight();
+
+	//		double heightRatio = std::min(aph1, aph2) / std::max(aph1, aph2);
+	//		double w = 1 + std::abs(1 - heightRatio);
+
+	//		double distance = avgLineDist*w;
+	//		edgeDistances << distance;
+	//	}
+
+	//	double medianDistance = Algorithms::statMoment(edgeDistances, 0.5);
+	//	for (int i = 0; i < edgeDistances.length(); ++i) {
+	//		double dist = edgeDistances[i];
+	//		if (dist < (medianDistance*0.75) || dist >(medianDistance*1.25)){
+	//			qDebug() << "Remove edge with indesx " << QString::number(i);
+	//			//split text blocks at correspondiong edge
+	//		}
+	//			
+	//	}
+
+
+	//	//cv::Mat results = Image::qImage2Mat(qImg);
+	//	//qDebug() << "finished refining text block";
+	//}
+
+}
+
+double TextBlockFormation::computeInterLineDistance(const QSharedPointer<WSTextLineSet>& ls1, const QSharedPointer<WSTextLineSet>& ls2) {
+
+	//TODO assert ls1 lies above ls2 lies and they do not intersect
+
+	Line l1 = ls1->fitLine();
+	Line l2 = ls2->fitLine();
+
+	double d1, d2;
+
+	if (l1.p1().x() > l2.p1().x())
+		d1 = l2.distance(l1.p1());
+	else
+		d1 = l1.distance(l2.p1());
+
+	if (l1.p2().x() < l2.p2().x())
+		d2 = l2.distance(l1.p2());
+	else
+		d2 = l1.distance(l2.p2());
+
+	double avgLineDist = (d1 + d2) / 2;
+
+	return avgLineDist;
+}
+
 cv::Mat TextBlockFormation::draw(const cv::Mat & img, const QColor & col) {
 
-	QImage qImg(img.size().width, img.size().height, QImage::Format_ARGB32);	//blank image
-	//QImage qImg = Image::mat2QImage(img, true);
+	//QImage qImg(img.size().width, img.size().height, QImage::Format_ARGB32);	//blank image
+	QImage qImg = Image::mat2QImage(img, true);
 	QPainter painter(&qImg);
 
 	painter.setPen(ColorManager::blue());
@@ -3128,14 +3282,14 @@ cv::Mat TextBlockFormation::draw(const cv::Mat & img, const QColor & col) {
 		Rect tlR = tl->boundingBox();
 		tlR.draw(painter);
 
-		for (int j : bnnIndices[i]) {
-			auto tl2 = mTextLines[j];
-			painter.drawLine(tl->center().toQPoint(), tl2->center().toQPoint());
-		}
+		//for (int j : bnnIndices[i]) {
+		//	auto tl2 = mTextLines[j];
+		//	painter.drawLine(tl->center().toQPoint(), tl2->center().toQPoint());
+		//}
 
-		QString bC = QString::number(bnnIndices[i].size());
-		QString aC = QString::number(annCount[i]);
-		painter.drawText(tlR.toQRect(), Qt::AlignCenter, "aC=" + aC + ", bC=" + bC);
+		//QString bC = QString::number(bnnIndices[i].size());
+		//QString aC = QString::number(annCount[i]);
+		//painter.drawText(tlR.toQRect(), Qt::AlignCenter, "aC=" + aC + ", bC=" + bC);
 	}
 
 	return Image::qImage2Mat(qImg);
@@ -3346,6 +3500,84 @@ QVector<QSharedPointer<PixelEdge>> WSConnector::connect(const QVector<QSharedPoi
 }
 
 
+// Text Line Connector --------------------------------------------------------------------
+
+TLConnector::TLConnector() {
+}
+
+TLConnector::TLConnector(cv::Mat img){
+	mImg = img;
+}
+
+QVector<QSharedPointer<PixelEdge>> TLConnector::connect(const QVector<QSharedPointer<Pixel>>& pixels) const{
+	
+	//double extFactor = 2.5;
+	double extFactor = 1.5;
+
+	QVector<QSharedPointer<PixelEdge> > edges;
+	QVector<QSharedPointer<Pixel>> mPixels(pixels);
+
+	//TODO for skewed lines sorting according to bbox().top() might give wrong results -> consider differemt sorting criteria
+
+	//sort pixels according to y_max coordinate for more efficient computation
+	std::sort(mPixels.begin(), mPixels.end(), [](const auto& lhs, const auto& rhs) {
+		return lhs->bbox().top() < rhs->bbox().top();
+		//return lhs->bbox().bottom() < rhs->bbox().bottom();
+	});
+
+	//deubg
+	//QImage qImg(mImg.size().width, mImg.size().height, QImage::Format_ARGB32);	//blank image
+	//QImage qImg = Image::mat2QImage(mImg, true);
+	//QPainter painter(&qImg);
+
+
+	for (int i1 = 0; i1 < mPixels.size(); ++i1) {
+
+		auto p1 = mPixels[i1];
+		Rect p1R = p1->bbox();
+		Ellipse p1E = p1->ellipse();
+		//Vector2D e1 = p1E.getPoint(0);
+		//Vector2D e2 = p1E.getPoint(CV_PI*0.5);
+		//Vector2D e3 = p1E.getPoint(CV_PI);
+		//Vector2D e4 = p1E.getPoint(CV_PI*1.5);
+		//pts << e.getPoint(CV_PI*0.75);
+
+		//painter.setPen(ColorManager::blue());
+		//p1R.draw(painter);
+		//p1E.draw(painter);
+
+		//int ss = 4;
+		//painter.drawEllipse(e1.toQPointF(), ss, ss);
+		//painter.drawEllipse(e2.toQPointF(), ss, ss);
+		//painter.drawEllipse(e3.toQPointF(), ss, ss);
+		//painter.drawEllipse(e4.toQPointF(), ss, ss);
+
+		Rect interBox = Rect(p1R.left(), p1R.bottom(), p1R.width(), (p1E.minorAxis()*2)*extFactor);
+		interBox.joined(p1R);
+		
+		//painter.setPen(ColorManager::red());
+		//interBox.draw(painter);
+		//cv::Mat resuts = Image::qImage2Mat(qImg);
+
+		for (int i2 = i1 + 1; i2 < mPixels.size(); ++i2) {
+
+			auto p2 = mPixels[i2];
+			Rect p2R = p2->bbox();
+
+			if (p2R.intersects(interBox)) {
+
+				if (p2R.top() > interBox.bottom())
+					break;
+
+				edges << QSharedPointer<PixelEdge>::create(p1, p2);
+			}
+		}
+	}
+
+	return edges;
+}
+
+
 // WhiteSpaceRun --------------------------------------------------------------------
 
 WhiteSpaceRun::WhiteSpaceRun(){
@@ -3394,5 +3626,4 @@ Rect WhiteSpaceRun::boundingBox() const{
 
 	return bbox;
 }
-
 }

@@ -668,25 +668,21 @@ void WhiteSpacePixel::setBCR(const bool isBCR){
 }
 
 // TextRegionPixel --------------------------------------------------------------------
-TextRegionPixel::TextRegionPixel(){
-}
-
-TextRegionPixel::TextRegionPixel(const Ellipse & ellipse, 
-	const Rect & bbox,const QString & id) : Pixel(ellipse, bbox, id) {
-}
-
-TextRegionPixel::TextRegionPixel(double maxGap, const Ellipse& ellipse,
-	const Rect& bbox, const QString& id) : TextRegionPixel(ellipse, bbox, id) {
-
-	mMaxGap = maxGap;
-}
-
-double TextRegionPixel::maxGap(){
-	return mMaxGap;
-}
-
-void TextRegionPixel::setBCR(double maxGap){
-	mMaxGap = maxGap;
-}
+//TextRegionPixel::TextRegionPixel(){
+//}
+//
+//TextRegionPixel::TextRegionPixel(const Ellipse & ellipse, 
+//	const Rect & bbox,const QString & id) : Pixel(ellipse, bbox, id) {
+//}
+//
+//TextRegionPixel::TextRegionPixel(QSharedPointer<TextLineSet> tls, const Ellipse& ellipse,
+//	const Rect& bbox, const QString& id) : TextRegionPixel(ellipse, bbox, id) {
+//
+//	mTls = tls;
+//}
+//
+//QSharedPointer<TextLineSet> TextRegionPixel::textLineSet(){
+//	return mTls;
+//}
 
 }

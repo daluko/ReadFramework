@@ -90,19 +90,25 @@ namespace rdf {
 		TextBlockFormation(const cv::Mat img, const QVector<QSharedPointer<WSTextLineSet>> textLines);
 
 		bool compute();
+		PixelGraph computeTextLinenGraph(PixelSet ps);
+		void computeTextBlocks(PixelGraph pg);
 		TextBlockSet textBlockSet();
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor());
 
 	protected:
-		void computeAdjacency();
-		void formTextBlocks();
-		void appendTextLines(int idx, QVector<QSharedPointer<TextLineSet> >& textLines);
+		void computeAdjacency(PixelGraph pg);
+		//void appendTextLines(int idx, QVector<QSharedPointer<TextLineSet> >& textLines);
+		void refineTextBlocks();
+		
 		TextBlock createTextBlock(const QVector<QSharedPointer<TextLineSet> >& textLines);
-
-		QVector<QVector<int>> bnnIndices;
-		QVector<int> annCount;
+		double computeInterLineDistance(const QSharedPointer<WSTextLineSet>& ls1, const QSharedPointer<WSTextLineSet>& ls2);
 
 		cv::Mat mImg;
+
+		QMap<QString, QSharedPointer<WSTextLineSet>> lineLookUp;
+		QMap<QString, int> annCount;
+		QMap<QString, QVector<int>> bnnIndices;
+		
 		QVector<QSharedPointer<WSTextLineSet>>mTextLines;
 		TextBlockSet mTextBlockSet;
 	};
@@ -133,6 +139,21 @@ namespace rdf {
 
 	protected:
 		double mLineSpacing = 0;
+	};
+
+	/// <summary>
+	/// Connects text lines to their nearest neighbors in vertical direction (below only) based on their height.
+	/// </summary>
+	/// <seealso cref="PixelConnector" />
+	class DllCoreExport TLConnector : public PixelConnector {
+
+	public:
+		TLConnector();
+		TLConnector(cv::Mat img);
+		virtual QVector<QSharedPointer<PixelEdge> > connect(const QVector<QSharedPointer<Pixel> >& pixels) const override;
+
+	protected:
+		cv::Mat mImg;
 	};
 
 	class DllCoreExport TextLinehypothesizerConfig : public ModuleConfig {
@@ -273,7 +294,7 @@ namespace rdf {
 
 		bool mScaleInput = true;
 
-		bool mDebugDraw = false;
+		bool mDebugDraw = true;
 		QString mDebugPath;
 	};
 	

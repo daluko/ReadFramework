@@ -267,18 +267,17 @@ protected:
 	bool mIsBCR = false;	//true if white space is between columns (BC)
 };
 
-class DllCoreExport TextRegionPixel : public Pixel {
-public:
-	TextRegionPixel();
-	TextRegionPixel(const Ellipse& ellipse, const Rect& bbox = Rect(), const QString& id = QString());
-	TextRegionPixel(double maxGap, const Ellipse& ellipse, const Rect& bbox = Rect(), const QString& id = QString());
-
-	double maxGap();
-	void setBCR(double maxGap);
-
-protected:
-	double mMaxGap = 0;
-};
+//class DllCoreExport TextRegionPixel : public Pixel {
+//public:
+//	TextRegionPixel();
+//	TextRegionPixel(const Ellipse& ellipse, const Rect& bbox = Rect(), const QString& id = QString());
+//	TextRegionPixel(QSharedPointer<TextLineSet> tls, const Ellipse& ellipse, const Rect& bbox = Rect(), const QString& id = QString());
+//
+//	QSharedPointer<TextLineSet> textLineSet();
+//
+//protected:
+//	QSharedPointer<TextLineSet> mTls;
+//};
 
 class DllCoreExport PixelEdge : public BaseElement {
 
