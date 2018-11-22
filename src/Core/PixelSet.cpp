@@ -1467,7 +1467,6 @@ bool TextBlock::remove(const QSharedPointer<TextLineSet>& tl) {
 
 	// find the text line
 	for (int rIdx = 0; rIdx < mTextLines.size(); rIdx++) {
-
 		if (*tl == *mTextLines[rIdx]) {
 			mTextLines.remove(rIdx);
 			return true;
@@ -1600,6 +1599,18 @@ void TextBlockSet::removeWeakTextLines() const {
 	}
 
 	qDebug().nospace() << filtered.size() << " unstable textlines removed (" << nf << "/" << filtered.size()-nf << ") sparse/angle";
+}
+
+bool TextBlockSet::remove(const QSharedPointer<TextBlock>& tb){
+	for (int rIdx = 0; rIdx < mTextBlocks.size(); rIdx++) {
+
+		if (*tb == *mTextBlocks[rIdx]) {
+			mTextBlocks.remove(rIdx);
+			return true;
+		}
+	}
+
+	return false;
 }
 
 // TextLine Helper functions --------------------------------------------------------------------
@@ -1906,17 +1917,6 @@ void WSTextLineSet::mergeWSTextLineSet(const QSharedPointer<WSTextLineSet>& tls)
 	append(tls->pixels());
 	appendWhiteSpaces(tls->whiteSpacePixels());
 }
-
-//QSharedPointer<TextRegionPixel> WSTextLineSet::convertToPixel() const{
-//	
-//	Rect slr = PixelSet::boundingBox();
-//	cv::Point2f tl = slr.topLeft().toCvPoint2f();
-//	cv::Point2f tr = slr.topRight().toCvPoint2f();
-//	cv::Point2f br = slr.bottomRight().toCvPoint2f();
-//	Ellipse ellipse(cv::RotatedRect(tl, tr, br));
-//
-//	return QSharedPointer<TextRegionPixel>::create(mMaxGap, ellipse);
-//}
 
 double WSTextLineSet::maxGap() const{
 	return mMaxGap;

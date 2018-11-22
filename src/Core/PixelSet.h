@@ -391,6 +391,7 @@ public:
 
 	void setPixels(const PixelSet& ps);
 	QVector<QSharedPointer<TextBlock> > textBlocks() const;
+	bool remove(const QSharedPointer<TextBlock>& tb);
 
 	QSharedPointer<Region> toTextRegion() const;
 

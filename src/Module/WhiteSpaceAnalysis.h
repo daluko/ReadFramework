@@ -90,20 +90,24 @@ namespace rdf {
 		TextBlockFormation(const cv::Mat img, const QVector<QSharedPointer<WSTextLineSet>> textLines);
 
 		bool compute();
-		PixelGraph computeTextLinenGraph(PixelSet ps);
+
 		void computeTextBlocks(PixelGraph pg);
+		void addSeparatorLines(const QVector<Line>& lines);
+
+		PixelGraph computeTextLineGraph(PixelSet ps);
 		TextBlockSet textBlockSet();
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor());
 
 	protected:
 		void computeAdjacency(PixelGraph pg);
-		//void appendTextLines(int idx, QVector<QSharedPointer<TextLineSet> >& textLines);
 		void refineTextBlocks();
 		
 		TextBlock createTextBlock(const QVector<QSharedPointer<TextLineSet> >& textLines);
 		double computeInterLineDistance(const QSharedPointer<WSTextLineSet>& ls1, const QSharedPointer<WSTextLineSet>& ls2);
 
+		//input
 		cv::Mat mImg;
+		QVector<Line> mSeparatorLines;
 
 		QMap<QString, QSharedPointer<WSTextLineSet>> lineLookUp;
 		QMap<QString, int> annCount;
@@ -227,6 +231,8 @@ namespace rdf {
 		bool isEmpty() const override;
 		bool compute();
 
+		void addSeparatorLines(const QVector<Line>& lines);
+
 		QVector<QSharedPointer<WSTextLineSet>> textLineSets() const;
 		QVector<QSharedPointer<WhiteSpacePixel>> bcrSet() const;
 
@@ -239,6 +245,7 @@ namespace rdf {
 		//input
 		cv::Mat  mImg;
 		QVector<QSharedPointer<WSTextLineSet> > mInitialTls;
+		QVector<Line> mSeparatorLines;
 
 		//output
 		QVector<QSharedPointer<WSTextLineSet> > mTlsM;
@@ -293,8 +300,8 @@ namespace rdf {
 		int mMaxImgSide = 2000;
 
 		bool mScaleInput = true;
-
-		bool mDebugDraw = true;
+		bool mUseAthenaTHE = false;
+		bool mDebugDraw = false;
 		QString mDebugPath;
 	};
 	
@@ -330,6 +337,7 @@ namespace rdf {
 		PixelSet pSet;
 		int mtextHeightEstimate = -1;
 		QSharedPointer<ScaleFactory> mScaleFactory;
+		QVector<Line> mBlackSeparators;
 		QVector<QSharedPointer<WSTextLineSet>> mTextLineHypotheses;
 		QVector<QSharedPointer<WSTextLineSet>> mWSTextLines;
 		QSharedPointer<Region>mTextBlockRegions;
@@ -343,6 +351,7 @@ namespace rdf {
 		bool computeLocalStats(PixelSet & pixels) const;
 		Rect filterPixels(PixelSet& pixels);
 		QVector<QVector<QSharedPointer<rdf::Pixel>>> findPixelGroups(PixelSet& set);
+		QVector<Line> findBlackSeparators(double pixelHeight = -1) const;
 
 		void drawDebugImages(const cv::Mat& img);
 		cv::Mat drawWhiteSpaces(const cv::Mat& img);

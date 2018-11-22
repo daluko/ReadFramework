@@ -219,11 +219,9 @@ int main(int argc, char** argv) {
 			qDebug() << "loading david's debug code";
 
 			QString dirPath;
+			//dirPath = "F:/dev/da/data/HBR2013/test/tr";
 			//dirPath = "E:/data/test/HBR13_test";
-			//dirPath = "E:/data/test/HBR2013_training/training";
-			//dirPath = "E:/data/test/HBR2013_training/improve me 28-9-18";
 			//dirPath = "E:/data/test/HBR2013_training/test";
-			//dirPath = "E:/data/test/HBR2013_training/THE problems";
 
 			bool testTHE = false;
 			bool testWSA = true;
@@ -295,41 +293,12 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		//dc.setImagePath("C:/read/test/d6.5/0056_S_Alzgern_011-01_0056-crop.JPG");
 		//dc.setImagePath("C:/read/test/d6.5/eval/P_241_27_012.jpg");
 
-		//dc.setImagePath("E:/data/test/HBR2013_training/00443033.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/00451351.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/00452456.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/00456592.tif");
-		dc.setImagePath("E:/data/test/HBR2013_training/00465433.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/00485679.tif"); 
-		
-		//0 or inf
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00042928.tif"); 
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00042929.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00107400.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00465675.tif");
-
-		//too big or else
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00465675.tif"); 
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00425137.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00441834.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00425137.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00672923.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00672924.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00528155.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/THE problems/00319983.tif");
-		
-		//dc.setImagePath("E:/data/test/HBR2013_training/improve me 28-9-18/00672923.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/improve me 28-9-18/00319988.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/improve me 28-9-18/00452467.tif");
+		//dc.setImagePath("E:/data/test/HBR2013_training/00443033.tif");		
 		//dc.setImagePath("E:/data/test/HBR2013_training/training/00452456.tif");
-		//dc.setImagePath("E:/data/test/HBR2013_training/training/00485679.tif");
-		dc.setImagePath("E:/data/test/HBR2013_training/test/00046981.tif");
-		dc.setImagePath("E:/data/test/HBR2013_training/test/00318461.tif");
-		dc.setImagePath("E:/data/test/HBR2013_training/test/00441830.tif");
-		dc.setImagePath("E:/data/test/HBR2013_training/test/00439448.tif");
-		dc.setImagePath("E:/data/test/HBR2013_training/test/00438736.tif");
-		
+		//dc.setImagePath("E:/data/test/HBR2013_training/test/00046981.tif");
 
+		dc.setImagePath("F:/dev/da/data/HBR2013/test/test/00451351.tif");
+		dc.setImagePath("F:/dev/da/data/HBR2013/test/tr/00465720.tif");
 
 
 		qInfo() << dc.imagePath() << "added as image path";
