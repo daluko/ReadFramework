@@ -2981,7 +2981,7 @@ QVector<Line> WhiteSpaceSegmentation::findWhiteSeparators() {
 	vLines = lt.lineFilter().removeSmall(vLines, minLength);
 
 	if (vLines.isEmpty())
-		return;
+		return vLines;
 
 	//rotate lines back according to estimated document skew
 	if (documentSkew != 0) {
@@ -2989,16 +2989,16 @@ QVector<Line> WhiteSpaceSegmentation::findWhiteSeparators() {
 			Line l = vLines[i];
 			QVector<Vector2D> pts = { l.p1(), l.p2() };
 
-			for (int i = 0; i < pts.size(); ++i) {
-				Vector2D pRot = (pts[i] - Vector2D(rotCenter));
+			for (int j = 0; j < pts.size(); ++j) {
+				Vector2D pRot = (pts[j] - Vector2D(rotCenter));
 				pRot.rotate(-documentSkew * DK_DEG2RAD);
-				pts[i] = pRot + Vector2D(rotCenter);
+				pts[j] = pRot + Vector2D(rotCenter);
 			}
 			vLines.replace(i, Line(pts[0], pts[1]));
 		}
 	}
 
-	mWhiteSeparatorLines = vLines;
+	return vLines;
 }
 
 void WhiteSpaceSegmentation::splitAtWhiteSeparators() {
