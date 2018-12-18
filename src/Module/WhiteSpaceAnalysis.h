@@ -239,6 +239,7 @@ namespace rdf {
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor());
 		cv::Mat drawSplitTextLines(const cv::Mat& img, const QColor& col = QColor());
 		cv::Mat drawWhiteSpaceRuns(const cv::Mat& img, const QColor& col = QColor());
+		cv::Mat drawWhiteSeparators(const cv::Mat & img, const QColor & col = QColor());
 		cv::Mat drawPixelGraph(const cv::Mat& img, const QColor& col = QColor());
 
 	protected:
@@ -246,6 +247,7 @@ namespace rdf {
 		cv::Mat  mImg;
 		QVector<QSharedPointer<WSTextLineSet> > mInitialTls;
 		QVector<Line> mSeparatorLines;
+		QVector<Line> mWhiteSeparatorLines;
 
 		//output
 		QVector<QSharedPointer<WSTextLineSet> > mTlsM;
@@ -260,12 +262,14 @@ namespace rdf {
 		PixelGraph computeSegmentationGraph() const;
 		bool removeIsolatedBCR(const PixelGraph pg);
 		bool mergeShortTextLines();
-		bool refineTextLineResults();
 		void deleteBCR(const QVector<QSharedPointer<WhiteSpacePixel>>& bcrM);
 		void deleteBCR(const QSharedPointer<WhiteSpacePixel>& bcr);
 		bool findWhiteSpaceRuns(const PixelGraph pg);
 		void updateBCRStatus();
 		bool refineWhiteSpaceRuns();
+		QVector<Line> findWhiteSeparators();
+		void splitAtWhiteSeparators();
+		bool refineTextLineResults();
 	};
 
 	class DllCoreExport WhiteSpaceAnalysisConfig : public ModuleConfig {
@@ -356,5 +360,6 @@ namespace rdf {
 		void drawDebugImages(const cv::Mat& img);
 		cv::Mat drawWhiteSpaces(const cv::Mat& img);
 		cv::Mat drawFilteredPixels(const cv::Mat& img);
+		cv::Mat drawBlackSeparators(const cv::Mat & img);
 	};
 }

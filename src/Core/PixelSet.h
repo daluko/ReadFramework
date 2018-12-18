@@ -291,6 +291,7 @@ public:
 	void appendWhiteSpaces(const QVector<QSharedPointer<WhiteSpacePixel>>& wsSet);
 	void addWhiteSpace(const QSharedPointer<WhiteSpacePixel>& ws);
 	void mergeWSTextLineSet(const QSharedPointer<WSTextLineSet>& tls);
+	QVector<QSharedPointer<WSTextLineSet>> splitWSTextLineSet(QSharedPointer<WhiteSpacePixel> splitPixel);
 	//QSharedPointer<TextRegionPixel> convertToPixel() const;
 	QVector<QSharedPointer<WhiteSpacePixel> > whiteSpacePixels() const {
 		return mWsSet;

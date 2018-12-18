@@ -1918,6 +1918,54 @@ void WSTextLineSet::mergeWSTextLineSet(const QSharedPointer<WSTextLineSet>& tls)
 	appendWhiteSpaces(tls->whiteSpacePixels());
 }
 
+QVector<QSharedPointer<WSTextLineSet>> WSTextLineSet::splitWSTextLineSet(QSharedPointer<WhiteSpacePixel> splitPixel){
+
+	if (!mWsSet.contains(splitPixel) || mSet.isEmpty() || mWsSet.isEmpty() || mSet.size() <= 1) {
+		qWarning() << "Failed to split ws text line.";
+		return QVector<QSharedPointer<WSTextLineSet>>();
+	}
+
+	QVector<QSharedPointer<WSTextLineSet>> splitLines;
+
+	//sort pixels according to x position
+	std::sort(mSet.begin(), mSet.end(), [](const auto& lhs, const auto& rhs) {
+		return lhs->bbox().right() < rhs->bbox().right();
+	});
+
+	std::sort(mWsSet.begin(), mWsSet.end(), [](const auto& lhs, const auto& rhs) {
+		return lhs->bbox().right() < rhs->bbox().right();
+	});
+
+	int wsSplitIdx = mWsSet.indexOf(splitPixel);
+	int tpSplitIdx;
+
+	for (int i = 0; i < mSet.size(); ++i) {
+		if (mSet[i]->bbox().center().x() > splitPixel->bbox().center().x()) {
+			tpSplitIdx = i;
+			break;
+		}
+	}
+
+	auto tmpTpSet1 = mSet.mid(0, tpSplitIdx);
+	auto tmpWsSet1 = mWsSet.mid(0, wsSplitIdx);
+
+	auto tmpTpSet2 = mSet.mid(tpSplitIdx);
+	auto tmpWsSet2 = mWsSet.mid(wsSplitIdx + 1);
+
+	if (tmpTpSet1.isEmpty() || tmpTpSet2.isEmpty()) {
+		qWarning() << "Failed to split ws text line.";
+		return QVector<QSharedPointer<WSTextLineSet>>();
+	}
+
+	auto line1 = QSharedPointer<WSTextLineSet>::create(tmpTpSet1, tmpWsSet1);
+	auto line2 = QSharedPointer<WSTextLineSet>::create(tmpTpSet2, tmpWsSet2);
+
+	splitLines << line1;
+	splitLines << line2;
+
+	return splitLines;
+}
+
 double WSTextLineSet::maxGap() const{
 	return mMaxGap;
 }
@@ -1928,7 +1976,7 @@ bool WSTextLineSet::isShort(double minWSSize) const{
 		minWSSize = mMinBCRSize*0.33;
 	}
 
-	//TODO minBCRSize * 5 -> minBCRSize ~ 1 char -> 2 words with 2 char + 1 whitespace
+	//minBCRSize * 5 -> minBCRSize ~ 1 char -> 2 words with 2 char + 1 whitespace
 	//TODO consider using a minLineLenght parameter in config
 	if ((mMaxGap < minWSSize && mSet.size() < 20) || mSet.size() < 5 || boundingBox().width() < mMinBCRSize * 5) {
 		return true;

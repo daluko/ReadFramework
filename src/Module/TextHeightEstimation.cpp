@@ -159,8 +159,6 @@ namespace rdf {
 
 		//level 0 won't be used (contribuition very poor according to Pintus et al.)
 		QSharedPointer<ImagePatch> p0 = QSharedPointer<ImagePatch>(new ImagePatch{ cv::Range(0, img.cols), cv::Range(0, img.rows) });
-		//p0->xRange = cv::Range(0, img.cols);
-		//p0->yRange = cv::Range(0, img.rows);
 		imagePatches[0] << QVector<QSharedPointer<ImagePatch>>(1, p0);
 
 		for (int i = 1; i < numSplitLevels; i++) {

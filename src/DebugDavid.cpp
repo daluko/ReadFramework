@@ -130,7 +130,7 @@ void WhiteSpaceTest::run() {
 	qInfo() << "Running White Space Analysis test...";
 
 	Timer dt;
-
+	bool debugDraw = false;
 	QImage qImg(mConfig.imagePath());
 	cv::Mat imgCv = Image::qImage2Mat(qImg);
 
@@ -143,6 +143,8 @@ void WhiteSpaceTest::run() {
 
 	if(wsa.config()->debugPath().isEmpty())
 		wsa.config()->setDebugPath(mConfig.imagePath());
+	
+	wsa.config()->setDebugDraw(debugDraw);
 
 	wsa.compute();
 
