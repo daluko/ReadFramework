@@ -362,4 +362,10 @@ namespace rdf {
 		cv::Mat drawFilteredPixels(const cv::Mat& img);
 		cv::Mat drawBlackSeparators(const cv::Mat & img);
 	};
+
+	namespace WSAHelper {
+
+		void fftShift(cv::Mat out);
+
+	}
 }

@@ -450,7 +450,6 @@ namespace rdf {
 		//normalize result		
 		normalize(autoCorr, normAutoCorr, 0, 1, CV_MINMAX);
 
-
 		//shift result image (since zero frequency comp was not centered)
 		fftShift(normAutoCorr);
 

@@ -36,6 +36,7 @@ related links:
 #include "PixelSet.h"
 #include "Image.h"
 #include "ScaleFactory.h"
+#include "GaborFiltering.h"
 
 #pragma warning(push, 0)	// no warnings from includes
 // Qt Includes
@@ -82,10 +83,27 @@ namespace rdf {
 	class DllCoreExport FontStyleClassification : public Module {
 
 	public:
+
+		enum ClassifierMode {
+			classify__nn = 0,
+			classify__nn_wed = 1,
+			label_end
+		};
+
+		FontStyleClassification();
 		FontStyleClassification(const cv::Mat& img, const QVector<QSharedPointer<TextLine>>& textLines);
 
 		bool isEmpty() const override;
 		bool compute() override;
+		
+		static cv::Mat generateTextImage(QString text, QFont font, QRect bbox = QRect(), bool cropImg = false);
+		static cv::Mat generateTextPatch(int patchSize, int lineHeight, cv::Mat textImg);
+		static cv::Mat generateSyntheticTextPatch(QFont font, QString text);
+		static QVector<cv::Mat> generateSyntheticTextPatches(QFont font, QStringList trainingWords);
+
+		QVector<int> classifyTestWords(QVector<cv::Mat> featMatManager, cv::Mat testFeatMat, ClassifierMode mode = ClassifierMode::classify__nn);
+
+		GaborFilterBank createGaborKernels(bool openCV) const;
 		QSharedPointer<FontStyleClassificationConfig> config() const;
 
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
@@ -101,6 +119,4 @@ namespace rdf {
 
 		bool checkInput() const override;
 	};
-
-
 }

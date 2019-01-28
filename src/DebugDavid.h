@@ -34,6 +34,7 @@
 
 #include "DebugUtils.h"
 #include "ScaleFactory.h"
+#include "FontStyleClassification.h"
 
 #pragma warning(push, 0)	// no warnings from includes
 // Qt Includes
@@ -58,14 +59,25 @@ protected:
 	DebugConfig mConfig;
 };
 
-class FontClassificationTest {
+class FontStyleClassificationTest {
 
 public:
-	FontClassificationTest(const DebugConfig& config = DebugConfig());
+	FontStyleClassificationTest(const DebugConfig& config = DebugConfig());
 
 	void run();
+	void processDirectory(const QString dirPath);
+	void testSyntheticDataSet(QString filePath);
 
 protected:
+	QStringList loadTrainData(QString filePath);
+	void generateDataFromTextFile(QString FilePath);
+
+	QVector<cv::Mat> generateTrainingFeatures(GaborFilterBank gfb, QStringList trainWords);
+	cv::Mat generateTestFeatures(QStringList testWords, QFont font, GaborFilterBank gfb);
+	cv::Mat generateSnytheticTestPage(QString filePath);
+	
+	double computePrecision(QVector<int> labels, int trueLabel);
+
 	DebugConfig mConfig;
 };
 

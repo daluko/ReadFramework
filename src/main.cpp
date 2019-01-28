@@ -116,6 +116,9 @@ int main(int argc, char** argv) {
 	QCommandLineOption xmlTableOpt(QStringList() << "t" << "table template", QObject::tr("Path to PAGE xml of table template. Table must be specified"), "templatepath");
 	parser.addOption(xmlTableOpt);
 
+	// font training data path
+	QCommandLineOption fontDataOpt(QStringList() << "w" << "font data", QObject::tr("Path to .csv or .txt file containing words for training font style classification."), "fontdata");
+	parser.addOption(fontDataOpt);
 
 	parser.process(*QCoreApplication::instance());
 	// CMD parser --------------------------------------------------------------------
@@ -173,6 +176,10 @@ int main(int argc, char** argv) {
 		dc.setTableTemplate(fc.templDatabase());
 	}
 
+	// add font data path
+	if (parser.isSet(fontDataOpt))
+		dc.setFontDataPath(parser.value(fontDataOpt));
+
 	// apply debug settings - convenience if you don't want to always change the cmd args
 	applyDebugSettings(dc);
 
@@ -224,8 +231,8 @@ int main(int argc, char** argv) {
 			//dirPath = "E:/data/test/HBR2013_training/test";
 
 			bool testTHE = false;
-			bool testWSA = true;
-			bool testFSC = false;
+			bool testWSA = false;
+			bool testFSC = true;
 
 			if (testTHE) {
 				rdf::TextHeightEstimationTest thet(dc);
@@ -248,8 +255,20 @@ int main(int argc, char** argv) {
 			}
 
 			if (testFSC) {
-				rdf::FontClassificationTest fct(dc);
-				fct.run();
+				rdf::FontStyleClassificationTest fct(dc);
+
+				//if (!dirPath.isEmpty())
+				//	fct.processDirectory(dirPath);
+				//else
+				//	fct.run();
+
+				if (!dc.fontDataPath().isEmpty()) {
+					fct.testSyntheticDataSet(dc.fontDataPath());
+				}
+				else {
+					qWarning() << "Can't test font style classification with synthetic data.";
+					qInfo() << "Use -w option to specify path to .csv or .txt file containing training data.";
+				}
 			}
 		}
 		// my section
@@ -330,6 +349,12 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		//dc.setXmlPath("C:/temp/T_Aigen_am_Inn_001_0056.xml");
 		qInfo() << dc.xmlPath() << "added as XML path";
 	} 
+
+	if (dc.fontDataPath().isEmpty()) {
+		QString fontDataPath = "F:/dev/da/CVL/ReadFrameworkDaluko/ReadFramework/resources/FontTrainData.csv";
+		dc.setFontDataPath(fontDataPath);		// overwrite
+		qInfo() << dc.fontDataPath() << "added as font data path";
+	}
 
 	// add your debug overwrites here...
 }

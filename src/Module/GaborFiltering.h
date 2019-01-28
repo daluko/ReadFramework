@@ -20,7 +20,7 @@
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
- The READ project  has  received  funding  from  the European  Unionâ€™s  Horizon  2020  
+ The READ project  has  received  funding  from  the European  Union’s  Horizon  2020  
  research  and innovation programme under grant agreement No 674943
  
  related links:
@@ -32,55 +32,58 @@
 
 #pragma once
 
+#include "Shapes.h"
+
 #pragma warning(push, 0)	// no warnings from includes
-#include <QString>
+#include <QSharedPointer>
+#include <opencv2/core.hpp>
+
 #pragma warning(pop)
 
-// TODO: add DllExport magic
+#pragma warning (disable: 4251)	// inlined Qt functions in dll interface
 
-// Qt defines
+#ifndef DllCoreExport
+#ifdef DLL_CORE_EXPORT
+#define DllCoreExport Q_DECL_EXPORT
+#else
+#define DllCoreExport Q_DECL_IMPORT
+#endif
+#endif
 
 namespace rdf {
 
-// read defines
-class DebugConfig{
+class DllCoreExport GaborFilterBank {
 
 public:
-	DebugConfig();
+	GaborFilterBank( QVector<double> lambda, QVector<double> theta, QVector<cv::Mat> kernels);
 
-	void setImagePath(const QString& path);
-	QString imagePath() const;
+	void setLambda(QVector<double> lambda);
+	void setTheta(QVector<double> theta);
+	void setKernels(QVector<cv::Mat> kernels);
 
-	void setXmlPath(const QString& path);
-	QString xmlPath() const;
+	QVector<double> lambda() const;
+	QVector<double> theta() const;
+	QVector<cv::Mat> kernels() const;
 
-	void setOutputPath(const QString& path);
-	QString outputPath() const;
+	QVector<cv::Mat> draw();
 
-	void setClassifierPath(const QString& path);
-	QString classifierPath() const;
+private:
+	QVector<cv::Mat> mKernels;
+	QVector<double> mLambda;
+	QVector<double> mTheta;
+};
 
-	void setLabelConfigPath(const QString& path);
-	QString labelConfigPath() const;
+/// <summary>
+/// Contains basic functions to perform gabor filtering on images.
+/// </summary>
+class DllCoreExport GaborFiltering {
 
-	void setFeatureCachePath(const QString& path);
-	QString featureCachePath() const;
+public:
+	static cv::Mat createGaborKernel(int ksize, double lambda, double theta, double sigma);
+	static GaborFilterBank createGaborFilterBank(QVector<double> lambda, QVector<double> theta,
+		int ksize, double sigma = -1, double psi = 0.0, double gamma = 1.0, bool openCV = false);
 
-	void setTableTemplate(const QString& tableTemplate);
-	QString tableTemplate() const;
-
-	void setFontDataPath(const QString & path);
-	QString fontDataPath() const;
-
-protected:
-	QString mImagePath;
-	QString mXMLPath;
-	QString mXMLTableTemplate;
-	QString mOutputPath;
-	QString mClassifierPath;
-	QString mFeatureCachePath;
-	QString mLabelConfigPath;
-	QString mFontDataPath;
+	static cv::Mat extractGaborFeatures(cv::Mat img, GaborFilterBank);
 };
 
 }

@@ -106,4 +106,12 @@ QString DebugConfig::tableTemplate() const {
 	return mXMLTableTemplate;
 }
 
+void DebugConfig::setFontDataPath(const QString & path) {
+	mFontDataPath = path;
+}
+
+QString DebugConfig::fontDataPath() const {
+	return mFontDataPath;
+}
+
 }
