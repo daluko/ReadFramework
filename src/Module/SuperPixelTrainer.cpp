@@ -533,6 +533,21 @@ bool FeatureCollectionManager::isEmpty() const {
 	return mCollection.isEmpty();
 }
 
+QJsonObject FeatureCollectionManager::toJson(const QString & filePath) const {
+	
+	QJsonArray ja;
+
+	// NOTE: JSON objects have a size limit ~40MB
+	for (const FeatureCollection& fc : mCollection) {
+		ja << fc.toJson(filePath);
+	}
+
+	QJsonObject jo;
+	jo.insert(FeatureCollection::jsonKey(), ja);
+
+	return jo;
+}
+
 void FeatureCollectionManager::write(const QString & filePath) const {
 
 	QJsonArray ja;
@@ -574,6 +589,46 @@ void FeatureCollectionManager::add(const FeatureCollection & collection) {
 
 QVector<FeatureCollection> FeatureCollectionManager::collection() const {
 	return mCollection;
+}
+
+QVector<cv::Mat> FeatureCollectionManager::collectionCentroids() const {
+
+	QVector<cv::Mat> cCentroids;
+
+	for (auto c : collection()) {
+		cv::Mat desc = c.descriptors();
+		cv::Mat centroid;
+
+		//compute centroid for each collection
+		for (int i = 0; i < desc.size().width; ++i) {
+			cv::Scalar mean;
+			meanStdDev(desc.col(i), mean, cv::noArray());
+			centroid.push_back<double>(mean[0]);
+		}
+
+		centroid.convertTo(centroid, CV_32FC1);
+		cv::transpose(centroid, centroid);
+		cCentroids << centroid;
+	}
+
+	return cCentroids;
+}
+
+cv::Mat FeatureCollectionManager::featureSTD() const {
+
+	cv::Mat samples = toCvTrainData(-1, false)->getSamples();
+	cv::Mat featSTD;
+
+	for (int i = 0; i < samples.size().width; ++i) {
+		cv::Scalar stddev;
+		meanStdDev(samples.col(i), cv::noArray(), stddev);
+		featSTD.push_back<double>(stddev[0]);
+	}
+
+	featSTD.convertTo(featSTD, CV_32FC1);
+	cv::transpose(featSTD, featSTD);
+
+	return featSTD;
 }
 
 int FeatureCollectionManager::numFeatures() const {
@@ -647,10 +702,10 @@ QString FeatureCollectionManager::toString() const {
 	return str;
 }
 
-cv::Ptr<cv::ml::TrainData> FeatureCollectionManager::toCvTrainData(int maxSamples) const {
+cv::Ptr<cv::ml::TrainData> FeatureCollectionManager::toCvTrainData(int maxSamples, bool normalize) const {
 
 	assert(numFeatures() > 0);
-	cv::Mat features = allFeatures();
+	cv::Mat features = allFeatures(normalize);
 	cv::Mat labels = allLabels();
 
 	if (maxSamples != -1 && features.rows > maxSamples) {
@@ -680,7 +735,7 @@ LabelManager FeatureCollectionManager::toLabelManager() const {
 /// Merges all features for training.
 /// </summary>
 /// <returns></returns>
-cv::Mat FeatureCollectionManager::allFeatures() const {
+cv::Mat FeatureCollectionManager::allFeatures(bool normalize) const {
 
 	cv::Mat features;
 
@@ -702,15 +757,19 @@ cv::Mat FeatureCollectionManager::allFeatures() const {
 	cv::minMaxLoc(features, &minV, &maxV);
 
 	// normalize
-	if (minV != maxV) {
-		double dr = 1.0 / (maxV - minV);
-		features.convertTo(features, CV_32FC1, dr, -dr * minV);
+	if (normalize) {
+		if (minV != maxV) {
+			double dr = 1.0 / (maxV - minV);
+			features.convertTo(features, CV_32FC1, dr, -dr * minV);
+		}
+		else {
+			qWarning() << "I seem to get weird values here: ";
+			features.convertTo(features, CV_32FC1);
+			Image::imageInfo(features, "features");
+		}
 	}
-	else {
-		qWarning() << "I seem to get weird values here: ";
-		features.convertTo(features, CV_32FC1);
-		Image::imageInfo(features, "features");
-	}
+
+	features.convertTo(features, CV_32FC1);
 
 	return features;
 }
@@ -740,6 +799,7 @@ cv::Mat FeatureCollectionManager::allLabels() const {
 
 	return labels;
 }
+
 
 // SuperPixelTrainerConfig --------------------------------------------------------------------
 SuperPixelTrainerConfig::SuperPixelTrainerConfig() : ModuleConfig("SuperPixelTrainer") {

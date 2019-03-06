@@ -103,6 +103,7 @@ public:
 
 	bool isEmpty() const;
 
+	QJsonObject toJson(const QString & filePath) const;
 	void write(const QString& filePath) const;
 	static FeatureCollectionManager read(const QString& filePath);
 	
@@ -111,18 +112,21 @@ public:
 	void normalize(int minFeaturesPerClass, int maxFeaturesPerClass);
 
 	QVector<FeatureCollection> collection() const;
+	QVector<cv::Mat> collectionCentroids() const;
+	cv::Mat featureSTD() const;
 
 	int numFeatures() const;
 
 	QString toString() const;
-	cv::Ptr<cv::ml::TrainData> toCvTrainData(int maxSamples = -1) const;
+	cv::Ptr<cv::ml::TrainData> toCvTrainData(int maxSamples = -1, bool normalize = true) const;
 	LabelManager toLabelManager() const;
 
 protected:
 	QVector<FeatureCollection> mCollection;
 
-	cv::Mat allFeatures() const;
+	cv::Mat allFeatures(bool normalize = true) const;
 	cv::Mat allLabels() const;
+	
 };
 
 /// <summary>

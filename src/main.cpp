@@ -117,7 +117,7 @@ int main(int argc, char** argv) {
 	parser.addOption(xmlTableOpt);
 
 	// font training data path
-	QCommandLineOption fontDataOpt(QStringList() << "w" << "font data", QObject::tr("Path to .csv or .txt file containing words for training font style classification."), "fontdata");
+	QCommandLineOption fontDataOpt(QStringList() << "w" << "font data", QObject::tr("Path to directory containing training data for font style classification."), "fontdata");
 	parser.addOption(fontDataOpt);
 
 	parser.process(*QCoreApplication::instance());
@@ -351,7 +351,7 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 	} 
 
 	if (dc.fontDataPath().isEmpty()) {
-		QString fontDataPath = "F:/dev/da/CVL/ReadFrameworkDaluko/ReadFramework/resources/FontTrainData.csv";
+		QString fontDataPath = "F:/dev/da/data/SynthFontData/";
 		dc.setFontDataPath(fontDataPath);		// overwrite
 		qInfo() << dc.fontDataPath() << "added as font data path";
 	}

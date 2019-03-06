@@ -69,14 +69,22 @@ public:
 	void testSyntheticDataSet(QString filePath);
 
 protected:
-	QStringList loadTrainData(QString filePath);
-	void generateDataFromTextFile(QString FilePath);
+	QStringList loadTextSamples(QString filePath);
+	bool generateDataSet(QStringList sample, LabelManager labelManager, QString outputFilePath);
+	bool readDataSet(QString inputFilePath, FeatureCollectionManager & fcm, QStringList & samples) const;
 
-	QVector<cv::Mat> generateTrainingFeatures(GaborFilterBank gfb, QStringList trainWords);
-	cv::Mat generateTestFeatures(QStringList testWords, QFont font, GaborFilterBank gfb);
-	cv::Mat generateSnytheticTestPage(QString filePath);
+	QStringList generateSamplesFromTextFile(QString filePath, int minWordLength = 4, bool removeDuplicates = true);
+	QVector<QStringList> splitSampleSet(QStringList samplesSet, double ratio = 0.8);
 	
-	double computePrecision(QVector<int> labels, int trueLabel);
+	LabelManager generateFontLabelManager();
+	QVector<QSharedPointer<TextPatch>> generateTextPatches(QStringList textSamples, LabelManager labelManager);
+	FeatureCollectionManager generatePatchFeatures(QVector<QSharedPointer<TextPatch>> textPatches);
+	cv::Mat generateSnytheticTestPage(QString filePath);
+
+	void evalSyntheticDataResults(const QVector<QSharedPointer<TextPatch>>& textPatches, 
+		const LabelManager labelManager, QString outputDir = QString()) const;
+	double computePrecision(const QVector<QSharedPointer<TextPatch>>& textPatches) const;
+	void writeEvalResults(QString evalSummary, QString outputDir) const;
 
 	DebugConfig mConfig;
 };
