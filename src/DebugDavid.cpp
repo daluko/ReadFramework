@@ -51,11 +51,19 @@
 #include <QFileInfo>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QFontDataBase>
+#include <QTextCursor>
+#include <QTextDocumentFragment>
+#include <QTextBlock>
+#include <QAbstractTextDocumentLayout>
+#include <QTextList>
+#include <QRandomGenerator>
 #pragma warning(pop)
 
 
 namespace rdf {
 
+// text height estimation test
 TextHeightEstimationTest::TextHeightEstimationTest(const DebugConfig & config) {
 	mConfig = config;
 }
@@ -119,7 +127,8 @@ void TextHeightEstimationTest::processDirectory(QString dirPath) {
 
 	qInfo() << "Directory processed in " << dt;
 }
-	
+
+// white space test
 WhiteSpaceTest::WhiteSpaceTest(const DebugConfig & config) {
 	mConfig = config;
 }
@@ -144,7 +153,6 @@ void WhiteSpaceTest::run() {
 		wsa.config()->setDebugPath(mConfig.imagePath());
 	
 	wsa.config()->setDebugDraw(debugDraw);
-
 	wsa.compute();
 
 	QString xmlPath;
@@ -191,7 +199,7 @@ void WhiteSpaceTest::run() {
 
 	////-------------------------eval xml text block regions
 
-	//NOTE: produce eval xml at the end -> text lines (children) are removed from results
+	//NOTE: produce eval block xml at the end -> text lines (children) are removed from results
 	xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.imagePath());
 	xml_found = parser.read(xmlPath);
 
@@ -238,6 +246,7 @@ void WhiteSpaceTest::processDirectory(QString dirPath) {
 	qInfo() << "Directory processed in " << dt;
 }
 
+// font style classification test
 FontStyleClassificationTest::FontStyleClassificationTest(const DebugConfig & config) {
 	mConfig = config;
 }
@@ -256,7 +265,7 @@ void FontStyleClassificationTest::run() {
 		return;
 	}
 
-	QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.outputPath());
+	QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.imagePath());
 	rdf::PageXmlParser parser;
 	bool xml_found = parser.read(xmlPath);
 
@@ -276,6 +285,7 @@ void FontStyleClassificationTest::run() {
 	FontStyleClassification fsc(imgCv, textLineRegions);
 	fsc.compute();
 
+	//draw results and compare with gt if available
 	cv::Mat img_result = fsc.draw(imgCv);
 	QString imgPath = Utils::createFilePath(xmlPath, "_fsc_results", "png");
 	Image::save(img_result, imgPath);
@@ -309,47 +319,68 @@ void FontStyleClassificationTest::processDirectory(const QString dirPath){
 	qInfo() << "Directory processed in " << dt;
 }
 
-void FontStyleClassificationTest::testSyntheticDataSet(QString filePath){
+void FontStyleClassificationTest::testSyntheticDataSet(QString fontDataDir, int maxSampleCount){
 
 	//TODO consider using duplicate words for training, should be avoided for test
-	//TODO create font style data set class and store test and train data set (+ text patches) in one file only
+	//TODO store test and train data set (+ text patches) in one file only
+	//TODO create text image synthesizer class encapsulating functions for creating snythetic data
 	//TODO refactoring
 
-	//generate file path for saving train data
-	QString fontDataDir = QFileInfo(filePath).absolutePath();
-	QString rtPath = QFileInfo(fontDataDir, "FontTrainData_rt.txt").absoluteFilePath();
-	QString trainDataSetPath = QFileInfo(fontDataDir, "FontStyleDataSet_train.txt").absoluteFilePath();
-	QString testDataSetPath = QFileInfo(fontDataDir, "FontStyleDataSet_test.txt").absoluteFilePath();
-	QString classifierPath = QFileInfo(fontDataDir, "FontStyleClassifier.txt").absoluteFilePath();
+	Timer dt;
 
-	//generate data sets (if files do not exist)
-	if (!QFileInfo(trainDataSetPath).exists() && !QFileInfo(testDataSetPath).exists()) {
+	QString rtPath, trainDataSetPath, testDataSetPath, classifierPath, outputDir;
 
-		QStringList wordList = generateSamplesFromTextFile(rtPath);
+	QStringList samples_train, samples_test;
+	FeatureCollectionManager fcm_train, fcm_test;
 
+	fontDataDir = QFileInfo(fontDataDir).absoluteFilePath();
+
+	rtPath = QFileInfo(fontDataDir, "FontTrainData_rt.txt").absoluteFilePath();
+	trainDataSetPath = QFileInfo(fontDataDir, "FontStyleDataSet_train.txt").absoluteFilePath();
+	
+	testDataSetPath = QFileInfo(fontDataDir, "FontStyleDataSet_test.txt").absoluteFilePath();
+	testDataSetPath = QFileInfo(fontDataDir, "FontStyleDataSet_test.txt").absoluteFilePath();
+
+	classifierPath = QFileInfo(fontDataDir, "FontStyleClassifier.txt").absoluteFilePath();
+	outputDir = QFileInfo(classifierPath).absolutePath();
+
+	if (maxSampleCount != -1) {
+		QString classifierDir = QFileInfo(fontDataDir + QDir::separator() + QString::number(maxSampleCount) + QDir::separator()).absoluteFilePath();
+		if (!QDir().mkpath(classifierDir)) {
+			qWarning() << "Unable to create font style classifier directory.";
+			return;
+		}
+		classifierPath = QFileInfo(classifierDir, "FontStyleClassifier.txt").absoluteFilePath();
+	}
+	
+	//fonts used for test
+	QVector<QFont> fonts = generateFonts(4, {"Georgia"});
+
+	qDebug() << "trainDataSetPath" << trainDataSetPath;
+	qDebug() << "testDataSetPath" << testDataSetPath;
+
+	//load or generate data sets from file
+	if (!QFileInfo(trainDataSetPath).exists() || !QFileInfo(testDataSetPath).exists()){
+		
+		QStringList wordList = loadWordSamples(rtPath);
 		if (wordList.isEmpty())
 			return;
 
 		QVector<QStringList> sampleSets = splitSampleSet(wordList);
-		LabelManager lm = generateFontLabelManager();
-
-		generateDataSet(sampleSets[0], lm, trainDataSetPath);
-		generateDataSet(sampleSets[1], lm, testDataSetPath);
+			
+		if (!generateDataSet(sampleSets[0], fonts, trainDataSetPath) || !generateDataSet(sampleSets[1], fonts, testDataSetPath))
+			return;
 	}
 
-	//load data sets
-	QStringList samples_train, samples_test;
-	FeatureCollectionManager fcm_train, fcm_test;
-
-	if (!readDataSet(trainDataSetPath, fcm_train, samples_train))
+	if (!readDataSet(trainDataSetPath, fcm_train, samples_train) || !readDataSet(testDataSetPath, fcm_test, samples_test))
 		return;
 
-	if (!readDataSet(testDataSetPath, fcm_test, samples_test))
-		return;
-
-	//generate test data
-	auto labelManager = fcm_train.toLabelManager();
-	QVector<QSharedPointer<TextPatch>> textPatches_test = generateTextPatches(samples_test, labelManager);
+	//reduce training data set size (for evaluation purpose)
+	if (maxSampleCount > 0) {
+		reduceSampleCount(fcm_train, maxSampleCount);
+		samples_train = samples_train.mid(0, maxSampleCount);
+		qDebug() << "Number of training samples reduced to: " << samples_train.size();
+	}
 
 	//load or generate font style classifier
 	QSharedPointer<FontStyleClassifier> fsClassifier;
@@ -358,18 +389,17 @@ void FontStyleClassificationTest::testSyntheticDataSet(QString filePath){
 
 		fsClassifier = FontStyleClassifier::read(classifierPath);
 		if (fsClassifier->isEmpty()) {
-			qCritical() << "Failed to load existing classifier from file.";
-			qInfo()		<< "Delete existing file to generate a new one.";
+			qInfo()		<< "Delete existing file to generate a new classifier.";
 			return;
 		}
 	}
 	else{
 		auto fst = FontStyleTrainer(fcm_train);
 
-		////test different classfier modes
+		//test different classfier modes
 		//auto fstConfig = fst.config();
-		//fstConfig->setModelType(FontStyleClassifier::classify_bayes);
-		//fstConfig->setDefaultK(25);
+		//fstConfig->setModelType(FontStyleClassifier::classify_knn);
+		//fstConfig->setDefaultK(20);
 
 		if (!fst.compute()) {
 			qCritical() << "Failed to train font style classifier.";
@@ -379,6 +409,10 @@ void FontStyleClassificationTest::testSyntheticDataSet(QString filePath){
 		fsClassifier = fst.classifier();
 		fsClassifier->write(classifierPath);	//optional
 	}
+
+	//generate test data
+	auto labelManager = fcm_train.toLabelManager();
+	QVector<QSharedPointer<TextPatch>> textPatches_test = generateTextPatches(samples_test, labelManager);
 
 	//compute font style classification results
 	FontStyleClassification fsc = FontStyleClassification(textPatches_test, testDataSetPath);
@@ -391,19 +425,149 @@ void FontStyleClassificationTest::testSyntheticDataSet(QString filePath){
 
 	//compute evaluation results
 	auto textPatches = fsc.textPatches();
-	evalSyntheticDataResults(textPatches, labelManager, fontDataDir);
+	evalSyntheticDataResults(textPatches, labelManager, outputDir);
 
-	qInfo() << "Finished font style classification test on synthetic data.";
+	qInfo() << "Finished font style classification test on synthetic data in "  << dt << ".";
+}
+
+void FontStyleClassificationTest::testSyntheticPage(QString pageDataPath, QString trainDataPath) {
+
+	//TODO add possibility to train classifier from text lines instead of synthetic patches
+	//TODO write region classification results to xml file
+	//TODO write/read multiple label tags in custom string of regions
+	//TODO use additional style label parameter for differentiation of gt/predicted labels
+
+	int maxSamples = 2000;	//max num of sample used for training classifier for synthetic page
+
+	//generate fonts used in synthetic page
+	//QVector<QFont> pageFonts = generateFonts(4, { "Arial" });
+	
+	QVector<QFont> pageFonts;
+	QFont font;
+	font.fromString("Arial,-1,30,5,50,0,0,0,0,0");
+	pageFonts << font;
+	font.fromString("Franklin Gothic Medium,-1,30,5,75,0,0,0,0,0");
+	pageFonts << font;
+	font.fromString("Times New Roman,-1,30,5,75,1,0,0,0,0");
+	pageFonts << font;
+	font.fromString("Georgia,-1,30,5,50,1,0,0,0,0");
+	pageFonts << font;
+
+	//generate synthetic page image (+ GT)
+	cv::Mat synthPageCv;
+
+	QString syntheticImagePath = QFileInfo(pageDataPath).absolutePath();
+	syntheticImagePath = QFileInfo(syntheticImagePath, "syntheticPage.png").absoluteFilePath();
+	QString outputDir = QFileInfo(pageDataPath).absolutePath();
+
+	//load or generate synthetic page image
+	if (!QFileInfo(syntheticImagePath).exists()) {
+		if (!generateSnytheticTestPage(pageDataPath, syntheticImagePath, pageFonts)) {
+			qDebug() << "Failed to generate synthetic page image.";
+			return;
+		}
+	}
+	
+	synthPageCv = Image::qImage2Mat(QImage(syntheticImagePath));
+
+	if (synthPageCv.empty()) {
+		qCritical() << "Failed to load synthetic page image.";
+		return;
+	}
+
+	//generate training data set for classifier (if files do not exist)
+	QString trainDataSetPath = Utils::createFilePath(trainDataPath, "_fcm_train", "txt");
+	if (!QFileInfo(trainDataSetPath).exists()) {
+		QStringList wordList = loadWordSamples(trainDataPath);
+		wordList = wordList.mid(0, maxSamples);	//reduce amount of training samples
+		if (wordList.isEmpty())
+			return;
+
+		generateDataSet(wordList, pageFonts, trainDataSetPath);
+	}
+
+	//load data sets
+	QStringList samples_train;
+	FeatureCollectionManager fcm_train;
+
+	if (!readDataSet(trainDataSetPath, fcm_train, samples_train))
+		return;
+
+	//load or generate font style classifier
+	QString classifierDir = QFileInfo(trainDataSetPath).absolutePath();
+	QString classifierPath = QFileInfo(classifierDir, "FontStyleClassifier.txt").absoluteFilePath();
+
+	//load or generate font style classifier
+	QSharedPointer<FontStyleClassifier> fsClassifier;
+	if (QFileInfo(classifierPath).exists()) {
+		qInfo() << "Loading existing classifier from  file: " << classifierPath;
+
+		fsClassifier = FontStyleClassifier::read(classifierPath);
+		if (fsClassifier->isEmpty())
+			return;
+	}
+	else {
+		qInfo() << "Generating new font style classifier from training data.";
+		auto fst = FontStyleTrainer(fcm_train);
+
+		if (!fst.compute())
+			return;
+
+		fsClassifier = fst.classifier();
+		fsClassifier->write(classifierPath);	//optional
+	}
+
+	//get label manager
+	LabelManager lm = fsClassifier->manager();
+	
+	//compute font style classification results for text lines
+	QVector<QSharedPointer<TextLine>> textLineRegions = loadTextLines(syntheticImagePath);
+
+	FontStyleClassification fsc = FontStyleClassification(synthPageCv, textLineRegions);
+	fsc.setClassifier(fsClassifier);
+
+	if (!fsc.compute()) {
+		qCritical() << "Failed to compute font style classification results";
+		return;
+	}
+
+	auto resultPatches = fsc.textPatches();
+
+	//map style results to GT regions and compute evaluation results
+	auto gtRegions = loadWordRegions(syntheticImagePath);
+
+	////remove patches of short words
+	//QVector<QSharedPointer<TextRegion>> longWordRegions;
+	//for (auto wr : gtRegions) {
+	//	if (wr->text().length() >= 4)
+	//		longWordRegions << wr;
+	//}
+	//gtRegions = longWordRegions;
+
+	auto gtPatches = regionsToTextPatches(gtRegions, lm, synthPageCv);
+	fsc.mapStyleToPatches(gtPatches);
+
+	//compute evaluation results based on GT regions
+	evalSyntheticDataResults(gtPatches, lm, outputDir);
+
+	////debug/visualize results
+	//cv::Mat predResults_gtPtaches = fsc.draw(synthPageCv, gtPatches, FontStyleClassification::draw_patch_results);
+	//cv::Mat trueResults_gtPtaches = fsc.draw(synthPageCv, gtPatches, FontStyleClassification::draw_comparison);
+	//cv::Mat compResults_gtPtaches = fsc.draw(synthPageCv, gtPatches, FontStyleClassification::draw_gt);
+	//cv::Mat predResults = fsc.draw(synthPageCv);
 }
 
 bool FontStyleClassificationTest::generateDataSet(QStringList samples,
-	LabelManager labelManager, QString outputFilePath) {
+	QVector<QFont> fonts, QString outputFilePath) {
 
-	QFileInfo outputFilePathInfo(outputFilePath);
-	if (outputFilePathInfo.exists()) {
-		qWarning() << "File already exists. Delete existing file to generate new one:" << outputFilePathInfo.absoluteFilePath();
+	Timer dt;
+
+	if (QFileInfo(outputFilePath).exists()) {
+		qWarning() << "File already exists. Delete existing file to generate new one:" << outputFilePath;
 		return false;
 	}
+
+	LabelManager labelManager = generateFontLabelManager(fonts);
 
 	if (samples.isEmpty() || labelManager.isEmpty()) {
 		qCritical() << "Could not generate data set, missing input data.";
@@ -420,6 +584,8 @@ bool FontStyleClassificationTest::generateDataSet(QStringList samples,
 	jo.insert("wordSamples", ja);
 
 	Utils::writeJson(outputFilePath, jo);
+
+	qDebug() << "Generated data set file in " << dt;
 
 	return true;
 }
@@ -441,23 +607,29 @@ bool FontStyleClassificationTest::readDataSet(QString inputFilePath, FeatureColl
 	return true;
 }
 
-QStringList FontStyleClassificationTest::generateSamplesFromTextFile(QString filePath, int minWordLength, bool removeDuplicates) {
+void FontStyleClassificationTest::reduceSampleCount(FeatureCollectionManager & fcm, int sampleCount) const{
 
-	QFile file(filePath);
-	if (!file.open(QIODevice::ReadOnly)) {
-		qInfo() << "Could not open file: " << filePath;
-		return QStringList();
+	FeatureCollectionManager fcm_;
+
+	if (sampleCount < fcm.collection()[0].numDescriptors()) {
+		for (FeatureCollection & c : fcm.collection()) {
+			if (sampleCount >= c.numDescriptors())
+				break;
+
+			cv::Mat desc_temp = c.descriptors().rowRange(cv::Range(0, sampleCount));
+			c.setDescriptors(desc_temp);
+			fcm_.add(c);
+		}
+		fcm = fcm_;                                                                                                                                                                            
 	}
+}
 
-	QTextStream inStream(&file);
-	QString inputText = inStream.readAll();
-	inStream.flush();
-	file.close();
+QStringList FontStyleClassificationTest::loadWordSamples(QString filePath, int minWordLength, bool removeDuplicates) {
 
-	if (inputText.isEmpty()) {
-		qInfo() << "Text file is empty.";
+	QString inputText = readTextFromFile(filePath);
+
+	if (inputText.isEmpty())
 		return QStringList();
-	}
 
 	//use alphanumeric symbols only 
 	inputText = inputText.replace(QRegExp(QString::fromUtf8("[-`~!@#$%^&*()_â€”+=|:;<>Â«Â»,.?/{}\'\"\\\[\\\]\\\\]")), " ");
@@ -489,6 +661,27 @@ QStringList FontStyleClassificationTest::generateSamplesFromTextFile(QString fil
 	return wordList;
 }
 
+QString FontStyleClassificationTest::readTextFromFile(QString filePath) {
+
+	QFile file(filePath);
+	if (!file.open(QIODevice::ReadOnly)) {
+		qInfo() << "Could not open file: " << filePath;
+		return QString();
+	}
+
+	QTextStream inStream(&file);
+	QString inputText = inStream.readAll();
+	inStream.flush();
+	file.close();
+
+	if (inputText.isEmpty()) {
+		qInfo() << "Input file is empty: " << filePath;
+		return QString();
+	}
+
+	return inputText;
+}
+
 QVector<QStringList> FontStyleClassificationTest::splitSampleSet(QStringList sampleSet, double ratio) {
 
 	if (sampleSet.isEmpty()) {
@@ -505,6 +698,68 @@ QVector<QStringList> FontStyleClassificationTest::splitSampleSet(QStringList sam
 	QVector<QStringList> splitSets = {wordListTrain, wordListTest};
 
 	return splitSets;
+}
+
+QVector<QSharedPointer<TextLine>> FontStyleClassificationTest::loadTextLines(QString imagePath){
+	
+	QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(imagePath);
+
+	rdf::PageXmlParser parser;
+	bool xml_found = parser.read(xmlPath);
+
+	if (!xml_found) {
+		qInfo() << xmlPath << "NOT found...";
+		return QVector<QSharedPointer<TextLine>>();
+	}
+
+	QSharedPointer<PageElement> xmlPage = parser.page();
+	QVector<QSharedPointer<TextLine>> textLineRegions = RegionManager::filter<TextLine>(xmlPage->rootRegion(), Region::type_text_line);
+
+	return textLineRegions;
+}
+
+QVector<QSharedPointer<TextRegion>> FontStyleClassificationTest::loadWordRegions(QString imagePath) {
+
+	QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(imagePath);
+
+	rdf::PageXmlParser parser;
+	bool xml_found = parser.read(xmlPath);
+
+	if (!xml_found) {
+		qInfo() << xmlPath << "NOT found...";
+		return QVector<QSharedPointer<TextRegion>>();
+	}
+
+	QSharedPointer<PageElement> xmlPage = parser.page();
+	QVector<QSharedPointer<TextRegion>> wordRegions = RegionManager::filter<TextRegion>(xmlPage->rootRegion(), Region::type_text_region);
+
+	return wordRegions;
+}
+
+QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::regionsToTextPatches(QVector<QSharedPointer<TextRegion>> wordRegions, LabelManager lm, cv::Mat img) {
+
+	QVector<QSharedPointer<TextPatch>> textPatches = QVector<QSharedPointer<TextPatch>>();
+
+	if (wordRegions.isEmpty()) {
+		qWarning() << "No regions to convert here.";
+		return textPatches;
+	}
+
+	for (auto wr : wordRegions) {
+		Rect trRect = Rect::fromPoints(wr->polygon().toPoints());
+		cv::Mat patchTexture = img(trRect.toCvRect());
+		
+		QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(patchTexture);
+
+		LabelInfo trLabel =  lm.find(wr->custom());
+		
+		if(!trLabel.isNull())
+			tp->label()->setTrueLabel(trLabel);
+
+		tp->setPolygon(wr->polygon());
+		textPatches << tp;
+	}
+	return textPatches;
 }
 
 QStringList FontStyleClassificationTest::loadTextSamples(QString filePath) {
@@ -553,8 +808,10 @@ QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateTextPatc
 	for (auto l : fontStyleLabels) {
 		for (auto s : textSamples) {
 			auto tp = QSharedPointer<TextPatch>::create(s, l);
-			if (!tp->isEmpty())
+			if (!tp->isEmpty()) {
 				textPatches << tp;
+			}
+				
 		}
 	}
 
@@ -568,6 +825,11 @@ FeatureCollectionManager FontStyleClassificationTest::generatePatchFeatures(QVec
 	//generate feature collection for each training sample and font style
 	GaborFilterBank gfb = FontStyleClassification::createGaborKernels();
 
+	////debug
+	//auto gfb_imgs = gfb.draw();
+	//cv::Mat gfb_img0 = gfb_imgs[0];
+	//cv::Mat gfb_img1 = gfb_imgs[1];
+
 	qInfo() << "Computing features for sample text patches. This might take a while...";
 	cv::Mat tpFeatures = FontStyleClassification::computeGaborFeatures(textPatches, gfb);
 
@@ -577,33 +839,19 @@ FeatureCollectionManager FontStyleClassificationTest::generatePatchFeatures(QVec
 	return fcm;
 }
 
-LabelManager FontStyleClassificationTest::generateFontLabelManager() {
+LabelManager FontStyleClassificationTest::generateFontLabelManager(QVector<QFont> fonts) {
 
 	LabelManager labelManager = LabelManager();
 	QVector<QString> labelNames;
 	QVector<LabelInfo> fontLabels;
 
-	bool italic = false;
-	int weight = QFont::Normal;
-	int size = 30;
-	QString fFamily = "Arial";
-	QFont font(fFamily, size, weight, italic);
+	if (fonts.isEmpty()) {
+		qWarning() << "Missing fonts for creation of label manager";
+		return labelManager;
+	}
 
-	QVector<QFont> fontStyleCollection;
-	fontStyleCollection << font;
-	
-	font.setBold(true);
-	fontStyleCollection << font;
-
-	font.setBold(true);
-	font.setItalic(true);
-	fontStyleCollection << font;
-
-	font.setBold(false);
-	fontStyleCollection << font;
-
-	for (int i = 0; i < fontStyleCollection.size(); i++) {
-		QString labelName = FontStyleClassification::fontToLabelName(fontStyleCollection[i]);
+	for (int i = 0; i < fonts.size(); i++) {
+		QString labelName = FontStyleClassification::fontToLabelName(fonts[i]);
 		LabelInfo label(i + 1, labelName);
 
 		labelNames << labelName;
@@ -613,37 +861,259 @@ LabelManager FontStyleClassificationTest::generateFontLabelManager() {
 	return labelManager;
 }
 
-cv::Mat FontStyleClassificationTest::generateSnytheticTestPage(QString filePath) {
+bool FontStyleClassificationTest::generateSnytheticTestPage(QString filePath, QString outputFilePath, QVector<QFont> synthPageFonts) {
 
-	FontStyleClassification fsc = FontStyleClassification();
+	//read in text file and create QDocument from it
+	QString inputText = readTextFromFile(filePath);
 
-	//font used for printing test page
-	bool italic = false;
-	int weight = QFont::Normal;
-	int size = 30;
-	QString fFamily = "Arial";
-	QFont font(fFamily, size, weight, italic);
-	
-	QFile file(filePath);
+	if (inputText.isEmpty())
+		return false;
 
-	if (!file.open(QIODevice::ReadOnly)) {
-		qInfo() << "Could not open text file containing test data.";
-		return cv::Mat();
-	}
-	
-	QTextStream inStream(&file);
-	QString inputText = inStream.readAll();
-	file.close();
-
-	if (inputText.isEmpty()) {
-		qInfo() << "Text file is empty.";
-		return cv::Mat();
+	if (synthPageFonts.isEmpty()) {
+		qWarning() << "Missing fonts for generation of synthetic test page.";
+		return false;
 	}
 
-	//cv::Mat textImg = fsc.generateTextImage(inputText, font, QRect(0, 0, 1000, 2000), false);
-	cv::Mat textImg = fsc.generateTextImage(inputText, font, QRect(), false);
+	//create document for rendering synthetic page image
+	QTextDocument doc;
+	QTextCursor cursor = QTextCursor(&doc);
+	cursor.insertText(inputText);
 
-	return textImg;
+	//apply random font styles
+	int fIdx = QRandomGenerator::global()->bounded(0, synthPageFonts.size());
+	int fCount = QRandomGenerator::global()->bounded(1, 16);
+	QTextCharFormat textFormat;
+	textFormat.setFont(synthPageFonts[fIdx]);
+
+	cursor.movePosition(QTextCursor::Start);
+	while (!cursor.atEnd()) {
+		cursor.select(QTextCursor::WordUnderCursor);
+
+		if (!cursor.selectedText().isEmpty()) {
+			if (fCount == 0) {
+				fIdx = QRandomGenerator::global()->bounded(0, synthPageFonts.size());
+				fCount = QRandomGenerator::global()->bounded(1, 16);
+				textFormat.setFont(synthPageFonts[fIdx]);
+			}
+			cursor.setCharFormat(textFormat);
+			--fCount;
+		}
+		cursor.movePosition(QTextCursor::NextWord);
+	}
+
+	//draw synthetic text page
+	doc.documentLayout();
+	QImage qImg = QImage(doc.size().toSize(), QImage::Format_ARGB32);
+	qImg.fill(QColor(255, 255, 255, 255)); //white background
+
+	QPainter p(&qImg);
+	doc.drawContents(&p);
+
+	cv::Mat synthPageImg  = Image::qImage2Mat(qImg);
+
+	//save page image 
+	if (Image::save(synthPageImg, outputFilePath)) {
+		if (!generateGroundTruthData(doc, outputFilePath))
+			qWarning() << "Failed to generate ground truth file for synthetic page.";
+
+		qInfo() << "Synthetic page image saved to: " << outputFilePath;
+	}
+	else{
+		qWarning() << "Failed to save synthetic page image."; 
+		return false;
+	}
+
+	return true;
+}
+
+bool FontStyleClassificationTest::generateGroundTruthData(QTextDocument& doc, QString filePath){
+
+	QVector<QSharedPointer<TextRegion>> mTextLineRegions;
+	QVector<QSharedPointer<Region>> textLineRegions;
+
+	QTextCursor cursor = QTextCursor(&doc);
+	cursor.movePosition(QTextCursor::Start);
+	cursor.select(QTextCursor::WordUnderCursor); //LineUnderCursor | BlockUnderCursor
+
+	// find bounding boxes of each word
+	QTextBlock textBlock = cursor.block();
+	QTextLine textLine = textBlock.layout()->lineForTextPosition(cursor.positionInBlock());
+	QTextFrameFormat rootFrameFormat = doc.rootFrame()->frameFormat();
+
+	while (!cursor.atEnd()) {
+
+		//process QTextBlock
+		if (textBlock.isValid()) {
+			textBlock = cursor.block();
+			
+			//compute text line bounding box
+			textLine = textBlock.layout()->lineForTextPosition(cursor.positionInBlock());
+			QRectF blockBoundingRect = doc.documentLayout()->blockBoundingRect(textBlock);
+			QSharedPointer<TextLine> textLineRegion = QSharedPointer<TextLine>::create();
+
+			//process QTextLine
+			if (textLine.isValid()) {
+				QRectF croppedLineBox; //bounding box of line area covered by words (cropping trailing or leading white spaces)
+				while (cursor.positionInBlock() <= textLine.textLength() && !cursor.atEnd()) {
+					QString wordString = cursor.selectedText();
+
+					int wordStartIdx = cursor.selectionStart();
+					int wordEndIdx = cursor.selectionEnd();
+
+					cursor.setPosition(wordStartIdx);
+					wordStartIdx = cursor.positionInBlock();
+
+					cursor.setPosition(wordEndIdx);
+					wordEndIdx = cursor.positionInBlock();
+
+					float flY = textLine.lineNumber() * textLine.height() + blockBoundingRect.top();
+					float flX = textLine.cursorToX(wordStartIdx) + rootFrameFormat.leftMargin() + rootFrameFormat.padding();
+					float flW = textLine.cursorToX(wordEndIdx) + rootFrameFormat.leftMargin() + rootFrameFormat.padding() - flX;
+					float flH = textLine.height();
+
+					QRectF wordBoundingBox = QRectF(flX, flY, flW, flH);
+
+					if (wordBoundingBox.width() > 0) {
+						if (croppedLineBox.isEmpty())
+							croppedLineBox = wordBoundingBox;
+						else
+							croppedLineBox = croppedLineBox.united(wordBoundingBox);
+
+						QSharedPointer<TextRegion> wordRegion = QSharedPointer<TextRegion>::create();
+						QString fontLabel = FontStyleClassification::fontToLabelName(cursor.charFormat().font());
+
+						wordRegion->setPolygon(Polygon::fromRect(Rect(wordBoundingBox)));
+						wordRegion->setText(wordString);
+						wordRegion->setCustom(fontLabel);
+
+						textLineRegion->addChild(wordRegion);
+					}	
+
+					cursor.movePosition(QTextCursor::NextWord);
+					cursor.select(QTextCursor::WordUnderCursor); //LineUnderCursor | BlockUnderCursor
+
+					if (textBlock.blockNumber() != cursor.blockNumber())
+						break;
+				}
+
+				if (!textLineRegion->children().isEmpty()) {
+
+					//set final text line polygon
+					QRectF textLineBoundingRect = textLine.rect();
+					textLineBoundingRect.translate(blockBoundingRect.topLeft());
+					textLineBoundingRect.setLeft(croppedLineBox.left());
+					textLineBoundingRect.setRight(croppedLineBox.right());
+					textLineRegion->setPolygon(Polygon::fromRect(Rect(textLineBoundingRect)));
+
+					//set final baseline of text line
+					int baseLineHeight = (int)textLineBoundingRect.top() + (int)textLine.ascent();
+					QLine baseLine = QLine((int)textLineBoundingRect.left() + 1, baseLineHeight, (int)textLineBoundingRect.right() - 1, baseLineHeight);
+					textLineRegion->setBaseLine(Line(baseLine));
+
+					textLineRegions << textLineRegion;
+				}
+			}
+			else {
+				cursor.movePosition(QTextCursor::NextWord);
+				cursor.select(QTextCursor::WordUnderCursor); //LineUnderCursor | BlockUnderCursor
+			}
+		}
+		else {
+			cursor.movePosition(QTextCursor::NextWord);
+			cursor.select(QTextCursor::WordUnderCursor); //LineUnderCursor | BlockUnderCursor
+		}
+	}
+
+	//write found regions to xml
+	QString xmlPath;
+	rdf::PageXmlParser parser;
+	bool xml_found;
+	QSharedPointer<PageElement> xmlPage;
+
+	xmlPath = rdf::PageXmlParser::imagePathToXmlPath(filePath);
+	xml_found = parser.read(xmlPath);
+
+	// set up xml page
+	xmlPage = parser.page();
+	xmlPage->setCreator(QString("CVL"));
+	xmlPage->setImageSize(doc.size().toSize());
+	xmlPage->setImageFileName(QFileInfo(xmlPath).fileName());
+
+	//add results to xml
+	xmlPage = parser.page();
+	xmlPage->rootRegion()->removeAllChildren();
+
+	for (auto tr : textLineRegions) {
+		xmlPage->rootRegion()->addChild(tr);
+	}
+
+	parser.write(xmlPath, xmlPage);
+
+	return true;
+}
+
+QVector<QFont> FontStyleClassificationTest::generateFontStyles() const {
+
+	QVector<QFont> fontStyleManager;
+
+	QFont fontStyle = QFont();
+
+	//regular
+	//fontStyle.fromString("Arial,30,-1,5,50,0,0,0,0,0");	//using pointSize instead of pixelSize
+	fontStyle.fromString("Arial,-1,30,5,50,0,0,0,0,0");
+	fontStyleManager << fontStyle;
+
+	//bold
+	fontStyle.fromString("Arial,-1,30,5,75,0,0,0,0,0");
+	fontStyleManager << fontStyle;
+
+	//bold + italic
+	fontStyle.fromString("Arial,-1,30,5,75,1,0,0,0,0");
+	fontStyleManager << fontStyle;
+
+	//italic
+	fontStyle.fromString("Arial,-1,30,5,50,1,0,0,0,0");
+	fontStyleManager << fontStyle;
+
+	return fontStyleManager;
+}
+
+QVector<QFont> FontStyleClassificationTest::generateFonts(int fontCount, QStringList fontFamilies, QVector<QFont> fontStyles) const{
+	
+	if(fontFamilies.isEmpty())
+		fontFamilies.append({ "Arial" , "Franklin Gothic Medium" , "Times New Roman" , "Georgia" });
+	
+	if(fontStyles.isEmpty())
+		fontStyles = generateFontStyles();
+
+	int maxFontNum = (int) fontFamilies.size()*fontStyles.size();
+
+	if (maxFontNum < fontCount) {
+		qWarning() << "Font generation process unable to create required number of distinct fonts.";
+		qInfo() << "Creating "<< maxFontNum << " instead of " << fontCount;
+		fontCount = maxFontNum;
+	}
+	
+	std::vector<int> fontIndices;
+	for (int i = 0; i < maxFontNum; ++i)
+		fontIndices.push_back(i);
+
+	//shuffle font indices for generation of random fonts
+	if (fontCount < maxFontNum)
+		std::random_shuffle(fontIndices.begin(), fontIndices.end());
+
+	QVector<QFont>  synthFonts;
+	for (int i = 0; i < fontCount; ++i) {
+		int idx = fontIndices[i];
+		int famInd = (int) floor(idx / fontStyles.size());
+		int styleInd = idx - (famInd * fontStyles.size());
+
+		QFont tmp = fontStyles[styleInd];
+		tmp.setFamily(fontFamilies[famInd]);
+		synthFonts << tmp;
+	}
+
+	return synthFonts;
 }
 
 double FontStyleClassificationTest::computePrecision(const QVector<QSharedPointer<TextPatch>>& textPatches) const{
@@ -712,20 +1182,23 @@ void FontStyleClassificationTest::evalSyntheticDataResults(const QVector<QShared
 	evalOutput += "\n" + outputString;
 	
 	//write results to file
-	if (!outputDir.isEmpty())
-		writeEvalResults(evalOutput, outputDir);
-	else
-		return;
+	writeEvalResults(evalOutput, outputDir);
 }
 
 void FontStyleClassificationTest::writeEvalResults(QString evalSummary, QString outputDir) const{
-	outputDir = QFileInfo(outputDir).absolutePath();
+	
+	QFileInfo outDirInfo = QFileInfo(outputDir);
+	if (!QFileInfo(outputDir).isDir())
+		outputDir = outDirInfo.absolutePath();
+
 	if (QFileInfo(outputDir).exists()) {
 
 		QString timeStamp = QDateTime::currentDateTime().toString("yyyy-MM-dd HH-mm");
 		evalSummary = "Font style classification results from " + timeStamp + "\n\n" + evalSummary;
 
 		QString outputFilePath = QFileInfo(outputDir, "FontStyleEvaluationResults_" + timeStamp + ".txt").absoluteFilePath();
+		qDebug() << "outputFilePath: " << outputFilePath;
+
 		QFile outputFile(outputFilePath);
 
 		if (outputFile.open(QFile::WriteOnly | QIODevice::Text)) {

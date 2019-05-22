@@ -522,6 +522,7 @@ public:
 	void setPolygon(const QPolygonF& polygon);
 
 	void scale(double factor);
+	void rotate(double angle, Vector2D center = Vector2D(0,0));
 	void draw(QPainter& p) const;
 	bool contains(const Vector2D& pt) const;
 

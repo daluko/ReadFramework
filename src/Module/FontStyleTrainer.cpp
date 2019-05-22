@@ -96,13 +96,10 @@ bool FontStyleTrainer::isEmpty() const {
 
 bool FontStyleTrainer::compute() {
 
-	if (!checkInput())
-		return false;
-
 	Timer dt;
 	
-	if (mFeatureManager.numFeatures() == 0) {
-		qCritical() << "Cannot train model if no feature vectors are provided";
+	if (!checkInput()) {
+		qCritical() << "Failed to train classifier. Found no feature vectors.";
 		return false;
 	}
 
@@ -143,8 +140,7 @@ bool FontStyleTrainer::compute() {
 				centroidsMat.push_back(centroids[i]);
 			}
 
-			//use k=1 -> nearest neighbor
-			model->setDefaultK(1);
+			model->setDefaultK(1);	//use k=1 -> nearest neighbor
 
 			if (mModelType == FontStyleClassifier::classify_nn) {
 				trainData = cv::ml::TrainData::create(centroidsMat, cv::ml::ROW_SAMPLE, labelMat);
@@ -168,6 +164,16 @@ bool FontStyleTrainer::compute() {
 
 		model->train(trainData);
 		mModel = model;
+	}
+
+	if (!mModel) {
+		qCritical() << "Failed to train font style classifier.";
+		return false;
+	}
+
+	if (!mModel->isTrained()) {
+		qCritical() << "Failed to train font style classifier.";
+		return false;
 	}
 
 	mInfo << "Trained font style classifier in " << dt;

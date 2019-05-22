@@ -88,6 +88,7 @@ public:
 	static QJsonObject readJson(const QString& filePath);
 	static int64 writeJson(const QString& filePath, const QJsonObject& jo);
 	static void initDefaultFramework();
+	static cv::Mat drawBarChart(const cv::Mat data);
 
 	// little number thingies
 	template<typename num>

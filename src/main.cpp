@@ -263,11 +263,30 @@ int main(int argc, char** argv) {
 				//	fct.run();
 
 				if (!dc.fontDataPath().isEmpty()) {
-					fct.testSyntheticDataSet(dc.fontDataPath());
+
+					//test text patch processing
+					//QString testPath = dc.fontDataPath() + "/fontDataTwain/";
+					//fct.testSyntheticDataSet(testPath);
+
+					//test different amounts of sample 
+					//int maxSampleCount = 250;
+					//while(maxSampleCount <= 3500) {
+					//	fct.testSyntheticDataSet(dc.fontDataPath(), maxSampleCount);
+					//	maxSampleCount = maxSampleCount + 250;
+					//}
+
+					//test synthetic page processing
+					QString pageDataPath = dc.fontDataPath() + "syntheticPage/pageData.txt";
+					QString trainDataPath = dc.fontDataPath() + "syntheticPage/FontTrainData.txt";
+					
+					qDebug() << "synthPage input path 1: " << pageDataPath;
+					qDebug() << "synthPage input path 2: " << trainDataPath;
+
+					fct.testSyntheticPage(pageDataPath, trainDataPath);
 				}
 				else {
 					qWarning() << "Can't test font style classification with synthetic data.";
-					qInfo() << "Use -w option to specify path to .csv or .txt file containing training data.";
+					qInfo() << "Use -w option to specify path to .txt file containing text samples (words).";
 				}
 			}
 		}
@@ -316,7 +335,9 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		//dc.setImagePath("E:/data/test/HBR2013_training/training/00452456.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/test/00046981.tif");
 
-		dc.setImagePath("F:/dev/da/data/HBR2013/test/test/00451351.tif");
+		//dc.setImagePath("F:/dev/da/data/HBR2013/test/test/00451351.tif");
+		dc.setImagePath("F:/dev/da/data/catalogue/1905_Venice_Biennale/1905_Venice_Biennale_0035.jpg");
+				
 
 		qInfo() << dc.imagePath() << "added as image path";
 	}

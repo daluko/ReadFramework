@@ -120,7 +120,7 @@ cv::Mat GaborFiltering::extractGaborFeatures(cv::Mat img_in, GaborFilterBank fil
 	//convert input matrix for processing
 	cv::Mat img;
 	if (img_in.channels() == 1)
-		img = img.clone();
+		img = img_in.clone();
 	else
 		cv::cvtColor(img_in, img, CV_BGR2GRAY);
 
@@ -161,6 +161,12 @@ cv::Mat GaborFiltering::extractGaborFeatures(cv::Mat img_in, GaborFilterBank fil
 	return featVec;
 }
 
+GaborFilterBank::GaborFilterBank(){
+	mKernels = QVector<cv::Mat>();
+	mLambda = QVector<double>();
+	mTheta = QVector<double>();
+}
+
 GaborFilterBank::GaborFilterBank(QVector<double> lambda, QVector<double> theta, QVector<cv::Mat> kernels){
 	mKernels = kernels;
 	mLambda = lambda;
@@ -189,6 +195,10 @@ QVector<double> GaborFilterBank::theta() const{
 
 QVector<cv::Mat> GaborFilterBank::kernels() const {
 	return mKernels;
+}
+
+bool GaborFilterBank::isEmpty(){
+	return mKernels.isEmpty();
 }
 
 QVector<cv::Mat> GaborFilterBank::draw(){

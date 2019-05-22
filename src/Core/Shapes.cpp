@@ -124,6 +124,21 @@ void Polygon::scale(double factor) {
 	mPoly = sPoly;
 }
 
+void Polygon::rotate(double angle, Vector2D center) {
+
+	QVector<Vector2D> points = toPoints();
+
+	QPolygonF rotPoly;
+	for (auto p : points) {
+		p = p - center;
+		p.rotate(angle);
+		p = p + center;
+		rotPoly << p.toQPointF();
+	}
+
+	mPoly = rotPoly;
+}
+
 void Polygon::draw(QPainter & p) const {
 	
 	QPen oPen = p.pen();

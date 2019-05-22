@@ -35,9 +35,11 @@
 #include "DebugUtils.h"
 #include "ScaleFactory.h"
 #include "FontStyleClassification.h"
+#include "Elements.h"
 
 #pragma warning(push, 0)	// no warnings from includes
 // Qt Includes
+#include <QTextDocument>
 #pragma warning(pop)
 
 // Qt/CV defines
@@ -66,23 +68,36 @@ public:
 
 	void run();
 	void processDirectory(const QString dirPath);
-	void testSyntheticDataSet(QString filePath);
+	void testSyntheticDataSet(QString filePath, int maxSampleCount = -1);
+	void testSyntheticPage(QString filePath, QString trainDataPath);
 
 protected:
 	QStringList loadTextSamples(QString filePath);
-	bool generateDataSet(QStringList sample, LabelManager labelManager, QString outputFilePath);
-	bool readDataSet(QString inputFilePath, FeatureCollectionManager & fcm, QStringList & samples) const;
+	QVector<QSharedPointer<TextLine>> loadTextLines(QString imagePath);
+	QVector< QSharedPointer<TextRegion>> loadWordRegions(QString imagePath);
+	QVector<QSharedPointer<TextPatch>> regionsToTextPatches(QVector<QSharedPointer<TextRegion>> wordRegions, LabelManager lm,  cv::Mat img);
 
-	QStringList generateSamplesFromTextFile(QString filePath, int minWordLength = 4, bool removeDuplicates = true);
+	bool readDataSet(QString inputFilePath, FeatureCollectionManager & fcm, QStringList & samples) const;
+	void reduceSampleCount(FeatureCollectionManager & fcm, int sampleCount) const;
+
+	QStringList loadWordSamples(QString filePath, int minWordLength = 4, bool removeDuplicates = true);
+	QString readTextFromFile(QString filePath);
 	QVector<QStringList> splitSampleSet(QStringList samplesSet, double ratio = 0.8);
 	
-	LabelManager generateFontLabelManager();
+	bool generateSnytheticTestPage(QString filePath, QString outputFilePath, QVector<QFont> synthPageFonts);
+	bool generateGroundTruthData(QTextDocument& doc, QString filePath);
+	bool generateDataSet(QStringList sample, QVector<QFont> fonts, QString outputFilePath);
+
+	LabelManager generateFontLabelManager(QVector<QFont> fonts);
 	QVector<QSharedPointer<TextPatch>> generateTextPatches(QStringList textSamples, LabelManager labelManager);
 	FeatureCollectionManager generatePatchFeatures(QVector<QSharedPointer<TextPatch>> textPatches);
-	cv::Mat generateSnytheticTestPage(QString filePath);
+
+	QVector<QFont> generateFontStyles() const;
+	QVector<QFont> generateFonts(int fontCount = 4, QStringList fonts = QStringList(), QVector<QFont> fontStyles = QVector<QFont>()) const;
 
 	void evalSyntheticDataResults(const QVector<QSharedPointer<TextPatch>>& textPatches, 
 		const LabelManager labelManager, QString outputDir = QString()) const;
+
 	double computePrecision(const QVector<QSharedPointer<TextPatch>>& textPatches) const;
 	void writeEvalResults(QString evalSummary, QString outputDir) const;
 

@@ -77,13 +77,17 @@ namespace rdf {
 		cv::Mat patchTexture() const;
 		cv::Mat textPatchImg() const;
 
+		void setPolygon(const Polygon& polygon);
+		Polygon polygon() const;
+
 	protected:
+		int mTextureSize = 128;
+		int mTextureLineHeight = 32;
+
 		//input
 		cv::Mat mTextPatch;
 		QFont mFont;
-
-		int mTextureSize = 128;
-		int mTextureLineHeight = 32;
+		Polygon mPoly;
 
 		//io
 		QSharedPointer<PixelLabel> mLabel = QSharedPointer<PixelLabel>::create();
@@ -98,6 +102,10 @@ namespace rdf {
 	class DllCoreExport FontStyleClassifier{
 
 	public:
+
+		FontStyleClassifier(const FeatureCollectionManager& fcm = FeatureCollectionManager(), 
+			const cv::Ptr<cv::ml::StatModel> model = cv::ml::KNearest::create(), int modelType = FontStyleClassifier::classify_nn_wed);
+
 		enum ClassifierMode {
 			classify_nn = 0,
 			classify_nn_wed = 1,
@@ -107,10 +115,9 @@ namespace rdf {
 			classify_end
 		};
 
-		FontStyleClassifier(const FeatureCollectionManager& fcm = FeatureCollectionManager(), 
-			const cv::Ptr<cv::ml::StatModel>& model = cv::Ptr<cv::ml::StatModel>(), int modelType = FontStyleClassifier::classify_nn_wed);
-
 		bool isEmpty() const;
+		bool isTrained() const;
+
 		cv::Ptr<cv::ml::StatModel> model() const;
 		LabelManager manager() const;
 		QVector<LabelInfo> classify(cv::Mat testFeat);
@@ -119,7 +126,6 @@ namespace rdf {
 		cv::Ptr<cv::ml::NormalBayesClassifier> bayes() const;
 		cv::Ptr<cv::ml::KNearest> kNearest() const;
 
-		//QSharedPointer<FontStyleClassifierConfig> config() const;
 		cv::Mat draw(const cv::Mat& img) const;
 
 		bool write(const QString & filePath) const;
@@ -158,61 +164,72 @@ namespace rdf {
 		void save(QSettings& settings) const override;
 
 		bool mTestBool = true;
-		int mTestInt = 15;
+		int mTestInt = 0;
 		QString mTestPath = "";
 	};
 
 	class DllCoreExport FontStyleClassification : public Module {
 
 	public:
-
+		
 		FontStyleClassification();
 		FontStyleClassification(const cv::Mat& img, const QVector<QSharedPointer<TextLine>>& textLines);
-		FontStyleClassification(const QVector<QSharedPointer<TextPatch>>& textPatches, QString featureFilePath = QString());
+		FontStyleClassification(const QVector<QSharedPointer<TextPatch>>& patches, QString featureFilePath = QString());
+
+		enum mDrawFlags {
+			draw_nothing = 0x0,
+			draw_comparison = 0x1,
+			draw_gt = 0x2,
+			draw_patch_results = 0x3,
+			draw_end
+		};
+		typedef Flags<mDrawFlags> DrawFlags;
 
 		bool isEmpty() const override;
 		bool compute() override;
 
 		void setClassifier(const QSharedPointer<FontStyleClassifier>& classifier);
 		
-		static cv::Mat generateTextImage(QString text, QFont font, QRect bbox = QRect(), bool cropImg = false);
-		static cv::Mat generateTextPatch(int patchSize, int lineHeight, cv::Mat textImg);
-		static cv::Mat generateSyntheticTextPatch(QFont font, QString text);
-		
 		static QFont labelNameToFont(QString labelName);
 		static QString fontToLabelName(QFont font);
 
-		static QVector<cv::Mat> generateSyntheticTextPatches(QFont font, QStringList trainingWords);
+		//static QVector<cv::Mat> generateSyntheticTextPatches(QFont font, QStringList trainingWords);
 		static GaborFilterBank createGaborKernels(QVector<double> theta = QVector<double>(), QVector<double> lambda = QVector<double>(), bool openCV = true);
 		static cv::Mat computeGaborFeatures(QVector<QSharedPointer<TextPatch>> patches, GaborFilterBank gfb, cv::ml::SampleTypes featureType = cv::ml::ROW_SAMPLE);
+		FeatureCollectionManager generateFCM(cv::Mat features);
 		static FeatureCollectionManager generateFCM(QVector<QSharedPointer<TextPatch>> patches, cv::Mat features);
 
 		//output
 		QVector<QSharedPointer<TextPatch>> textPatches() const;
+		bool mapStyleToPatches(QVector<QSharedPointer<TextPatch>>& regionPatches) const;
 
+		cv::Mat labelMap() const;
+		cv::Mat draw(const cv::Mat& img) const;
+		cv::Mat draw(const cv::Mat& img, QVector<QSharedPointer<TextPatch>> patches,
+			const DrawFlags& options = DrawFlags() | draw_gt | draw_comparison | draw_patch_results) const;
+		
+		QString toString() const override;
 		QSharedPointer<FontStyleClassificationConfig> config() const;
 
-		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor()) const;
-		QString toString() const override;
-
 	private:
+		QSharedPointer<ScaleFactory> mScaleFactory;
+		GaborFilterBank mGfb = GaborFilterBank();
+
 		// input
 		cv::Mat mImg;
-		QSharedPointer<FontStyleClassifier> mClassifier;
 		bool mProcessLines = true;
-
-
+		QSharedPointer<FontStyleClassifier> mClassifier;
 		QString mFeatureFilePath;
 		FeatureCollectionManager mFCM_test;
+		QVector<QSharedPointer<TextLine>> mTextLines;
 
 		//io
-		QVector<QSharedPointer<TextLine>> mTextLines;
 		QVector<QSharedPointer<TextPatch>> mTextPatches;
 
-		// output
-		QSharedPointer<ScaleFactory> mScaleFactory;
-
 		bool checkInput() const override;
+		QVector<QSharedPointer<TextPatch>> splitTextLine(cv::Mat lineImg, Rect bbox);
+		bool processPatches();
+		bool loadFeatures();
 	};
 
 }

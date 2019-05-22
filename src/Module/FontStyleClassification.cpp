@@ -1,3 +1,4 @@
+#include "FontStyleClassification.h"
 /*******************************************************************************************************
 ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ.
 
@@ -51,10 +52,7 @@ namespace rdf {
 	// TextPatch --------------------------------------------------------------------
 	TextPatch::TextPatch() {
 		mTextPatch = cv::Mat();
-		
-		if (!generatePatchTexture()) {
-			qWarning() << "Failed to generate texture from text patch.";
-		}
+		mLabel->setTrueLabel(LabelInfo(1, "unknown_font"));
 	}
 
 	TextPatch::TextPatch(const cv::Mat textImg, const QString& id) : BaseElement(id) {
@@ -64,12 +62,13 @@ namespace rdf {
 		if (!generatePatchTexture()) {
 			qWarning() << "Failed to generate texture from text patch.";
 		}
+
+		mLabel->setTrueLabel(LabelInfo(1, "unknown_font"));
 	}
 
 	TextPatch::TextPatch(QString text, const LabelInfo label, const QString& id) : BaseElement(id) {
 
 		QFont font = FontStyleClassification::labelNameToFont(label.name());
-		font.setPointSize(30);
 
 		generateTextImage(text, font);
 		mLabel->setTrueLabel(label);
@@ -120,7 +119,6 @@ namespace rdf {
 		cv::Mat patchScaled = mTextPatch.clone();
 		resize(mTextPatch, patchScaled, cv::Size(), sf, sf, cv::INTER_LINEAR); //TODO test different interpolation modes
 
-		//TODO test/consider padding initial image
 		if (patchScaled.size().width > mTextureSize) {
 
 			cv::Mat firstPatchLine = patchScaled(cv::Range::all(), cv::Range(0, mTextureSize));
@@ -167,8 +165,6 @@ namespace rdf {
 	}
 
 	bool TextPatch::generateTextImage(QString text, QFont font, bool cropImg) {
-
-		//TODO check if font is valid
 
 		if (text.isEmpty()) {
 			qWarning() << "Could not generate text patch image. No input text found.";
@@ -217,8 +213,16 @@ namespace rdf {
 		return mTextPatch;
 	}
 
+	void TextPatch::setPolygon(const Polygon & polygon) {
+		mPoly = polygon;
+	}
+
+	Polygon TextPatch::polygon() const {
+		return mPoly;
+	}
+
 	// FontStyleClassifier --------------------------------------------------------------------
-	FontStyleClassifier::FontStyleClassifier(const FeatureCollectionManager & fcm, const cv::Ptr<cv::ml::StatModel>& model, int classifierMode) {
+	FontStyleClassifier::FontStyleClassifier(const FeatureCollectionManager & fcm, const cv::Ptr<cv::ml::StatModel> model, int classifierMode) {
 		mModel = model;
 		mFcm = fcm;
 		mClassifierMode = (ClassifierMode) classifierMode;
@@ -226,6 +230,10 @@ namespace rdf {
 
 	bool FontStyleClassifier::isEmpty() const {
 		return mModel->empty() || mFcm.isEmpty();
+	}
+
+	bool FontStyleClassifier::isTrained() const{
+		return mModel->isTrained();
 	}
 
 	cv::Ptr<cv::ml::StatModel> FontStyleClassifier::model() const {
@@ -266,6 +274,7 @@ namespace rdf {
 			}
 			else if (bayes()) {
 				rawLabel = bayes()->predict(cr);
+				//bayes()->predictProb(InputArray inputs, OutputArray outputs, OutputArray outputProbs, int flags = 0);
 			}
 			else {
 				if (mClassifierMode == ClassifierMode::classify_nn || mClassifierMode == ClassifierMode::classify_knn) {
@@ -279,7 +288,7 @@ namespace rdf {
 					rawLabel = kNearest()->predict(cr);
 				}
 				else {
-					qCritical() << "Unable to performe font style classification. Classifier mode is unknown.";
+					qCritical() << "Unable to perform font style classification. Classifier mode is unknown.";
 					return QVector<LabelInfo>();
 				}
 			}
@@ -321,10 +330,10 @@ namespace rdf {
 
 	bool FontStyleClassifier::checkInput() const {
 
-		if (!isEmpty() && !mModel->isTrained())
+		if (!isEmpty() && !isTrained())
 			qCritical() << "I cannot classify, since the model is not trained";
 
-		return !isEmpty() && mModel->isTrained();
+		return !isEmpty() && isTrained();
 	}
 
 	bool FontStyleClassifier::write(const QString & filePath) const {
@@ -372,7 +381,7 @@ namespace rdf {
 		QJsonObject jo = Utils::readJson(filePath);
 
 		if (jo.isEmpty()) {
-			qCritical() << "Can not load classifier from file.";
+			qCritical() << "Failed to load font style classifier from" << filePath;
 			return QSharedPointer<FontStyleClassifier>::create();
 		}
 
@@ -392,7 +401,7 @@ namespace rdf {
 			qInfo() << "Font style classifier loaded from" << filePath << "in" << dt;
 		}
 		else {
-			qCritical() << "Could not load font style classifier from" << filePath;
+			qCritical() << "Failed to load font style classifier from" << filePath;
 			return QSharedPointer<FontStyleClassifier>::create();
 		}
 
@@ -484,6 +493,7 @@ namespace rdf {
 
 	// FontStyleClassification --------------------------------------------------------------------
 	FontStyleClassification::FontStyleClassification() {
+		mClassifier = QSharedPointer<FontStyleClassifier>::create();
 		mConfig = QSharedPointer<FontStyleClassificationConfig>::create();
 		mConfig->loadSettings();
 	}
@@ -492,6 +502,7 @@ namespace rdf {
 		mImg = img;
 		mTextLines = textLines;
 		mProcessLines = true;
+		mClassifier = QSharedPointer<FontStyleClassifier>::create();
 
 		mConfig = QSharedPointer<FontStyleClassificationConfig>::create();
 		mConfig->loadSettings();
@@ -503,17 +514,19 @@ namespace rdf {
 		mProcessLines = false;
 		mTextPatches = textPatches;
 		mFeatureFilePath = featureFilePath;
+		mClassifier = QSharedPointer<FontStyleClassifier>::create();
 
 		mConfig = QSharedPointer<FontStyleClassificationConfig>::create();
 		mConfig->loadSettings();
 	}
 
 	bool FontStyleClassification::isEmpty() const {
-		return mImg.empty();
+		return (mProcessLines && (mImg.empty() || mTextLines.isEmpty())) || (!mProcessLines && mTextPatches.isEmpty());
 	}
 
 	bool FontStyleClassification::compute() {
-		//TODO preprocessing for "real" text page input (non synthetic data)
+
+		//TODO text line processing: convert patches to text (line) regions for xml output
 
 		if (!checkInput())
 			return false;
@@ -521,79 +534,71 @@ namespace rdf {
 		if (mProcessLines) {
 			cv::Mat img = mImg.clone();
 
-			////rotate text lines according to baseline orientation and crop its image
-			//for (auto tl : mTextLines) {
-			//	//mask out text line region
-			//	auto points = tl->polygon().toPoints();
-			//	std::vector<cv::Point> poly;
-			//	for (auto p : points) {
-			//		poly.push_back(p.toCvPoint());
-			//	}
-			//	//cv::getRectSubPix(image, patch_size, center, patch);
-			//	cv::Mat mask = cv::Mat::zeros(img.size(), CV_8U);
-			//	cv::fillConvexPoly(mask, poly, cv::Scalar(255, 255, 255), 16, 0);
-			//	cv::Mat polyImg;
-			//	img.copyTo(polyImg, mask);
+			if (mGfb.isEmpty())
+				mGfb = createGaborKernels();
 
-			//	//rotate text line patch according to baseline angle
-			//	Line baseline(Polygon(tl->baseLine().toPolygon()));
-			//	double angle = baseline.angle() * (180.0 / CV_PI);
-			//	//qDebug() << "line angle = " << QString::number(angle);
-			//	cv::Mat rot_mat = cv::getRotationMatrix2D(baseline.center().toCvPoint(), angle, 1);
+			//debug
+			QImage patchResults = Image::mat2QImage(img, true);
+			QPainter painter(&patchResults);
 
-			//	cv::Mat polyRotImg;
-			//	cv::warpAffine(polyImg, polyRotImg, rot_mat, polyImg.size());
+			//rotate text lines according to baseline orientation and crop its image
+			for (auto tl : mTextLines) {
 
-			//	//processTextLine();
-			//}
+				//rotate text line patch according to baseline angle
+				Line baseline(Polygon(tl->baseLine().toPolygon()));
 
-			////create gabor kernels
-			//GaborFilterBank filterBank = createGaborKernels(false);
+				if (baseline.isEmpty()) {
+					qWarning() << "Failed to process text line. Missing base line information.";
+					continue;
+				}
 
-			////apply gabor filter bank to input image
-			////cv::bitwise_not(img_gray, img_gray);
-			//GaborFiltering::extractGaborFeatures(img, filterBank);
+				double angleDeg = baseline.angle() * (180.0 / CV_PI);
+				Vector2D center = baseline.center();
+
+				cv::Mat imgRot = cv::Mat(img.size(), CV_8UC4, cv::Scalar(255, 255, 255, 255));
+				if (angleDeg != 0) {
+					cv::Mat rot_mat = cv::getRotationMatrix2D(center.toCvPoint(), angleDeg, 1);
+					cv::warpAffine(img, imgRot, rot_mat, img.size());
+				}
+				else
+					imgRot = img;
+				
+				//rotate text region polygon
+				Polygon poly = tl->polygon();
+				poly.rotate(baseline.angle(), center);
+
+				//find bounding box of rotated text region polygon
+				cv::Rect bb = Rect::fromPoints(poly.toPoints()).toCvRect();
+				//cv::cvtColor(imgRot, imgRot, cv::COLOR_BGRA2GRAY);
+				cv::Mat croppedImage = imgRot(bb);
+
+				//split text line into text patches
+				auto textPatches = splitTextLine(croppedImage, bb);
+
+				if (textPatches.isEmpty())
+					continue;
+
+				//rotate patch polygons back to original image coordinates
+				for (auto tp : textPatches) {
+					Polygon tpPoly = tp->polygon();
+					tpPoly.rotate(-baseline.angle(), center);
+					tp->setPolygon(tpPoly);
+				}
+
+				//gather extracted patches for classification
+				mTextPatches.append(textPatches);
+			}
+
+			//compute classification results 
+			if (!processPatches())
+				qCritical() << "Failed to classify style of text lines.";
 		}
 		else {
-
-			if (mTextPatches.isEmpty())
-				return false;
-
-			//get test features
-			if (!mFeatureFilePath.isEmpty()) {
-				mFCM_test = FeatureCollectionManager::read(mFeatureFilePath);
-			}
-			else {
-				auto gfb = createGaborKernels();
-				cv::Mat features = computeGaborFeatures(mTextPatches, gfb);
-				mFCM_test = generateFCM(mTextPatches, features);
-			}
-
-			if (mFCM_test.isEmpty()) {
-				return false;
-			}
-
-			cv::Mat testFeatures_, testFeatures;
-			testFeatures_ = mFCM_test.toCvTrainData(-1, false)->getSamples(); //uses additional normalization
-			testFeatures_.convertTo(testFeatures, CV_64F);
-
-			//compute classification results for test features
-			if (mClassifier->isEmpty()) {
-				return false;
-			}
+			if (mGfb.isEmpty())
+				mGfb = createGaborKernels();
 			
-			QVector<LabelInfo> cLabels =  mClassifier->classify(testFeatures);
-			
-			if (mTextPatches.size() != cLabels.size()) {
-				qCritical() << "Failed to classify text patches.";
-				qInfo() << "Number of test samples is out of sync with number of result labels.";
+			if (!processPatches())
 				return false;
-			}
-
-			for (int idx = 0; idx < mTextPatches.size(); idx++) {
-				auto label = mTextPatches[idx]->label();
-				label->setLabel(cLabels[idx]);
-			}
 		}
 
 		return true;
@@ -603,31 +608,250 @@ namespace rdf {
 		mClassifier = classifier;
 	}
 
-	QVector<cv::Mat> FontStyleClassification::generateSyntheticTextPatches(QFont font, QStringList textVec) {
+	QVector<QSharedPointer<TextPatch>> FontStyleClassification::splitTextLine(cv::Mat lineImg, Rect bbox) {
+		
+		//TODO add additional checks for more robustness 
+		//TODO check against:	single word lines
+		//						very short words,
+		//						little difference between gap clusters
+		//						very large gaps that need to be removed
+		//						difference in line height (ascenders, descender, font size change)
+		//use connected component information to improve gap detection
+		//	strengthen regions representing one connected component
 
-		QVector<cv::Mat> trainPatches;
-		for (QString text : textVec) {
+		//convert input image to gray scale
+		cv::Mat lineImg_ = IP::grayscale(lineImg);
 
-			cv::Mat textImg = generateSyntheticTextPatch(font, text);
+		cv::Mat vPP;
+		bitwise_not(lineImg_, lineImg_);
+		reduce(lineImg_, vPP, 0, cv::REDUCE_SUM, CV_32F);
+		vPP = vPP / 255; //normalize
+		cv::Mat vPPRawImg = Utils::drawBarChart(vPP);
 
-			if (textImg.empty())
-				continue;
+		GaussianBlur(vPP, vPP, cv::Size(5, 1), 0, 0, cv::BORDER_DEFAULT);
+		cv::Mat vPPImg = Utils::drawBarChart(vPP);
 
-			trainPatches << textImg;
+		//prune vertical projection profile
+		QList<double> values;
+		for (int i = 0; i < vPP.cols; ++i)
+			values << (double)vPP.at<float>(i);
+
+		double q = 0.10;
+		double qValue = Algorithms::statMoment(values, q);
+		cv::Mat prunedVPP = cv::Mat::zeros(vPP.size(), vPP.type());
+		vPP.copyTo(prunedVPP, (vPP > (float)qValue));
+		cv::Mat gaps = prunedVPP == 0;
+
+		//debugging: visualize line, vpp and gaps
+		//cv::Mat prunedVPPImg = Utils::drawBarChart(prunedVPP);
+		//cv::Mat gapsImg = Utils::drawBarChart((gaps / 255) * 20);
+		//cv::Mat results;
+		//cv::vconcat(lineImg, vPPImg, results);
+		//cv::vconcat(results, gapsImg, results);
+
+		//compute white spaces
+		QVector<cv::Range> whiteSpaces;
+		int start = 0;
+		bool activeRun = false;
+
+		for (int i = 0; i < gaps.cols; ++i) {
+
+			if (!activeRun && gaps.at<uchar>(i) == 255) {
+				start = i;
+				activeRun = true;
+			}
+
+			if (activeRun && gaps.at<uchar>(i) == 0) {
+				whiteSpaces << cv::Range(start, i);
+				activeRun = false;
+			}
 		}
 
-		return trainPatches;
+		//add trailing ws
+		if (activeRun) {
+			whiteSpaces << cv::Range(start, gaps.cols);
+		}
+
+		//cluster white spaces in two groups
+		cv::Mat labels;
+		std::vector<cv::Point2f> centers, data;
+
+		for (auto ws : whiteSpaces)
+			data.push_back(cv::Point2f(ws.size(), 0));
+
+		cv::kmeans(data, 2, labels, cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 10, 1.0), 3, cv::KMEANS_RANDOM_CENTERS, centers);
+
+		//debug gap cluster centers
+		//for (auto c : centers)
+		//	qDebug() << "" << Vector2D(c).toString();
+
+		QVector<cv::Range> final_whiteSpaces;
+		int bigGapIdx = (centers[0].x > centers[1].x) ? 0 : 1;
+		cv::Mat textPatchImg = cv::Mat(vPP.size(), CV_8UC1, cv::Scalar(255));
+		
+		for (int i = 0; i < data.size(); ++i) {
+			if (labels.at<int>(i) == bigGapIdx) {
+				final_whiteSpaces << whiteSpaces[i];
+				textPatchImg(cv::Range(0, 1), whiteSpaces.at(i)) = 0;
+			}
+		}
+				
+		//compute text patch regions
+		activeRun = false;
+		QVector<Rect> patchRects;
+		int height = lineImg.size().height - 1;
+
+		for (int i = 0; i < textPatchImg.cols; ++i) {
+			if (!activeRun && textPatchImg.at<uchar>(i) == 255) {
+				start = i;
+				activeRun = true;
+			}
+
+			if (activeRun && textPatchImg.at<uchar>(i) == 0) {		
+				int width = (i - start);
+				activeRun = false;
+
+				if (width > 0) {
+					Rect patchRect = Rect(start, 0, width, height);
+					patchRects << patchRect;
+				}
+			}
+		}
+		
+		if (activeRun) { //add trailing patch
+			int width = (textPatchImg.cols - start);
+			patchRects << Rect(start, 0, width, height);
+		}
+
+		//generate text patches
+		QVector<QSharedPointer<TextPatch>> textPatches;
+		for (auto pr : patchRects) {
+			auto tp = QSharedPointer<TextPatch>::create(lineImg(pr.toCvRect()));
+			pr.move(bbox.topLeft());
+			tp->setPolygon(Polygon::fromRect(pr));
+			textPatches << tp;
+		}
+		
+		if (textPatches.isEmpty()) {
+			qCritical() << "Failed to split text line into text patches.";
+			return textPatches;
+		}
+
+		////visualize final text patches extracted from text line
+		//QImage patchResults = Image::mat2QImage(lineImg, true);
+		//QPainter painter(&patchResults);
+
+		//for (int i = 0; i < patchRects.size(); ++i) {
+		//	painter.setPen(ColorManager::blue());
+		//	painter.drawRect(patchRects[i].toQRect());
+		//}
+
+		//cv::Mat patchResultsCV = Image::qImage2Mat(patchResults);
+
+		return textPatches;
 	}
 
-	cv::Mat FontStyleClassification::generateSyntheticTextPatch(QFont font, QString text) {
-	
-		cv::Mat textImg = generateTextImage(text, font);
-		textImg = generateTextPatch(128, 30, textImg);
+	bool FontStyleClassification::processPatches(){
 
-		if (textImg.empty())
-			qWarning() << "Failed to generate text patch.";
+		//get test features
+		cv::Mat features;
+		if (!loadFeatures()) {
+			features = computeGaborFeatures(mTextPatches, mGfb);
+			mFCM_test = generateFCM(features);	//do not pass additional patches with GT labels (if availabel)
+		}
 
-		return textImg;
+		if (mFCM_test.isEmpty())
+			return false;
+
+		//convert features to CvTrainData format
+		cv::Mat testFeatures;
+		testFeatures = mFCM_test.toCvTrainData(-1, false)->getSamples(); //do not use additional normalization
+		testFeatures.convertTo(testFeatures, CV_64F);
+
+		//compute classification results for test features
+		QVector<LabelInfo> cLabels = mClassifier->classify(testFeatures);
+
+		if (mTextPatches.size() != cLabels.size()) {
+			qCritical() << "Failed to classify text patches.";
+			qInfo() << "Number of test samples is out of sync with number of result labels.";
+			return false;
+		}
+
+		for (int idx = 0; idx < mTextPatches.size(); idx++) {
+			auto label = mTextPatches[idx]->label();
+			label->setLabel(cLabels[idx]);
+		}
+
+		return true;
+	}
+
+	bool FontStyleClassification::mapStyleToPatches(QVector<QSharedPointer<TextPatch>>& regionPatches) const {
+
+		if (!checkInput()) {
+			qWarning() << "Failed to map styles to patches.";
+			qInfo() << "Make sure font style classification module is set up correctly.";
+			return false;
+		}
+
+		cv::Mat styleMap = labelMap();
+		if (styleMap.empty()) {
+			qWarning() << "No font style classification results found!";
+			return false;
+		}
+
+		LabelManager lm = mClassifier->manager();
+
+		double maxVal;
+		cv::minMaxLoc(styleMap, NULL, &maxVal, NULL, NULL);
+
+		for (auto rp : regionPatches) {
+
+			Polygon poly = rp->polygon();
+			std::vector<cv::Point> points = poly.toCvPoints();
+
+			cv::Mat mask = cv::Mat::zeros(styleMap.size(), CV_8UC1);
+			std::vector<cv::Point> polyPoints = poly.toCvPoints();
+			cv::fillConvexPoly(mask, polyPoints, cv::Scalar(1), cv::LINE_8, 0);
+			cv::Mat rpLabels = mask.mul(styleMap);
+
+			std::vector<int> labelCounter;
+			labelCounter.push_back(1);
+			for (int li = 1; li <= maxVal; ++li) {
+				cv::Mat rplm = rpLabels == li;
+				int lCount = cv::countNonZero(rplm);
+				labelCounter.push_back(lCount);
+				//qDebug() << "count for label index: " << li << " = " << lCount;
+			}
+
+			cv::Point maxPos;
+			cv::minMaxLoc(labelCounter, NULL, NULL, NULL, &maxPos);
+			int resultLabelID = maxPos.x;
+			//qDebug() << "final label has id: " << maxPos.x << ", " << maxPos.y;
+
+			//set result label to region patch label
+			auto label = rp->label();
+			label->setLabel(lm.find(resultLabelID));
+		}
+
+		return true;
+	}
+
+	bool FontStyleClassification::loadFeatures(){
+		
+		if (!mFeatureFilePath.isEmpty()) {
+			mFCM_test = FeatureCollectionManager::read(mFeatureFilePath);
+
+			if (mFCM_test.numFeatures() != mTextPatches.size()) {
+				qWarning() << "Number of loaded feature vectors does not match number of input text patches.";
+				qInfo() << "Feature vectors need to be recomputed.";
+				return false;
+			}
+		}
+		else {
+			return false;
+		}
+
+		return true;
 	}
 
 	QString FontStyleClassification::fontToLabelName(QFont font){
@@ -657,6 +881,7 @@ namespace rdf {
 		}
 		
 		QFont font;
+		font.setPixelSize(30);
 		font.setFamily(lp[1]);
 		
 		if(lp[2] == "b")
@@ -672,105 +897,6 @@ namespace rdf {
 			font.setItalic(false);
 
 		return font;
-	}
-
-	cv::Mat FontStyleClassification::generateTextImage(QString text, QFont font, QRect bbox, bool cropImg) {
-
-		QImage qImg(1, 1, QImage::Format_ARGB32);	//used only for estimating bb size
-		QPainter painter(&qImg);
-		painter.setFont(font);
-		
-		QRect tbb;
-		if (bbox.isEmpty())
-			tbb = painter.boundingRect(QRect(0, 0, 1, 1), Qt::AlignTop | Qt::AlignLeft, text);
-		else
-			tbb = bbox;
-		
-		painter.end();
-
-		//reset painter device to optimized size
-		qImg = QImage(tbb.size(), QImage::Format_ARGB32);
-		qImg.fill(QColor(255, 255, 255, 255)); //white background
-		painter.begin(&qImg);
-
-		painter.setFont(font);
-		if(bbox.isEmpty())
-			painter.drawText(tbb, Qt::AlignTop | Qt::AlignLeft, text);
-		else
-			painter.drawText(tbb, Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap, text, &bbox);
-
-		cv::Mat img = Image::qImage2Mat(qImg);
-
-		//crop image - ignoring white border regions
-		if (cropImg) {
-			cv::Mat img_gray(img.size(), CV_8UC1);
-			cv::cvtColor(img, img_gray, CV_BGR2GRAY);
-
-			cv::Mat points;
-			cv::findNonZero(img_gray == 0, points);
-			img = img(cv::boundingRect(points));
-		}
-
-		return img;
-	}
-
-	cv::Mat FontStyleClassification::generateTextPatch(int patchSize, int lineHeight, cv::Mat textImg) {
-
-		cv::Mat textPatch;
-
-		if (lineHeight > patchSize) {
-			qWarning() << "Couldn't create text patch -> lineHeight > patchSize";
-			return cv::Mat();
-		}
-
-		//get text input image and resize + replicate it to fill an image patch fo size sz
-		double sf = lineHeight / (double)textImg.size().height;
-		resize(textImg, textImg, cv::Size(), sf, sf, cv::INTER_LINEAR); //TODO test different interpolation modes
-
-		//TODO test/consider padding initial image
-		if (textImg.size().width > patchSize) {
-
-			cv::Mat firstPatchLine = textImg(cv::Range::all(), cv::Range(0, patchSize));
-			textPatch = firstPatchLine.clone();
-
-			cv::Mat tmpImg = textImg(cv::Range::all(), cv::Range(patchSize, textImg.size().width));
-			while (tmpImg.size().width > patchSize) {
-				cv::Mat patchLine = tmpImg(cv::Range::all(), cv::Range(0, patchSize));
-				cv::vconcat(textPatch, patchLine, textPatch);
-				tmpImg = tmpImg(cv::Range::all(), cv::Range(patchSize, tmpImg.size().width));
-			}
-
-			if (!tmpImg.empty()) {
-				cv::hconcat(tmpImg, firstPatchLine, tmpImg);
-				tmpImg = tmpImg(cv::Range::all(), cv::Range(0, patchSize));
-				cv::vconcat(textPatch, tmpImg, textPatch);
-			}
-
-			if (textPatch.size().height > patchSize) {
-				qWarning() << "Could not fit text into text patch. Cropping image according to patch size. Some text information might be lost.";
-			}
-
-			while (textPatch.size().height < patchSize) {
-				cv::vconcat(textPatch, textPatch, textPatch);
-			}
-		}
-		else {
-			cv::Mat textPatchLine = textImg.clone();
-
-			while (textPatchLine.size().width < patchSize) {
-				cv::hconcat(textPatchLine, textImg, textPatchLine);
-			}
-
-			textPatchLine = textPatchLine(cv::Range::all(), cv::Range(0, patchSize));
-			textPatch = textPatchLine.clone();
-			while (textPatch.size().height < patchSize) {
-				cv::vconcat(textPatch, textPatchLine, textPatch);
-			}
-		}
-
-		textPatch = textPatch(cv::Range(0, patchSize), cv::Range(0, patchSize));
-
-		return textPatch;
 	}
 
 	GaborFilterBank FontStyleClassification::createGaborKernels(QVector<double> theta, QVector<double> lambda, bool openCV) {
@@ -821,6 +947,18 @@ namespace rdf {
 		return featM;
 	}
 
+	FeatureCollectionManager FontStyleClassification::generateFCM(cv::Mat features) {
+		
+		FeatureCollectionManager fcm = FeatureCollectionManager();
+		
+		if (!features.empty()) {
+			FeatureCollection testDataCollection = FeatureCollection(features, TextPatch().label()->trueLabel());
+			fcm.add(testDataCollection);
+		}
+
+		return fcm;
+	}
+
 	FeatureCollectionManager FontStyleClassification::generateFCM(QVector<QSharedPointer<TextPatch>> patches, cv::Mat features){
 
 		if (patches.size() != features.rows) {
@@ -859,31 +997,132 @@ namespace rdf {
 		return mTextPatches;
 	}
 
+	cv::Mat FontStyleClassification::labelMap() const{
+	
+		if (mTextPatches.isEmpty()) {
+			qWarning() << "Failed to created label map! No result patches found.";
+			return cv::Mat();
+		}
+		
+		Rect bbox;
+		for (auto tp : mTextPatches) {
+			Polygon poly = tp->polygon();
+			if (poly.isEmpty())
+				continue;
+			bbox = bbox.joined(Rect::fromPoints(poly.toPoints()));
+		}
+
+		if (bbox.isNull())
+			return cv::Mat();
+
+		cv::Mat predlabelMap(bbox.height(), bbox.width(), CV_8UC1, cv::Scalar(0));
+		for (auto tp : mTextPatches) {
+			auto poly = tp->polygon();
+
+			if (poly.isEmpty())
+				continue;
+			
+			cv::Mat polyImg(bbox.height(), bbox.width(), CV_8UC1, cv::Scalar(0));
+			cv::fillConvexPoly(polyImg, poly.toCvPoints(), cv::Scalar(tp->label()->predicted().id()), cv::LINE_8, 0);
+			cv::Mat mask = polyImg != 0;
+			polyImg.copyTo(predlabelMap, mask);
+		}
+
+		return predlabelMap;
+	}
+
 	QSharedPointer<FontStyleClassificationConfig> FontStyleClassification::config() const {
 		return qSharedPointerDynamicCast<FontStyleClassificationConfig>(mConfig);
 	}
 
-	cv::Mat FontStyleClassification::draw(const cv::Mat & img, const QColor& col) const {
+	cv::Mat FontStyleClassification::draw(const cv::Mat & img) const {
 
-		QImage qImg = Image::mat2QImage(img, true);
-		QPainter painter(&qImg);
+		QImage outputImg = Image::mat2QImage(img, true);
+		QPainter painter(&outputImg);
 
-		for (auto tl : mTextLines) {
+		for (int i = 0; i < mTextPatches.size(); ++i) {
+			int predLabelID = mTextPatches[i]->label()->predicted().id();
+			QColor predLabelColor = ColorManager::getColor(predLabelID, 0.5);
 
-			//draw polygon
-			tl->polygon().draw(painter);
+			painter.setBrush(predLabelColor);
+			painter.setPen(predLabelColor);
 
-			//draw baseline with skew angle
-			painter.setPen(ColorManager::blue());
-			Line baseline(Polygon(tl->baseLine().toPolygon()));
-			Rect bbox = Rect::fromPoints(tl->polygon().toPoints());
-			double angle_ = baseline.angle() * (180.0 / CV_PI);
-
-			baseline.draw(painter);
-			painter.drawText(bbox.bottomRight().toQPoint(), QString::number(angle_));
+			painter.drawPolygon(mTextPatches[i]->polygon().polygon());
 		}
 
-		return Image::qImage2Mat(qImg);
+		cv::Mat outputImgCV = Image::qImage2Mat(outputImg);
+
+		return outputImgCV;
+	}
+
+	cv::Mat FontStyleClassification::draw(const cv::Mat & img, QVector<QSharedPointer<TextPatch>> patches, const DrawFlags & options) const {
+
+		QImage outputImg = Image::mat2QImage(img, true);
+		QPainter painter(&outputImg);
+
+		if (options & draw_patch_results) {
+
+			if (!mapStyleToPatches(patches)) {
+				return img;
+			}
+
+			for (int i = 0; i < patches.size(); ++i) {
+				int predLabelID = patches[i]->label()->predicted().id();
+				int trueLabelID = patches[i]->label()->trueLabel().id();
+				QColor predLabelColor = ColorManager::getColor(predLabelID, 0.5);
+
+				painter.setBrush(predLabelColor);
+				painter.setPen(predLabelColor);
+
+				painter.drawPolygon(patches[i]->polygon().polygon());
+			}
+			return Image::qImage2Mat(outputImg);
+		}
+
+		if (options & draw_comparison) {
+
+			if (!mapStyleToPatches(patches)) {
+				return img;
+			}
+
+			for (int i = 0; i < patches.size(); ++i) {
+					
+				int predLabelID = patches[i]->label()->predicted().id();
+				int trueLabelID = patches[i]->label()->trueLabel().id();
+
+				if (predLabelID == trueLabelID) {
+					painter.setBrush(ColorManager::green(0.5));
+					painter.setPen(ColorManager::green(0.5));
+				}
+				else {
+					painter.setBrush(ColorManager::red(0.5));
+					painter.setPen(ColorManager::red(0.5));
+				}
+
+				painter.drawPolygon(patches[i]->polygon().polygon());
+			}
+
+			return Image::qImage2Mat(outputImg);
+		}
+
+		if (options & draw_gt) {
+
+			for (int i = 0; i < patches.size(); ++i) {
+				int trueLabelID = patches[i]->label()->trueLabel().id();
+				QColor trueLabelColor = ColorManager::getColor(trueLabelID, 0.5);
+
+				painter.setBrush(trueLabelColor);
+				painter.setPen(trueLabelColor);
+
+				painter.drawPolygon(patches[i]->polygon().polygon());
+			}
+
+			cv::Mat outputImgCV = Image::qImage2Mat(outputImg);
+			return outputImgCV;
+		}
+
+		return draw(img);
+
 	}
 
 	QString FontStyleClassification::toString() const {
@@ -891,6 +1130,17 @@ namespace rdf {
 	}
 
 	bool FontStyleClassification::checkInput() const {
-		return (!isEmpty() && !mTextLines.isEmpty()) || !mProcessLines;
+
+		if (isEmpty()) {
+			qWarning() << "Missing input data for font style classification.";
+			return false;
+		}
+		if (mClassifier->isEmpty() || !mClassifier->isTrained()) {
+			qWarning() << "Font Style Classifier empty or not trained.";
+			qInfo() << "Make sure font style classifier is set correctly.";
+			return false;
+		}
+		
+		return true;
 	}
 }

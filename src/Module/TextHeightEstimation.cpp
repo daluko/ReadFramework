@@ -233,7 +233,7 @@ namespace rdf {
 				magnitude(planes[0], planes[1], mag);
 
 				//find index of coefficient with max magnitude
-				mag.at<float>(0, 0) = 0;	//discard contant compoent (0 index coefficient)
+				mag.at<float>(0, 0) = 0;	//discard constant component (0 index coefficient)
 				mag = mag(cv::Range(0, std::min(mag.rows / 2, 100)), cv::Range(0, 1));	//ignore coefficients with index > 100 (assumption -> max 100 lines per page)
 
 				double maxVal;
@@ -314,7 +314,7 @@ namespace rdf {
 				magnitude(planes[0], planes[1], mag);
 
 				//find index of coefficient with max magnitude
-				mag.at<float>(0, 0) = 0;	//discard contant compoent (0 index coefficient)
+				mag.at<float>(0, 0) = 0;	//discard constant component (0 index coefficient)
 				mag = mag(cv::Range(0, std::min(mag.rows / 2, 100)), cv::Range(0, 1));	//ignore coefficients with index > 100 (assumption -> max 100 lines per page)
 
 				double maxVal;

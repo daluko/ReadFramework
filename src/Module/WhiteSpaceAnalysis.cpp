@@ -3221,11 +3221,6 @@ bool TextBlockFormation::compute() {
 
 	//cv::Mat imgBf = draw(mImg);
 
-	//remove parentheses to please Aletheia and avoid errors
-	//tb->setPolygon(rdf::Polygon::fromRect(bb));
-	//tb->setId(tb->id().remove("{").remove("}"));	
-	//tb->setType(rdf::Region::type_text_region);
-
 	return true;
 }
 
@@ -3301,7 +3296,7 @@ void TextBlockFormation::computeTextBlocks(PixelGraph pg) {
 
 void TextBlockFormation::computeAdjacency(PixelGraph pg) {
 
-	//TODO fix minHeightRatio parameter and computation of heightRation value
+	//TODO fix minHeightRatio parameter and computation of heightRatio value
 	double minHeightRatio = 0.75;
 
 	for (auto pixel : pg.set().pixels()) {
@@ -3560,7 +3555,6 @@ void TextBlockFormation::refineTextBlocks() {
 	//debugEND
 
 	qInfo() << "Removed " << filtered.size() << " text blocks because they are contained in another one.";
-
 
 	////debug
 	////QImage qImg(mImg.size().width, mImg.size().height, QImage::Format_ARGB32);	//blank image

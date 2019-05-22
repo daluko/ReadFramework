@@ -55,6 +55,7 @@ namespace rdf {
 class DllCoreExport GaborFilterBank {
 
 public:
+	GaborFilterBank();
 	GaborFilterBank( QVector<double> lambda, QVector<double> theta, QVector<cv::Mat> kernels);
 
 	void setLambda(QVector<double> lambda);
@@ -65,6 +66,7 @@ public:
 	QVector<double> theta() const;
 	QVector<cv::Mat> kernels() const;
 
+	bool isEmpty();
 	QVector<cv::Mat> draw();
 
 private:

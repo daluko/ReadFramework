@@ -50,6 +50,7 @@
 #include <QDateTime>
 
 #include <opencv2/core.hpp>
+#include "opencv2/imgproc.hpp"
 #pragma warning(pop)
 
 // needed for registering the file version
@@ -352,6 +353,36 @@ void Utils::initDefaultFramework() {
 
 	rdf::Utils::instance().initFramework();
 
+}
+
+/// Draws bar chart visualizing the data
+/// from the input row vector.
+/// data = row vector containig data values
+cv::Mat Utils::drawBarChart(const cv::Mat data) {
+
+	cv::Mat data_;
+	data.convertTo(data_, CV_32FC1);
+
+	double maxVal, minVal;
+	cv::minMaxLoc(data, &minVal, &maxVal, NULL,NULL);
+	maxVal = (int)std::ceil(maxVal);
+	
+	int maxVal_ = maxVal;
+	if (minVal < 0)
+		maxVal_ = maxVal - (int)std::floor(minVal);
+
+	cv::Mat chartImg = cv::Mat(cv::Size(data.cols, maxVal_), CV_8U, cv::Scalar(0));
+	maxVal = maxVal - 1;
+
+	for (int j = 1; j < data.cols; j++) {
+		int cVal = (int) std::round(data_.at<float>(j - 1));
+
+		cv::Point p1 = cv::Point(j - 1, maxVal);
+		cv::Point p2 = cv::Point(j - 1, maxVal - cVal);
+		cv::line(chartImg, p1, p2, cv::Scalar(255), 1, 8, 0);
+	}
+
+	return chartImg;
 }
 
 // Converter --------------------------------------------------------------------
