@@ -1676,7 +1676,7 @@ QVector<QSharedPointer<TextLineSet>> TextLineHelper::filterAngle(const QVector<Q
 		double orDist = Algorithms::angleDist(textOr, baseLineOr, CV_PI);
 		if (orDist > maxAngle) {
 			filtered << tl;
-			qDebug() << tl->id() << "angle error:" << orDist*DK_RAD2DEG << "tl" << textOr*DK_RAD2DEG << "bl" << baseLineOr*DK_RAD2DEG;
+			//qDebug() << tl->id() << "angle error:" << orDist*DK_RAD2DEG << "tl" << textOr*DK_RAD2DEG << "bl" << baseLineOr*DK_RAD2DEG;
 		}
 	}
 
@@ -1978,6 +1978,7 @@ bool WSTextLineSet::isShort(double minWSSize) const{
 
 	//minBCRSize * 5 -> minBCRSize ~ 1 char -> 2 words with 2 char + 1 whitespace
 	//TODO consider using a minLineLenght parameter in config
+	//TODO try to simplify this section, consider removing maxGap constraint
 	if ((mMaxGap < minWSSize && mSet.size() < 20) || mSet.size() < 5 || boundingBox().width() < mMinBCRSize * 5) {
 		return true;
 	}

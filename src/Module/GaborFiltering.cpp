@@ -74,7 +74,6 @@ cv::Mat GaborFiltering::createGaborKernel(int kSize, double lambda, double theta
 	return kernel;
 }
 
-
 GaborFilterBank GaborFiltering::createGaborFilterBank(QVector<double> lambda, QVector<double> theta,
 	int ksize, double sigma, double psi, double gamma, bool openCV) {
 
@@ -87,7 +86,7 @@ GaborFilterBank GaborFiltering::createGaborFilterBank(QVector<double> lambda, QV
 
 			double sigma_;
 			if (sigma == -1)
-				sigma_ = lambda[l];
+				sigma_ = lambda[l]; //sigma_ = 1.1*lambda[l];
 			else
 				sigma_ = sigma;
 
@@ -211,6 +210,7 @@ QVector<cv::Mat> GaborFilterBank::draw(){
 	
 	cv::Mat kernelImages;
 	cv::Mat kernelDFTImages;
+	cv::Mat filterBankFR;
 
 	for (int l = 0; l < mLambda.length(); ++l) {
 		cv::Mat kernelRow, kernelDFTRow;
@@ -220,19 +220,30 @@ QVector<cv::Mat> GaborFilterBank::draw(){
 			cv::Mat kernel = mKernels[idx];
 			cv::Mat kernel_planes[2];
 			cv::split(kernel, kernel_planes);
-			kernel = kernel_planes[1];	//visualize real part of kernel only
+			kernel = kernel_planes[0];		//visualize real part of kernel only
+			//kernel = kernel_planes[1];	//real part!?
 
 			// visualize kernels in spatial domain
+			cv::Mat kernel_norm = kernel.clone();
+			normalize(kernel_norm, kernel_norm, 0, 1, CV_MINMAX);
+
 			if (kernelRow.empty()) {
-				cv::Mat kernel_norm = kernel.clone();
-				normalize(kernel_norm, kernel_norm, 0, 1, CV_MINMAX);
-				kernelRow = kernel_norm;
+				//cv::Mat img = cv::Mat::ones(kernel_norm.size().height, 100, CV_32F);
+				QImage qImg = QImage(200, kernel_norm.size().height, QImage::Format_Grayscale8);
+				qImg.fill(QColor(255,255,255));
+				QPainter painter(&qImg);
+
+				QString outText = "lambda/f = " + QString::number(mLambda[l]);
+				painter.drawText(QRect(0, 0, 200, kernel_norm.size().height), Qt::AlignCenter, outText);
+				kernelRow = Image::qImage2Mat(qImg);
+				kernelRow.convertTo(kernelRow, CV_32F);
+				
+				//insert kernel image
+				cv::hconcat(kernelRow, kernel_norm, kernelRow);
+				//kernelRow = kernel_norm;
 			}
 			else {
 				cv::hconcat(kernelRow, cv::Mat::ones(kernelRow.size().height, 5, CV_32F), kernelRow);
-
-				cv::Mat kernel_norm = kernel.clone();
-				normalize(kernel_norm, kernel_norm, 0, 1, CV_MINMAX);
 				cv::hconcat(kernelRow, kernel_norm, kernelRow);
 			}
 			
@@ -241,21 +252,24 @@ QVector<cv::Mat> GaborFilterBank::draw(){
 			dft(kernel, kernelDFT, cv::DFT_COMPLEX_OUTPUT);
 
 			std::vector<cv::Mat> planes;
-			split(kernelDFT, planes);							// planes[0] = Re(DFT(I), planes[1] = Im(DFT(I))
-			magnitude(planes[0], planes[1], magnitudeImg);		// planes[0] = magnitude
+			split(kernelDFT, planes);							// planes[0] = Re(DFT(I)), planes[1] = Im(DFT(I))
+			magnitude(planes[0], planes[1], magnitudeImg);
 			
 			magnitudeImg += cv::Scalar::all(1);					//switch to logarithmic scale
 			log(magnitudeImg, kernelDFT);
 			WSAHelper::fftShift(kernelDFT);						// shift 0 frequency to center of image
+			normalize(kernelDFT, kernelDFT, 0, 1, CV_MINMAX);
+
+			if (filterBankFR.empty())
+				filterBankFR = kernelDFT.clone();
+			else
+				filterBankFR += kernelDFT;
 
 			if (kernelDFTRow.empty()) {
-				normalize(kernelDFT, kernelDFT, 0, 1, CV_MINMAX);
 				kernelDFTRow = kernelDFT;
 			}
 			else {
 				cv::hconcat(kernelDFTRow, cv::Mat::ones(kernelDFTRow.size().height, 5, CV_32F), kernelDFTRow);
-
-				normalize(kernelDFT, kernelDFT, 0, 1, CV_MINMAX);
 				cv::hconcat(kernelDFTRow, kernelDFT, kernelDFTRow);
 			}
 		}
@@ -275,7 +289,34 @@ QVector<cv::Mat> GaborFilterBank::draw(){
 		}
 	}
 
-	QVector<cv::Mat> output = {kernelImages, kernelDFTImages};
+	cv::Mat topRow;
+	int width = mKernels[0].cols;
+
+	for (int t = 0; t < mTheta.length(); ++t) {
+
+		QImage qImg = QImage(width, 50, QImage::Format_Grayscale8);
+		qImg.fill(QColor(255, 255, 255));
+		QPainter painter(&qImg);
+
+		QString outText = "theta = " + QString::number(mTheta[t]);
+		painter.drawText(QRect(0, 0, width, 50), Qt::AlignCenter, outText);
+
+		cv::Mat topRow_ = Image::qImage2Mat(qImg);
+		topRow_.convertTo(topRow_, CV_32F);
+		
+		if (topRow.empty()) {
+			topRow = cv::Mat::ones(50, 200, CV_32F);
+			cv::hconcat(topRow, topRow_, topRow);
+		}
+		else {
+			cv::hconcat(topRow, cv::Mat::ones(50, 5, CV_32F), topRow);
+			cv::hconcat(topRow, topRow_, topRow);
+		}		
+	}
+
+	cv::vconcat(topRow, kernelImages, kernelImages);
+
+	QVector<cv::Mat> output = {kernelImages, kernelDFTImages, filterBankFR };
 
 	return output;
 }

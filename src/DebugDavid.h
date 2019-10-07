@@ -36,6 +36,7 @@
 #include "ScaleFactory.h"
 #include "FontStyleClassification.h"
 #include "Elements.h"
+#include "WhiteSpaceAnalysis.h"
 
 #pragma warning(push, 0)	// no warnings from includes
 // Qt Includes
@@ -56,9 +57,16 @@ public:
 
 	void run();
 	void processDirectory(const QString dirPath);
+	void testParameterSettings(const QString dirPath = QString());
+	void testFontHeightRatio();
+
 
 protected:
 	DebugConfig mConfig;
+	QSharedPointer<WhiteSpaceAnalysisConfig> mWsaConfig;
+	QSharedPointer<TextLineHypothesizerConfig> mTlhConfig;
+	QSharedPointer<WhiteSpaceSegmentationConfig> mWssConfig;
+	QSharedPointer<TextBlockFormationConfig> mTbfConfig;
 };
 
 class FontStyleClassificationTest {
@@ -70,11 +78,14 @@ public:
 	void processDirectory(const QString dirPath);
 	void testSyntheticDataSet(QString filePath, int maxSampleCount = -1);
 	void testSyntheticPage(QString filePath, QString trainDataPath);
+	void testClassifierTraining(QString dirPath);
 
 protected:
 	QStringList loadTextSamples(QString filePath);
 	QVector<QSharedPointer<TextLine>> loadTextLines(QString imagePath);
 	QVector< QSharedPointer<TextRegion>> loadWordRegions(QString imagePath);
+	template <typename T>
+	QVector< QSharedPointer<T>> loadRegions(QString imagePath, Region::Type type);
 	QVector<QSharedPointer<TextPatch>> regionsToTextPatches(QVector<QSharedPointer<TextRegion>> wordRegions, LabelManager lm,  cv::Mat img);
 
 	bool readDataSet(QString inputFilePath, FeatureCollectionManager & fcm, QStringList & samples) const;
@@ -90,6 +101,7 @@ protected:
 
 	LabelManager generateFontLabelManager(QVector<QFont> fonts);
 	QVector<QSharedPointer<TextPatch>> generateTextPatches(QStringList textSamples, LabelManager labelManager);
+	QVector<QSharedPointer<TextPatch>> generateTextPatches(QVector<QSharedPointer<TextLine>> wordRegions, cv::Mat img, int PatchSize = 50);
 	FeatureCollectionManager generatePatchFeatures(QVector<QSharedPointer<TextPatch>> textPatches);
 
 	QVector<QFont> generateFontStyles() const;
@@ -111,9 +123,37 @@ public:
 
 	void run();
 	void processDirectory(QString dirPath);
+	bool drawTextHeightRect(QRect thr);
 
 protected:
 	DebugConfig mConfig;
+};
+
+class TextBlockFormationTest {
+
+public:
+	TextBlockFormationTest(const DebugConfig& config = DebugConfig());
+
+	void run();
+
+protected:
+	DebugConfig mConfig;
+	void mergeLineRegions(QVector<QSharedPointer<TextLine>>& textLines, Rect mergRect = Rect());
+	QSharedPointer<TextRegion> mergeLinesToBlock(QVector<QSharedPointer<TextLine>> textLines, Rect mergRect);
+	Polygon computeTextBlockPolygon(QVector<QSharedPointer<TextLine>> textLines);
+};
+
+class DebugDavidUtils {
+
+public:
+	//static DebugDavidUtils& instance();
+	template <typename T>
+	static QVector< QSharedPointer<T>> loadRegions(QString imagePath, Region::Type type);
+
+private:
+	//DebugDavidUtils();
+	//DebugDavidUtils(const DebugDavidUtils&);
+
 };
 
 }

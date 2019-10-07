@@ -906,13 +906,14 @@ namespace rdf {
 		//QVector<double> mTheta = { 0 * DK_DEG2RAD, 45 * DK_DEG2RAD, 90 * DK_DEG2RAD, 135 * DK_DEG2RAD };					//orientation
 
 		if (lambda.isEmpty())
-			lambda = { 2, 4, 8, 16, 32};					//frequency/wavelength
+			lambda = { 2, 4, 8, 16, 32 };	//frequency/wavelength
+			//lambda = { 4, 8, 16, 32};		//test if low frequency is needed
 		
-		if (theta.isEmpty())
-			theta = { 0, 45, 90, 135};						//orientation
-			
 		for (int i = 0; i < lambda.size(); i++)
 			lambda[i] *= sqrt(2);
+
+		if (theta.isEmpty())
+			theta = { 0, 45, 90, 135};						//orientation
 
 		for (int i = 0; i < theta.size(); i++)
 			theta[i] *= DK_DEG2RAD;
@@ -1015,7 +1016,7 @@ namespace rdf {
 		if (bbox.isNull())
 			return cv::Mat();
 
-		cv::Mat predlabelMap(bbox.height(), bbox.width(), CV_8UC1, cv::Scalar(0));
+		cv::Mat predlabelMap((int)bbox.height(), (int)bbox.width(), CV_8UC1, cv::Scalar(0));
 		for (auto tp : mTextPatches) {
 			auto poly = tp->polygon();
 

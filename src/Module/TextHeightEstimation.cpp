@@ -107,9 +107,8 @@ namespace rdf {
 
 	bool TextHeightEstimation::compute() {
 
-		//TODO fix parameters
 		//TODO check weights of PMFs (lower level PMFs seem to have large influence -> results of higher levels will be ignored)
-		//TODO check for run time problems (big difference on similar images)
+		//TODO check for run time issues
 
 		if (!checkInput())
 			return false;
@@ -149,8 +148,8 @@ namespace rdf {
 		//get estimate for confidence of THE result
 		computeConfidence(accPMF);
 
-		qInfo() << "Estimated text height = " << QString::number(thEstimate);
-		qInfo() << "Finished text height estimation. Computation took: " << dt.getTotal();
+		//qInfo() << "Estimated text height = " << QString::number(thEstimate);
+		qInfo() << "Finished Athena text height estimation. Computation took: " << dt.getTotal();
 
 		return true;
 	}
@@ -194,7 +193,7 @@ namespace rdf {
 			splitRanges << r1 << r2;
 		}
 		else {
-			int rm = range.start + std::ceil(range.size() / 2.0);
+			int rm = range.start + (int)std::ceil(range.size() / 2.0);
 			cv::Range r1(range.start, rm);
 			cv::Range r2(rm - 1, range.end);
 
@@ -206,7 +205,7 @@ namespace rdf {
 
 	cv::Mat TextHeightEstimation::processImagePatches(cv::Mat img){
 
-		cv::Mat accPMF = cv::Mat::zeros(1, ceil(img.rows / 2.0), CV_32F);
+		cv::Mat accPMF = cv::Mat::zeros(1, (int)ceil(img.rows / 2.0), CV_32F);
 
 		//process each layer
 		for (int i = 1; i < imagePatches.size(); ++i) {	//discard level 0 -> contribution is very poor according to Pintus et al.
@@ -215,11 +214,11 @@ namespace rdf {
 			cv::Mat maxMagHist = cv::Mat::zeros(100, 1, CV_32F);
 			cv::Mat maxMagCount = cv::Mat::zeros(100, 1, CV_8U);
 			
-			//process each patche of current layer
+			//process each patch of the current layer
 			for (auto pi : layer) {
 
 				cv::Mat patch = img(pi->yRange, pi->xRange).clone();
-				cv::Mat nacImg = nacf(patch); //compute normalize auto correlation
+				cv::Mat nacImg = nacf(patch); //compute normalized auto correlation
 				cv::Mat vPP, vPPdft, mag;
 
 				//compute vertical projection profile of nac image
@@ -256,7 +255,7 @@ namespace rdf {
 			cv::minMaxLoc(maxMagCount, NULL, NULL, NULL, &maxLoc);
 			int thIdx = maxLoc.y;
 
-			//compute probability mass function of text height random variable and accumulate it for all levels
+			//compute probability mass function of text height random variable and accumulate it over all levels
 			double patchHeight = layer[0]->yRange.size();
 			double patchWidth = layer[0]->xRange.size();
 
@@ -286,7 +285,7 @@ namespace rdf {
 
 	cv::Mat TextHeightEstimation::processImagePatchesDebug(cv::Mat img){
 
-		cv::Mat accPMF = cv::Mat::zeros(1, ceil(img.rows / 2.0), CV_32F);
+		cv::Mat accPMF = cv::Mat::zeros(1, (int)ceil(img.rows / 2.0), CV_32F);
 
 		for (int i = 1; i < imagePatches.size(); ++i) {	//discard level 0 -> contribution is very poor according to Pintus et al.
 
@@ -328,30 +327,30 @@ namespace rdf {
 				}
 
 				//debug draw-------------------------------------------------------------------------------------------------------------------------
-				//draw vertical projection profile within dft image
+				//draw vertical projection profile within nac image
 				nacImg.convertTo(nacImg, CV_8U, 255);
 
 				int max_x = nacImg.cols - 1;
 				for (int j = 1; j < vPP.rows; j++) {
-					cv::Point p1 = cv::Point(max_x - vPP.at<float>(j - 1), j - 1);
-					cv::Point p2 = cv::Point(max_x - vPP.at<float>(j), j);
+					cv::Point p1 = cv::Point(max_x - (int)round(vPP.at<float>(j - 1)), j - 1);
+					cv::Point p2 = cv::Point(max_x - (int)round(vPP.at<float>(j)), j);
 					cv::line(nacImg, p1, p2, cv::Scalar(255), 2, 8, 0);
 				}
 
 				//draw magnitudes
-				normalize(mag, mag, 0, nacImg.cols/2.0, CV_MINMAX);
-				for (int j = 0; j < mag.rows; j++) {
-					cv::Point p1 = cv::Point(0, j);
-					cv::Point p2 = cv::Point(mag.at<float>(j), j);
-					cv::line(nacImg, p1, p2, cv::Scalar(255), 1, 8, 0);
-				}
+				//normalize(mag, mag, 0, nacImg.cols/2.0, CV_MINMAX);
+				//for (int j = 0; j < mag.rows; j++) {
+				//	cv::Point p1 = cv::Point(0, j);
+				//	cv::Point p2 = cv::Point((int)round(mag.at<float>(j)), j);
+				//	cv::line(nacImg, p1, p2, cv::Scalar(255), 1, 8, 0);
+				//}
 
 				//draw patch and result values in original image
 				QImage qImg = Image::mat2QImage(nacImg, true);
 				QPainter painter(&qImg);
-				painter.setPen(QColor(150,150,150,255));
-				QString outText = "maxMagIndex=" + QString::number(maxLoc.y) + "\n" + "maxMag=" + QString::number(maxVal);
-				painter.drawText(qImg.rect(), QTextOption::WrapAtWordBoundaryOrAnywhere || Qt::AlignTop || Qt::AlignLeft, outText);
+				//painter.setPen(QColor(150,150,150,255));
+				//QString outText = "maxMagIndex=" + QString::number(maxLoc.y) + "\n" + "maxMag=" + QString::number(maxVal);
+				//painter.drawText(qImg.rect(), QTextOption::WrapAtWordBoundaryOrAnywhere || Qt::AlignTop || Qt::AlignLeft, outText);
 				nacImg = Image::qImage2Mat(qImg);
 				cv::cvtColor(nacImg, nacImg, cv::COLOR_BGR2GRAY);
 				nacImg.copyTo(nacLayer(pi->yRange, pi->xRange));
@@ -462,7 +461,7 @@ namespace rdf {
 		for (int t = 0; t < tMax; ++t){
 			double expVal = exp(-0.5*pow((t - m), 2) / sig);
 			double ft = w * expVal;
-			pmf.at<float>(t) = ft;
+			pmf.at<float>(t) = (float)ft;
 		}
 
 		return pmf;
@@ -541,7 +540,7 @@ namespace rdf {
 		//compute standard deviation of accumulated PMF -> giving approximate confidence of THE results
 		cv::Mat xi = cv::Mat::zeros(accPMF.size(), CV_32F);
 		for (int i = 0; i < accPMF.cols; ++i) {
-			xi.at<float>(i) = i;
+			xi.at<float>(i) = (float)i;
 		}
 
 		double sumVal = cv::sum(accPMF)[0];
@@ -589,7 +588,7 @@ namespace rdf {
 		return Image::qImage2Mat(qImg);
 	}
 
-	void TextHeightEstimation::drawDebugImages(QString input_path) const{
+	void TextHeightEstimation::drawDebugImages(QString input_path) const {
 		
 		input_path = QDir::cleanPath(input_path);
 		QFileInfo pathInfo(input_path);
@@ -608,17 +607,38 @@ namespace rdf {
 			return;
 		}
 
-		QString debugPath = Utils::createFilePath(input_path, "_THE_accPMF", ".png");
+		QString debugPath = Utils::createFilePath(input_path, "_THE_accPMF", "png");
 		Image::save(accPMFImg, debugPath);
 
 		for (int i = 0; i < nacImages.size(); ++i) {
-			debugPath = Utils::createFilePath(input_path, "_THE_nac"+QString::number(i), ".png");
+			debugPath = Utils::createFilePath(input_path, "_THE_nac"+QString::number(i), "png");
 			Image::save(nacImages[i], debugPath);
 		}
 
 		for (int i = 0; i < magImages.size(); ++i) {
-			debugPath = Utils::createFilePath(input_path, "_THE_mag" + QString::number(i), ".png");
+			debugPath = Utils::createFilePath(input_path, "_THE_mag" + QString::number(i), "png");
 			Image::save(magImages[i], debugPath);
+		}
+
+		//draw image patch rects (thesis draw)
+		QImage qImg = Image::mat2QImage(mImg, true);
+		QPainter painter(&qImg);
+
+		for (int i = 0; i < imagePatches.size(); ++i) {
+			auto layer = imagePatches[i];
+			debugPath = Utils::createFilePath(input_path, "_THE_patchRects_" + QString::number(i), "png");
+
+			for (auto p : layer) {
+				cv::Range xr = p->xRange;
+				cv::Range yr = p->yRange;
+				QRect patchRect = QRect(xr.start, yr.start, xr.end - xr.start, yr.end - yr.start);
+				QPen pen = QPen(ColorManager::blue());
+				pen.setWidth(10);
+				painter.setPen(pen);
+				painter.drawRect(patchRect);
+			}
+
+			Image::save(qImg, debugPath);
 		}
 	}
 

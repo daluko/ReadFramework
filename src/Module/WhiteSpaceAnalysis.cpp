@@ -82,6 +82,14 @@ namespace rdf {
 		return ModuleConfig::checkParam(mMaxImgSide, 0, INT_MAX, "maxImgSide");
 	}
 
+	void WhiteSpaceAnalysisConfig::setTextHeightMultiplier(double textHeightMultiplier){
+		mTextHeightMultiplier = textHeightMultiplier;
+	}
+
+	double WhiteSpaceAnalysisConfig::textHeightMultiplier() const{
+		return ModuleConfig::checkParam(mTextHeightMultiplier, 0.1, 5.0, "textHeightMultiplier");
+	}
+
 	void WhiteSpaceAnalysisConfig::setScaleInput(bool scaleInput) {
 		mScaleInput = scaleInput;
 	}
@@ -90,12 +98,28 @@ namespace rdf {
 		return mScaleInput;
 	}
 
+	void WhiteSpaceAnalysisConfig::setAthenaScaling(bool athenaScaling){
+		mAthenaScaling = athenaScaling;
+	}
+
+	bool WhiteSpaceAnalysisConfig::athenaScaling() const{
+		return mAthenaScaling;
+	}
+
 	void WhiteSpaceAnalysisConfig::setDebugDraw(bool debugDraw){
 		mDebugDraw = debugDraw;
 	}
 
 	bool WhiteSpaceAnalysisConfig::debugDraw() const{
 		return mDebugDraw;
+	}
+
+	void WhiteSpaceAnalysisConfig::setBlackSeparators(bool bs) {
+		mBlackSeparators = bs;
+	}
+
+	bool WhiteSpaceAnalysisConfig::blackSeparators() const {
+		return mBlackSeparators;
 	}
 
 	void WhiteSpaceAnalysisConfig::setDebugPath(const QString & dp) {
@@ -108,19 +132,25 @@ namespace rdf {
 	
 	void WhiteSpaceAnalysisConfig::load(const QSettings & settings) {
 
-		mNumErosionLayers = settings.value("numErosionLayers", numErosionLayers()).toInt();
-		mMaxImgSide  = settings.value("maxImgSide", maxImgSide()).toInt();
-		mScaleInput  = settings.value("scaleInput", scaleInput()).toBool();
-		mDebugDraw   = settings.value("debugDraw", debugDraw()).toBool();
-		mDebugPath   = settings.value("debugPath", debugPath()).toString();
+		mNumErosionLayers		= settings.value("numErosionLayers", numErosionLayers()).toInt();
+		mMaxImgSide				= settings.value("maxImgSide", maxImgSide()).toInt();
+		mTextHeightMultiplier	= settings.value("textHeightMultiplier", textHeightMultiplier()).toDouble();
+		mScaleInput				= settings.value("scaleInput", scaleInput()).toBool();
+		mAthenaScaling			= settings.value("athenaScaling", athenaScaling()).toBool();
+		mDebugDraw				= settings.value("debugDraw", debugDraw()).toBool();
+		mBlackSeparators		= settings.value("blackSeparators", blackSeparators()).toBool();
+		mDebugPath				= settings.value("debugPath", debugPath()).toString();
 	}
 
 	void WhiteSpaceAnalysisConfig::save(QSettings & settings) const {
 
 		settings.setValue("numErosionLayers", numErosionLayers());
 		settings.setValue("maxImgSide", maxImgSide());
+		settings.setValue("textHeightMultiplier", textHeightMultiplier());
 		settings.setValue("scaleInput", scaleInput());
+		settings.setValue("athenaScaling", athenaScaling());
 		settings.setValue("debugDraw", debugDraw());
+		settings.setValue("blackSeparators", blackSeparators());
 		settings.setValue("debugPath", debugPath());
 	}
 
@@ -132,6 +162,15 @@ WhiteSpaceAnalysis::WhiteSpaceAnalysis(const cv::Mat& img) {
 
 	mConfig = QSharedPointer<WhiteSpaceAnalysisConfig>::create();
 	mConfig->loadSettings();
+
+	mTlhConfig = QSharedPointer<TextLineHypothesizerConfig>::create();
+	mTlhConfig->loadSettings();
+
+	mWssConfig = QSharedPointer<WhiteSpaceSegmentationConfig>::create();
+	mWssConfig->loadSettings();
+
+	mTbfConfig = QSharedPointer<TextBlockFormationConfig>::create();
+	mTbfConfig->loadSettings();
 
 	mScaleFactory = QSharedPointer<ScaleFactory>(new ScaleFactory(img.size()));
 
@@ -146,7 +185,7 @@ bool WhiteSpaceAnalysis::isEmpty() const {
 
 bool WhiteSpaceAnalysis::compute() {
 	//TODO use asssert() function to check input parameters and results
-	//TODO minor improvements:	merge h-aligned line fragments that are isolated or at top/bottom of text block
+	//TODO minor improvements:	merge horizontally aligned line fragments that are isolated or at top/bottom of text block
 	//							try to simplify/smooth polygon regions of TBs
 
 	qInfo()<< "Computing white space layout analysis...";
@@ -159,27 +198,43 @@ bool WhiteSpaceAnalysis::compute() {
 
 	//---------------------------------------------------------------------------------------------------------
 	// PREPROCESSING: compute text height estimate, black separators and scale input image according to config options
+
 	Timer dt0;
 	//scaling of input image (if enabled: super pixels will be computed in advance)	
 	if (config()->scaleInput()) {
 
-		//text height estimation
-		//TextHeightEstimation the(inputImg);
+		//Athena text height estimation
+		if (config()->athenaScaling()) {
+			Timer dtA;
+			TextHeightEstimation the(inputImg);
+		
+			if (the.compute()) {
+				mtextHeightAthena = the.textHeightEstimate();
+				if (the.confidence() > 0.75) {
+					mtextHeightEstimate = the.textHeightEstimate();
+					qInfo() << "Athena text height estimation sucessfull.";
+					qInfo() << "Estimated text line size = " << QString::number(mtextHeightEstimate);
+					athenaEstimateValid = true;
+				}
+				else
+					qInfo() << "Athena text height estimation has low confidence = " << QString::number(the.confidence());
+			}
 
-		//if (the.compute()) {
-		//	if (the.confidence() > 0.75) {
-		//		mtextHeightEstimate = the.textHeightEstimate();
-		//		qInfo() << "Text height estimation sucessfull."; 
-		//		qInfo() << "Estimated text line size = " << QString::number(mtextHeightEstimate);
-		//	}
-		//}
+			QString ttA = dtA.getTotal();
+			//thesis  draw
+			//the.drawDebugImages(config()->debugPath());
+		}
 
 		if (mtextHeightEstimate > 0) {
 			double sf = (double)mMinTextHeight / (double)mtextHeightEstimate;
 			scaleInputImage(sf);
 		}
-		else
+		else {
 			scaleInputImage();
+		}			
+
+		//thesis draw
+		//drawTheDebugImages(inputImg);
 	}
 
 	QString tt0 = dt0.getTotal();
@@ -208,17 +263,17 @@ bool WhiteSpaceAnalysis::compute() {
 	//prune super pixels in order to reduce amout of pixels used for further processing
 	filterRect = filterPixels(pSet);
 
-	//TODO try to insert non-text filtering here
+	//thesis draw
+	//cv::Mat unfilteredPixelImg = drawFilteredPixels(mImg, ColorManager::blue(), ColorManager::blue(), ColorManager::blue());
+	//cv::Mat bigPixelImg = drawFilteredPixels(mImg, ColorManager::blue(), ColorManager::red(), ColorManager::blue());
+	//cv::Mat overlappingPixelImg = drawFilteredPixels(mImg, ColorManager::blue(), QColor(), ColorManager::red());
+	//cv::Mat finalPixelImg = drawFilteredPixels(mImg, ColorManager::blue(), QColor(), QColor());
 
-	//compute median of pixel heights
-	QList<double> heights;
-	for (const QSharedPointer<Pixel>& px : pSet.pixels())
-		heights << px->bbox().height();
-
-	double medianHeight = Algorithms::statMoment(heights, 0.5);
+	//TODO insert non-text filtering here
 
 	//find black separators (vertical/horizontal lines) in the imput image
-	mBlackSeparators = findBlackSeparators(medianHeight);
+	if(config()->blackSeparators())
+		mBlackSeparators = findBlackSeparators();
 
 	QString tt1 = dt1.getTotal();
 	qInfo() << "Finished super pixel extraction. Computation took: " << tt1;
@@ -227,16 +282,17 @@ bool WhiteSpaceAnalysis::compute() {
 	// TEXT LINE HYPOTHIISIZER: compute initial text lines
 	Timer dt2;
 
-	TextLinehypothesizer tlh(mImg, pSet);
+	TextLineHypothesizer tlh(mImg, pSet);
 	tlh.addSeparatorLines(mBlackSeparators);
+	tlh.setConfig(mTlhConfig);
 
 	if (!tlh.compute()) {
 		qWarning() << "Could not compute text line hypotheses!";
 		return false;
 	}
 
-	auto  textLines = tlh.textLineSets();
-	mTextLineHypotheses = textLines;
+	//auto  textLines = tlh.textLineSets();
+	mTextLineHypotheses = tlh.textLineSets();
 	//cv::Mat imgDebugWhiteSpaces = drawWhiteSpaces(img);	//based on mTextLineHypotheses and computed white spaces
 
 	qInfo() << "Found " << tlh.textLineSets().size() << " text lines.";
@@ -248,23 +304,25 @@ bool WhiteSpaceAnalysis::compute() {
 	// WHITE SPACE SEGMENTATION: compute white space segmentation for estimated text lines
 	Timer dt3;
 
-	WhiteSpaceSegmentation wss(mImg, textLines);
-	wss.addSeparatorLines(mBlackSeparators);
+	////cv::Mat wsImg = drawWhiteSpaces(mImg);
 
-	if (!wss.compute()) {
-		qWarning() << "Could not compute white space segmentation!";
-		return false;
-	}
+	//WhiteSpaceSegmentation wss(mImg, mTextLineHypotheses);
+	//wss.addSeparatorLines(mBlackSeparators);
+	//wss.setConfig(mWssConfig);
 
-	//get segmented text lines
-	mWSTextLines = wss.textLineSets();
-	//cv::Mat imgDebugWSS = wss.drawSplitTextLines(img);
+	//if (!wss.compute()) {
+	//	qWarning() << "Could not compute white space segmentation!";
+	//	return false;
+	//}
 
-	//debug 
-	if (config()->debugDraw()) {
-		QString imgPath = Utils::createFilePath(config()->debugPath(), "_whiteSpaces","png");
-		Image::save(wss.drawSplitTextLines(mImg), imgPath);
-	}
+	////get segmented text lines
+	//mWSTextLines = wss.textLineSets();
+
+	//if (config()->debugDraw()) {
+	//	QString imgPath = Utils::createFilePath(config()->debugPath(), "_whiteSpaces","png");
+	//	cv::Mat imgDebugWSS = wss.drawSplitTextLines(mImg);
+	//	Image::save(imgDebugWSS, imgPath);
+	//}
 
 	QString tt3 = dt3.getTotal();
 	qInfo() << "Finished white space segmentation. Computation took: " << tt3;
@@ -273,8 +331,13 @@ bool WhiteSpaceAnalysis::compute() {
 	// TEXT BLOCK FORMATION: compute text blocks formed by previously detected text lines
 	Timer dt4;
 
+	//use text line hypotheses as input if no WSS results are availabel
+	if (mWSTextLines.isEmpty())
+			mWSTextLines = mTextLineHypotheses;
+
 	TextBlockFormation tbf(mImg, mWSTextLines);
 	tbf.addSeparatorLines(mBlackSeparators);
+	tbf.setConfig(mTbfConfig);
 
 	if (!tbf.compute()) {
 		qWarning() << "White space analysis: Could not compute text blocks!";
@@ -286,6 +349,20 @@ bool WhiteSpaceAnalysis::compute() {
 	QString tt4 = dt4.getTotal();
 	qInfo() << "Finished text block formation. Computation took: " << tt4;
 
+	//use text lines as output if no text blocks are found
+	if (mTextBlockSet.isEmpty()) {
+		if (mWSTextLines.isEmpty())
+			mWSTextLines = mTextLineHypotheses;
+
+		for (auto tl : mWSTextLines) {
+			Rect imgRect = Rect(0, 0, mImg.cols-1, mImg.rows -1);
+			QPolygonF imgPoly = Polygon::fromRect(imgRect).polygon();
+			QPolygonF poly = imgPoly.intersected(tl->convexHull().polygon());	//clip polygon to image bounds
+
+			TextBlock tb(poly);
+			mTextBlockSet << tb;
+		}
+	}
 
 	if (config()->debugDraw())
 		drawDebugImages(mImg);
@@ -297,7 +374,6 @@ bool WhiteSpaceAnalysis::compute() {
 
 	mTextBlockRegions = mTextBlockSet.toTextRegion();
 	
-
 	mInfo << "white space layout analysis computed in: " << dt;
 	mInfo << "PP: " << tt0 << ", SPE: " << tt1 << ", TLH: " << tt2 << ", WSS: " << tt3 << ", TBF: " << tt4;
 
@@ -308,10 +384,21 @@ QSharedPointer<WhiteSpaceAnalysisConfig> WhiteSpaceAnalysis::config() const {
 	return qSharedPointerDynamicCast<WhiteSpaceAnalysisConfig>(mConfig);
 }
 
+void WhiteSpaceAnalysis::setTlhConfig(QSharedPointer<TextLineHypothesizerConfig> tlhConfig){
+	mTlhConfig = tlhConfig;
+}
+
+void WhiteSpaceAnalysis::setWssConfig(QSharedPointer<WhiteSpaceSegmentationConfig> wssConfig){
+	mWssConfig = wssConfig;
+}
+
+void WhiteSpaceAnalysis::setTbfConfig(QSharedPointer<TextBlockFormationConfig> tbfConfig){
+	mTbfConfig = tbfConfig;
+}
+
 SuperPixel WhiteSpaceAnalysis::computeSuperPixels(const cv::Mat & img){
 
-	//TODO Check choice/influence of MSER max/min parameters (for different image sizes)
-	//TODO use additional flag for processing black/white/both pixels
+	//TODO eval choice of min max area parameters
 
 	int mserMaxArea = (int)std::round(img.rows / 1.5);
 	int mserMinArea = (int)std::round(img.rows / 52);
@@ -368,6 +455,8 @@ bool WhiteSpaceAnalysis::computeLocalStats(PixelSet & pixels) const {
 
 Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 
+	//TODO increase acceptable max width (avoid pruning large character such as W, M, etc.)
+
 	if (set.isEmpty())
 		return Rect();
 
@@ -375,7 +464,6 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 
 	//filter pixels according to size constraints-------------------------------------
 
-	//TODO fix parameters for estimating filter rects
 	QList<double> heights;
 	QList<double> widths;
 	for (auto p : set.pixels()) {
@@ -388,8 +476,9 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 	double q50 = Algorithms::statMoment(widths, 0.5);
 	double q75 = Algorithms::statMoment(widths, 0.75);
 	
-	double lbw = std::max(0.0, (q50 - (q75 - q25)) / 1.5);
-	double ubw = (q50 + (q75 - q25)) * 2.0;
+	double iqd = q75 - q25;
+	double lbw = std::max(0.0, (q50 - iqd) / 1.5);
+	double ubw = (q50 + iqd) * 2.0;
 
 	// compute bounds for heights
 	q25 = Algorithms::statMoment(heights, 0.25);
@@ -476,7 +565,6 @@ Rect WhiteSpaceAnalysis::filterPixels(PixelSet& set){
 				break;
 			}
 
-			//TODO refine this process
 			if (!overlappingPixels.isEmpty()) {
 
 				Rect uBox = overlappingPixels[0]->bbox();
@@ -546,7 +634,7 @@ QVector<QVector<QSharedPointer<rdf::Pixel>>> WhiteSpaceAnalysis::findPixelGroups
 			c_.push_back(Vector2D(p));
 
 		Rect bbox = Rect::fromPoints(c_);
-		bbox.setSize(bbox.size() + Vector2D(1.0, 1.0)); //TODO find out why this is needed
+		bbox.setSize(bbox.size() + Vector2D(1.0, 1.0)); //TODO if this fix is still needed
 		pixelRects << bbox;
 	}
 
@@ -616,12 +704,18 @@ QVector<QVector<QSharedPointer<rdf::Pixel>>> WhiteSpaceAnalysis::findPixelGroups
 	return pixelGroups;
 }
 
-QVector<Line> WhiteSpaceAnalysis::findBlackSeparators(double pixelHeight) const {
-	//consider using full resolution for separator computation
+QVector<Line> WhiteSpaceAnalysis::findBlackSeparators() const {
 
 	//TODO move parameter to config
 	int mMinSeparatorMultiplier = 4; //multiplier for median pixel height -> defining min length of separators
 	QVector<Line> stopLines;
+
+	//compute median of pixel heights
+	QList<double> heights;
+	for (const QSharedPointer<Pixel>& px : pSet.pixels())
+		heights << px->bbox().height();
+
+	double medianPixelHeight = Algorithms::statMoment(heights, 0.5);
 
 	LineTraceLSD lt(mImg);
 	lt.config()->setScale(1.0);
@@ -632,8 +726,8 @@ QVector<Line> WhiteSpaceAnalysis::findBlackSeparators(double pixelHeight) const 
 
 	stopLines << lt.separatorLines();
 
-	if (pixelHeight > 0) {
-		int minLineLength = (int) std::round(pixelHeight) * mMinSeparatorMultiplier;
+	if (medianPixelHeight > 0) {
+		int minLineLength = (int) std::round(medianPixelHeight) * mMinSeparatorMultiplier;
 		stopLines = lt.lineFilter().removeSmall(stopLines, minLineLength);
 	}
 
@@ -651,6 +745,10 @@ QVector<QSharedPointer<TextRegion>> WhiteSpaceAnalysis::textLineRegions() const{
 	for (auto tr : textRegions) {
 		mTextLineRegions << qSharedPointerCast<TextRegion>(tr);
 	}
+	
+	//for (auto tl : mTextLineRegions) {
+	//	tl->setId("cvl-" + tl->id().remove("{").remove("}"));	//avoid errors when using as input for aletheia eval tool
+	//}
 
 	return mTextLineRegions;
 }
@@ -665,7 +763,7 @@ QVector<QSharedPointer<Region>> WhiteSpaceAnalysis::evalTextBlockRegions() const
 
 	for (auto tb : mTextBlockRegions->children()) {
 		tb->removeAllChildren();
-		tb->setId("cvl-" + tb->id().remove("{").remove("}"));	//try to please aletheia input
+		tb->setId("cvl-" + tb->id().remove("{").remove("}"));	//avoid errors when using as input for aletheia eval tool
 		evalRegions << tb;
 	}
 	
@@ -695,9 +793,10 @@ void WhiteSpaceAnalysis::drawDebugImages(const cv::Mat & img){
 	//draw pixel set-------------------------------------------------
 	painter.setPen(ColorManager::blue());
 	pSet.draw(painter, PixelSet::draw_pixels);
+	pSet.draw(painter, PixelSet::draw_rect);
 	//for (auto p : pSet.pixels()) {
-	//	//p->bbox().draw(painter);
-	//	qDebug() << "pixel size = " << p->size() ;
+	//	p->bbox().draw(painter);
+	//	//qDebug() << "pixel size = " << p->size() ;
 	//}
 	painter.end();
 
@@ -710,6 +809,11 @@ void WhiteSpaceAnalysis::drawDebugImages(const cv::Mat & img){
 
 	// draw pixel set and filtered pixels--------------------------------------------------
 	imgPath = Utils::createFilePath(path, "_filtered_pixels", "png");
+	img_debug = drawFilteredPixels(img);
+	Image::save(img_debug, imgPath);
+
+	// draw pixel set and filtered pixels--------------------------------------------------
+	imgPath = Utils::createFilePath(path, "_unfiltered_pixels", "png");
 	img_debug = drawFilteredPixels(img);
 	Image::save(img_debug, imgPath);
 
@@ -733,31 +837,36 @@ void WhiteSpaceAnalysis::drawDebugImages(const cv::Mat & img){
 	imgPath = Utils::createFilePath(path, "_separators", "png");
 	img_debug = drawBlackSeparators(img);
 	Image::save(img_debug, imgPath);
+
 }
 
 cv::Mat WhiteSpaceAnalysis::drawWhiteSpaces(const cv::Mat & img) {
 
-	QImage qImg = Image::mat2QImage(img, true);
-	//QImage qImg(img.size().width, img.size().height, QImage::Format_ARGB32);	//blank image
+	//QImage qImg = Image::mat2QImage(img, true);
+	QImage qImg(img.size().width, img.size().height, QImage::Format_ARGB32);	//blank image
+	qImg.fill(ColorManager::white());
 	QPainter painter(&qImg);
 
 	for (auto tl : mTextLineHypotheses) {
 		for (auto ws : tl->whiteSpacePixels()) {
 			painter.setPen(ColorManager::lightGray());
 
-			if (ws->isBCR())
+			if (ws->isBCR()) {
 				painter.setPen(ColorManager::red());
+				ws->bbox().draw(painter);
+			}	
 
-			ws->bbox().draw(painter);
+			//ws->bbox().draw(painter);
 		}
 
-		painter.setPen(ColorManager::blue());
-		for (auto tp : tl->pixels()) {
-			tp->bbox().draw(painter);
-		}
+		//painter.setPen(ColorManager::blue());
+		//for (auto tp : tl->pixels()) {
+		//	tp->bbox().draw(painter);
+		//}
 
-		painter.setPen(ColorManager::darkGray());
-		tl->boundingBox().draw(painter);
+		//painter.setPen(ColorManager::darkGray());
+		////tl->boundingBox().draw(painter);
+		//tl->convexHull().draw(painter);
 	}
 
 	cv::Mat imgDebugWhiteSpaces = Image::qImage2Mat(qImg);
@@ -765,42 +874,47 @@ cv::Mat WhiteSpaceAnalysis::drawWhiteSpaces(const cv::Mat & img) {
 	return imgDebugWhiteSpaces;
 }
 
-cv::Mat WhiteSpaceAnalysis::drawFilteredPixels(const cv::Mat & img){
+cv::Mat WhiteSpaceAnalysis::drawFilteredPixels(const cv::Mat & img, QColor fpCol, QColor bpCol, QColor opCol){
 	
-	//debug draw
 	//QImage qImg(img.size().width, img.size().height, QImage::Format_ARGB32);	//blank image
 	QImage qImg = Image::mat2QImage(mImg, true);
 	QPainter painter(&qImg);
 
+	//draw pixels deleted due to size contstraints
+	//painter.setPen(ColorManager::darkGray());
+	//Rect lb = Rect(0, 0, filterRect.left(), filterRect.top());
+	//Rect ub = Rect(0, 0, filterRect.right(), filterRect.bottom());
+	//lb.draw(painter);	//filter rects used as size constraint for pixels
+	//ub.draw(painter);
+	//painter.drawText(ub.toQRect(), Qt::AlignCenter, "fR");
+
+	if (bpCol.isValid()) {
+		painter.setPen(bpCol);
+		for (auto p : removedPixels1) {
+			//QString wh = QString::number(p->bbox().width()) + ", " + QString::number(p->bbox().height());
+			//painter.drawText(p->bbox().topLeft().toQPoint(), wh);
+
+			p->bbox().draw(painter);
+			//p->draw(painter, 0.3, Pixel::DrawFlags() | Pixel::draw_ellipse);
+		}
+	}
+
+	//draw pixels deleted due to size contstraints
+	if (opCol.isValid()) {
+		painter.setPen(opCol);
+		for (auto p : removedPixels2) {
+			p->bbox().draw(painter);
+			//p->draw(painter, 0.3, Pixel::DrawFlags() | Pixel::draw_ellipse);
+		}
+	}
 
 	//draw final pixel Set
-	painter.setPen(ColorManager::blue());
-	for (auto p : pSet.pixels()) {
-		//p->bbox().draw(painter);
-		p->draw(painter, 0.3, Pixel::DrawFlags() | Pixel::draw_ellipse);
-	}
-
-	//draw pixels deleted due to size contstraints
-	painter.setPen(ColorManager::darkGray());
-	Rect lb = Rect(0, 0, filterRect.left(), filterRect.top());
-	Rect ub = Rect(0, 0, filterRect.right(), filterRect.bottom());
-	lb.draw(painter);	//filter rects used as size constraint for pixels
-	ub.draw(painter);
-	painter.drawText(ub.toQRect(), Qt::AlignCenter, "fR");
-
-	painter.setPen(ColorManager::red());
-	for (auto p : removedPixels1) {
-		//p->bbox().draw(painter);
-		//QString wh = QString::number(p->bbox().width()) + ", " + QString::number(p->bbox().height());
-		//painter.drawText(p->bbox().topLeft().toQPoint(), wh);
-		p->draw(painter, 0.3 ,Pixel::DrawFlags() | Pixel::draw_ellipse);
-	}
-
-	//draw pixels deleted due to size contstraints
-	painter.setPen(QColor(255, 255, 102, 255));
-	for (auto p : removedPixels2) {
-		//p->bbox().draw(painter);
-		p->draw(painter, 0.3, Pixel::DrawFlags() | Pixel::draw_ellipse);
+	if (fpCol.isValid()) {
+		painter.setPen(fpCol);
+		for (auto p : pSet.pixels()) {
+			p->bbox().draw(painter);
+			//p->draw(painter, 0.3, Pixel::DrawFlags() | Pixel::draw_ellipse);
+		}
 	}
 
 	cv::Mat img_debug = Image::qImage2Mat(qImg);
@@ -817,15 +931,56 @@ cv::Mat WhiteSpaceAnalysis::drawBlackSeparators(const cv::Mat & img) {
 	QImage qImg = Image::mat2QImage(img, true);
 	//QImage qImg(img.size().width, img.size().height, QImage::Format_ARGB32);	//blank image
 	QPainter painter(&qImg);
-	painter.setPen(ColorManager::red());
+
+	QColor pc = ColorManager::red();
+	pc.setAlphaF(0.7);
+
+	painter.setPen(pc);
 
 	for (auto l : mBlackSeparators) {
 		Line tmp = Line(l);
-		tmp.setThickness(5);
+		tmp.setThickness(10);
 		tmp.draw(painter);
 	}
 		
 	return Image::qImage2Mat(qImg);
+}
+
+void WhiteSpaceAnalysis::drawTheDebugImages(const cv::Mat & img) {
+
+	// draw the debug infos-------------------------------------------------------
+	cv::Mat debugImg;
+
+	int bb = 0;
+	if (img.rows < std::max(mtextHeightAthena, mtextHeightEstimate) + 100)
+		bb = std::max(mtextHeightAthena, mtextHeightEstimate) + 100;
+	
+	cv::Mat img_ = img.clone();
+	if(img_.channels() == 1)
+		cv::cvtColor(img_, img_, cv::COLOR_GRAY2BGRA);
+
+	copyMakeBorder(img_, debugImg, 0, bb, 0, 150 + mtextHeightAthena + mtextHeightEstimate, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0, 0));
+	cv::rectangle(debugImg, cv::Rect(img.cols + 50, 50, mtextHeightAthena, mtextHeightAthena), cv::Scalar(153, 102, 0, 255), 3); //blue
+	cv::rectangle(debugImg, cv::Rect(img.cols + 100 + mtextHeightAthena, 50, mtextHeightEstimate, mtextHeightEstimate), cv::Scalar(167, 192, 120, 255), 3); //green
+	
+	QString path = config()->debugPath();
+	QString fileName= "_the_debug_";
+
+	if(!athenaEstimateValid)
+		fileName += "_!a" + QString::number(mtextHeightAthena);
+	else
+		fileName += "_a" + QString::number(mtextHeightAthena);
+
+	if (!roughEstimateValid)
+		fileName += "_!r" + QString::number(mtextHeightEstimate);
+	else
+		fileName += "_r" + QString::number(mtextHeightEstimate);
+
+	QString imgPath = Utils::createFilePath(path, fileName, "png");
+	QImage qDebugImg = Image::mat2QImage(debugImg);
+
+	if (!qDebugImg.save(imgPath, 0, 1))
+		qDebug() << "Failed to save THE debug image.";
 }
 
 QString WhiteSpaceAnalysis::toString() const {
@@ -838,15 +993,10 @@ bool WhiteSpaceAnalysis::checkInput() const {
 
 void WhiteSpaceAnalysis::scaleInputImage(double sf){
 	
-	//TODO debug results and compare rough vs. precise text height estimate
-	//TODO test parameter choice for computing fitting of scale factor and for scale factor itself
-	
-	bool isRoughEstimate = false;
 	//use original scale to find suitable scale factor
 	if (sf == 1) {
 		
 		qInfo() << "Trying to find alternative rough text height estimate for scaling input image.";
-		isRoughEstimate = true;
 
 		SuperPixel sp = computeSuperPixels(mImg);
 		PixelSet tmpSet = sp.pixelSet();
@@ -863,17 +1013,22 @@ void WhiteSpaceAnalysis::scaleInputImage(double sf){
 			heights << px->bbox().height();
 
 		double medianHeight = Algorithms::statMoment(heights, 0.5);
+		
+		//TODO consider adaptive scaling of median height - e.g. based on quartile distance
+		//mtextHeightEstimate = medianHeight * 2.5; //old setting: tested range 1.5 - 2.5 -> 2.0 best
+		mtextHeightEstimate = qRound(medianHeight * config()->textHeightMultiplier());
 
 		//find new scale factor based on rough text height estimate
-		sf =  (double)mMinTextHeight / (medianHeight*2.5);
+		sf =  (double)mMinTextHeight / (double)mtextHeightEstimate;
 
-		int maxImgSide = (sf < 1) ? round(mImg.rows * sf) : mImg.rows;
+		int maxImgSide = (sf < 1) ? qRound(mImg.rows * sf) : mImg.rows;
 		reconfigScaleFactory(maxImgSide);
 		cv::Mat scaledImg = mScaleFactory->scaled(mImg);
 
-		//TODO consider additional check for strong decrease in amout of super pixels
-		if (validateImageScale(scaledImg))
+		if (validateImageScale(scaledImg)) {
 			mImg = scaledImg;
+			roughEstimateValid = true;
+		}
 		else {
 			reconfigScaleFactory(mImg.rows);
 			pSet = tmpSet;
@@ -883,9 +1038,8 @@ void WhiteSpaceAnalysis::scaleInputImage(double sf){
 			return;
 		}
 	}
-	else {	//use specified sf to determine
-		
-		int maxImgSide = (sf < 1) ? round(mImg.rows * sf) : mImg.rows;
+	else {
+		int maxImgSide = (sf < 1) ? (int)round(mImg.rows * sf) : mImg.rows;
 		reconfigScaleFactory(maxImgSide);
 		cv::Mat scaledImg = mScaleFactory->scaled(mImg);
 
@@ -893,10 +1047,37 @@ void WhiteSpaceAnalysis::scaleInputImage(double sf){
 			mImg = scaledImg;
 		}
 		else {
-			qWarning() << "Scaling based on precomputed text height estimate seems inappropriate .";
+			qWarning() << "Scaling based on precomputed text height estimate seems inappropriate.";
 			scaleInputImage();
 		}
 	}
+
+	//debug text file-----------------------------------------------------------------------------------
+
+	////write scaling results to file
+	//QString outputFilePath = config()->debugPath();
+	//
+	//QString theMethod = "_scaleInfo";
+	//theMethod = (isRoughEstimate) ? QString("_scaleInfo_rthe") : QString("_scaleInfo_athena");
+	//theMethod += "_sf=" + QString::number(mScaleFactory->scaleFactor()) + "_the=" + QString::number(mtextHeightEstimate);
+	//outputFilePath = Utils::createFilePath(outputFilePath, theMethod, "txt");
+
+	//QString timeStamp = QDateTime::currentDateTime().toString("yyyy-MM-dd HH-mm");
+	//QString theInfo =	"Text Height estimation results from " + timeStamp + "\n" + 
+	//					"usingAthena=" + QString::number(!isRoughEstimate) + "\n" +
+	//					"sf=" + QString::number(mScaleFactory->scaleFactor()) + "\n" +
+	//					 "the=" + QString::number(mtextHeightEstimate) + "\n\n";
+
+	//QFile outputFile(outputFilePath);
+
+	//if (outputFile.open(QFile::WriteOnly | QIODevice::Text)) {
+	//	QTextStream outStream(&outputFile);
+	//	outStream << theInfo << endl;
+	//	outStream.flush();
+	//	outputFile.close();
+	//}
+	//else
+	//	qWarning() << "Could not open file for saving evaluation results: " << outputFilePath;
 
 	//debug draw-----------------------------------------------------------------------------------
 	
@@ -932,7 +1113,7 @@ void WhiteSpaceAnalysis::scaleInputImage(double sf){
 	//Image::save(debug_img, imgPath);
 
 	//---------------------------------------------------------------------------------------------
-	qInfo() << "Input image is scaled by factor: " << mScaleFactory->scaleFactor();
+	//qInfo() << "Input image is scaled by factor: " << mScaleFactory->scaleFactor();
 }
 
 bool WhiteSpaceAnalysis::validateImageScale(cv::Mat img){
@@ -996,58 +1177,58 @@ void WhiteSpaceAnalysis::reconfigScaleFactory(int maxImgSide){
 }
 
 
-// TextLinehypothesizerConfig ------------------------------------------------------------------------------
+// TextLineHypothesizerConfig ------------------------------------------------------------------------------
 
-TextLinehypothesizerConfig::TextLinehypothesizerConfig() : ModuleConfig("Text Line hypothesizer Module") {
+TextLineHypothesizerConfig::TextLineHypothesizerConfig() : ModuleConfig("Text Line Hypothesizer Module") {
 }
 
-QString TextLinehypothesizerConfig::toString() const {
+QString TextLineHypothesizerConfig::toString() const {
 	return ModuleConfig::toString();
 }
 
-void TextLinehypothesizerConfig::setMinLineLength(int length) {
+void TextLineHypothesizerConfig::setMinLineLength(int length) {
 	mMinLineLength = length;
 }
 
-int TextLinehypothesizerConfig::minLineLength() const {
+int TextLineHypothesizerConfig::minLineLength() const {
 	return mMinLineLength;
 }
 
-void TextLinehypothesizerConfig::setErrorMultiplier(double multiplier) {
+void TextLineHypothesizerConfig::setErrorMultiplier(double multiplier) {
 	mErrorMultiplier = multiplier;
 }
 
-double TextLinehypothesizerConfig::errorMultiplier() const {
+double TextLineHypothesizerConfig::errorMultiplier() const {
 	return checkParam(mErrorMultiplier, 0.0, DBL_MAX, "errorMultiplier");
 }
 
-QString TextLinehypothesizerConfig::debugPath() const {
+QString TextLineHypothesizerConfig::debugPath() const {
 	return mDebugPath;
 }
 
-void TextLinehypothesizerConfig::load(const QSettings & settings) {
-	mMinLineLength = settings.value("minLineLength", mMinLineLength).toInt();
+void TextLineHypothesizerConfig::load(const QSettings & settings) {
+	mMinLineLength = settings.value("minLineLength", minLineLength()).toInt();
 	mErrorMultiplier = settings.value("errorMultiplier", errorMultiplier()).toDouble();
 	mDebugPath = settings.value("debugPath", debugPath()).toString();
 }
 
-void TextLinehypothesizerConfig::save(QSettings & settings) const {
-	settings.setValue("minLineLength", mMinLineLength);
+void TextLineHypothesizerConfig::save(QSettings & settings) const {
+	settings.setValue("minLineLength", minLineLength());
 	settings.setValue("errorMultiplier", errorMultiplier());
 	settings.setValue("debugPath", debugPath());
 }
 
 
-// TextLinehypothesizer -------------------------------------------------------------------------------------
+// TextLineHypothesizer -------------------------------------------------------------------------------------
 
-TextLinehypothesizer::TextLinehypothesizer(const cv::Mat img, const PixelSet& set){
+TextLineHypothesizer::TextLineHypothesizer(const cv::Mat img, const PixelSet& set){
 	mSet = set;
 	mImg = img;
-	mConfig = QSharedPointer<TextLinehypothesizerConfig>::create();
+	mConfig = QSharedPointer<TextLineHypothesizerConfig>::create();
 	mConfig->loadSettings();
 }
 
-bool TextLinehypothesizer::compute() {
+bool TextLineHypothesizer::compute() {
 
 	if (mSet.isEmpty())
 		return false;
@@ -1058,7 +1239,8 @@ bool TextLinehypothesizer::compute() {
 	PixelGraph pg(mSet);
 	pg.connect(rnnpc, PixelGraph::sort_edges);
 	mPg = pg;
-	//cv::Mat results_pg = drawGraphEdges(mImg);
+	
+	cv::Mat results_pg = drawGraphEdges(mImg, ColorManager::blue());
 
 	mTextLines = clusterTextLines(pg);
 	//cv::Mat results1 =  draw(mImg);
@@ -1076,17 +1258,9 @@ bool TextLinehypothesizer::compute() {
 	return true;
 }
 
-QVector<QSharedPointer<WSTextLineSet>> TextLinehypothesizer::clusterTextLines(const PixelGraph & graph) const{
+QVector<QSharedPointer<WSTextLineSet>> TextLineHypothesizer::clusterTextLines(const PixelGraph & graph) const{
 
 	QVector<QSharedPointer<WSTextLineSet> > textLines;
-	QMap<QString, QVector<QString>> inEdges;
-
-	for (auto e : graph.edges()) {
-		QString key = e->second()->id();
-		QVector<QString> value = inEdges.value(key);
-		value << e->first()->id();
-		inEdges.insert(key, value);
-	}
 
 	bool updated = true;
 	int idx = 0;
@@ -1106,7 +1280,7 @@ QVector<QSharedPointer<WSTextLineSet>> TextLinehypothesizer::clusterTextLines(co
 	return textLines;
 }
 
-bool TextLinehypothesizer::processEdge(const QSharedPointer<PixelEdge>& e, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat) const{
+bool TextLineHypothesizer::processEdge(const QSharedPointer<PixelEdge>& e, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat) const{
 
 	int psIdx1 = findSetIndex(e->first(), textLines);
 	int psIdx2 = findSetIndex(e->second(), textLines);
@@ -1144,7 +1318,7 @@ bool TextLinehypothesizer::processEdge(const QSharedPointer<PixelEdge>& e, QVect
 	return false;
 }
 
-bool TextLinehypothesizer::processEdgeDebug(const QSharedPointer<PixelEdge>& e, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat, Rect debugWindow) const {
+bool TextLineHypothesizer::processEdgeDebug(const QSharedPointer<PixelEdge>& e, QVector<QSharedPointer<WSTextLineSet>>& textLines, double heat, Rect debugWindow) const {
 
 	bool updated = false;
 
@@ -1166,19 +1340,19 @@ bool TextLinehypothesizer::processEdgeDebug(const QSharedPointer<PixelEdge>& e, 
 		QPen dp = painter.pen();
 		QPen sp = dp;
 		sp.setWidth(2);
-		sp.setColor(ColorManager::darkGray(1.0));
+		sp.setColor(ColorManager::darkGray());
 		painter.setPen(sp);
 		painter.drawRect(debugWindow.toQRect());
 		painter.setPen(dp);
 
 		if (psIdx1 == -1) {
-			painter.setPen(ColorManager::red(1.0));
+			painter.setPen(ColorManager::red());
 			e->first()->draw(painter);
 		}
 		else {
-			painter.setPen(ColorManager::lightGray(1.0));
+			painter.setPen(ColorManager::lightGray());
 			textLines[psIdx1]->draw(painter);
-			painter.setPen(ColorManager::blue(1.0));
+			painter.setPen(ColorManager::blue());
 			e->first()->draw(painter);
 		}
 
@@ -1205,6 +1379,9 @@ bool TextLinehypothesizer::processEdgeDebug(const QSharedPointer<PixelEdge>& e, 
 				updated = true;
 		}
 		// merge one pixel
+		if (psIdx1 == -1 || psIdx2 == -1) {
+			updated = true;
+		}
 		else if (psIdx1 == -1) {
 			if (addPixel(textLines[psIdx2], e, e->first(), heat))
 				updated = true;
@@ -1226,7 +1403,7 @@ bool TextLinehypothesizer::processEdgeDebug(const QSharedPointer<PixelEdge>& e, 
 			tln1->line().extendBorder(eBox).draw(painter);
 			for (auto p : tln1->centers()) {
 				painter.drawEllipse(p.toQPointF(), 4, 4);
-				painter.drawText(p.x()-4, p.y()-15, QString::number(std::round(tln2->line().distance(p))));
+				painter.drawText((int)p.x()-4, (int)p.y()-15, QString::number(std::round(tln2->line().distance(p))));
 			}
 
 			sp.setColor(ColorManager::randColor(0.6));
@@ -1235,7 +1412,7 @@ bool TextLinehypothesizer::processEdgeDebug(const QSharedPointer<PixelEdge>& e, 
 			tln2->line().extendBorder(eBox).draw(painter);
 			for (auto p : tln2->centers()) {
 				painter.drawEllipse(p.toQPointF(), 4, 4);
-				painter.drawText(p.x()-4, p.y()-15, QString::number(std::round(tln1->line().distance(p))));
+				painter.drawText((int)p.x()-4, (int)p.y()-15, QString::number(std::round(tln1->line().distance(p))));
 			}
 
 			painter.setPen(dp);
@@ -1252,7 +1429,7 @@ bool TextLinehypothesizer::processEdgeDebug(const QSharedPointer<PixelEdge>& e, 
 		debugImg = Image::qImage2Mat(qImg);
 	}
 	
-	// debug draw---------------------------------------------------------------------
+	// debug draw end---------------------------------------------------------------------
 
 	// create a new text line
 	if (psIdx1 == -1 && psIdx2 == -1) {
@@ -1293,9 +1470,10 @@ bool TextLinehypothesizer::processEdgeDebug(const QSharedPointer<PixelEdge>& e, 
 	return updated;
 }
 
-void TextLinehypothesizer::extractWhiteSpaces(QSharedPointer<WSTextLineSet>& textLine) const {
+void TextLineHypothesizer::extractWhiteSpaces(QSharedPointer<WSTextLineSet>& textLine) const {
 
 	//TODO simplify this section
+	//TODO move this section to the white space segmenation class
 
 	QVector<Rect> textRects;
 	for (auto p : textLine->pixels()) {
@@ -1448,7 +1626,7 @@ void TextLinehypothesizer::extractWhiteSpaces(QSharedPointer<WSTextLineSet>& tex
 	textLine->setMinBCRSize(minBCRSize);
 }
 
-int TextLinehypothesizer::findSetIndex(const QSharedPointer<Pixel> &pixel, const QVector<QSharedPointer<WSTextLineSet>> &sets) const{
+int TextLineHypothesizer::findSetIndex(const QSharedPointer<Pixel> &pixel, const QVector<QSharedPointer<WSTextLineSet>> &sets) const{
 
 	assert(pixel);
 
@@ -1462,8 +1640,10 @@ int TextLinehypothesizer::findSetIndex(const QSharedPointer<Pixel> &pixel, const
 	return -1;
 }
 
-bool TextLinehypothesizer::mergePixels(const QSharedPointer<PixelEdge> &e) const {
-	
+bool TextLineHypothesizer::mergePixels(const QSharedPointer<PixelEdge> &e) const {
+	//TODO consider reducing maxHeightRaio parameter (higher robustness in pixel merging process)
+	//TODO check if maxHeightRatio is obsolete when using relative vertical overlap threshold
+
 	double maxHeightRatio = 3.0;
 	double minVertOverlapRatio = 0.4;
 
@@ -1484,16 +1664,19 @@ bool TextLinehypothesizer::mergePixels(const QSharedPointer<PixelEdge> &e) const
 			return false;
 		}
 
-		if(relYoverlap > (minVertOverlapRatio)) {
+		if(relYoverlap > minVertOverlapRatio) {
 			return true;
 		}
+	}
+	else {
+		qDebug() << "This should not happen";
 	}
 
 	return false;
 
 }
 
-bool TextLinehypothesizer::addPixel(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<PixelEdge> &e, const QSharedPointer<Pixel> &p, double heat) const{
+bool TextLineHypothesizer::addPixel(QSharedPointer<WSTextLineSet> &set, const QSharedPointer<PixelEdge> &e, const QSharedPointer<Pixel> &p, double heat) const{
 
 	if (set->size() < 10) {
 		return mergePixels(e);
@@ -1525,7 +1708,7 @@ bool TextLinehypothesizer::addPixel(QSharedPointer<WSTextLineSet> &set, const QS
 
 		cv::Mat mask(mImg.size(), CV_8UC1, cv::Scalar(0));
 		cv::fillConvexPoly(mask, pts, cv::Scalar(1.0));
-		cv::Rect pbox = p->bbox().toCvRect() + cv::Size(1, 1);
+		cv::Rect pbox = p->bbox().toCvRect() + cv::Size(1, 1); //TODO check if this expansion is still needed
 		mask(pbox) = mask(pbox) + 1;
 
 		cv::Mat inter_mask = mask > 1;
@@ -1536,37 +1719,57 @@ bool TextLinehypothesizer::addPixel(QSharedPointer<WSTextLineSet> &set, const QS
 
 		double jIndex = inter_count/union_count;
 
-		//debug----------------------------------------------------------------------------------------------------------------
-
-		////QImage qImg = Image::mat2QImage(mImg, true);
-		//QImage qImg(mImg.size().width, mImg.size().height, QImage::Format_ARGB32);
+		//debug draw start----------------------------------------------------------------------------------------------------------------
+		//QImage qImg = Image::mat2QImage(mImg, true);
+		////QImage qImg(mImg.size().width, mImg.size().height, QImage::Format_ARGB32);
 		//QPainter painter(&qImg);
 
-		//painter.setPen(ColorManager::blue());
-		//cLine.draw(painter);
+		//Line tLine = cLine.moved(Vector2D(0, (avgPH / 2)));
+		//Line bLine = cLine.moved(Vector2D(0, -(avgPH / 2)));
+
+		//painter.setPen(ColorManager::darkGray().lighter());
 		//rLine.draw(painter);
 		//lLine.draw(painter);
 
+		//painter.setPen(ColorManager::blue().lighter());
+		//tLine.draw(painter);
+		//bLine.draw(painter);
+
+		////painter.setPen(ColorManager::blue());
+		////cLine.draw(painter);
+
+		////pixel to be added
+		//painter.setPen(ColorManager::darkGray().lighter());
+		//Polygon::fromRect(p->bbox()).draw(painter);
+
+		////intersection rect
+		//painter.setPen(ColorManager::blue().lighter());
+		//Polygon poly = Polygon::fromCvPoints(pts);
+		//poly.draw(painter);
+
+		////text lines poly
+		//painter.setPen(ColorManager::blue().lighter());
+		//set->convexHull().draw(painter);
+
+		////connecting edge
+		//QPen pen(ColorManager::darkGray());
+		//pen.setWidth(4);
+		//painter.setPen(pen);
+
+		//e->first()->center().draw(painter);
+		//e->second()->center().draw(painter);
+
 		//if (jIndex < 0.5)
 		//	painter.setPen(ColorManager::red());
-		//
+		//else
+		//	painter.setPen(QColor(100,200,0,255));
+
 		//e->draw(painter);
-		//
-		//painter.setPen(ColorManager::lightGray());
-		//painter.drawRect(p->bbox().toQRect());
-
-		//painter.setPen(ColorManager::darkGray());
-		//Polygon poly = Polygon::fromCvPoints(pts);
-		//painter.drawPolygon(poly.closedPolygon());
-
-		//painter.setPen(ColorManager::blue());
-		//set->draw(painter);
-		//p->draw(painter);
 
 		//cv::Mat debug_result = Image::qImage2Mat(qImg);
 		////debug_result.setTo(cv::Scalar(150, 150, 150, 256), union_mask);
 		////debug_result.setTo(cv::Scalar(75, 75, 75, 256), inter_mask);
-		//debug----------------------------------------------------------------------------------------------------------------
+		//debug draw end----------------------------------------------------------------------------------------------------------------
 
 		if (jIndex > 0.5) {
 			return true;
@@ -1576,15 +1779,13 @@ bool TextLinehypothesizer::addPixel(QSharedPointer<WSTextLineSet> &set, const QS
 	return false;
 }
 
-bool TextLinehypothesizer::mergeTextLines(const QSharedPointer<WSTextLineSet>& tls1, const QSharedPointer<WSTextLineSet>& tls2, const QSharedPointer<PixelEdge> &e, double heat) const{
+bool TextLineHypothesizer::mergeTextLines(const QSharedPointer<WSTextLineSet>& tls1, const QSharedPointer<WSTextLineSet>& tls2, const QSharedPointer<PixelEdge> &e, double heat) const{
 
+	//TODO add additional check for horizontal overlap of text lines (avoid merging neighboring text lines , due to touching components)
 	//TODO incorporate average size of lines in linking process
-	//TODO check continuity of text line after merging
-	//TODO fix parameters
-		//minAgreeRatio
-
-
+	//TODO evaluate parameter settings for: minAgreeRatio
 	//TODO improve linking of short components
+
 	if (tls1->size() < 10 && tls1->size() < 10) {
 		return	mergePixels(e);
 	}
@@ -1633,68 +1834,87 @@ bool TextLinehypothesizer::mergeTextLines(const QSharedPointer<WSTextLineSet>& t
 	}
 
 
-	//debug draw-------------------------------------------------------------------------------
+	//debug draw start-------------------------------------------------------------------------------
 	//QImage qImg = Image::mat2QImage(mImg, true);
 	////QImage qImg(mImg.size().width, mImg.size().height, QImage::Format_ARGB32);
 	//QPainter painter(&qImg);
+	//QPen gPen(QColor(100, 200, 0, 255));
+	//QPen rPen(ColorManager::red());
 
 	//Rect unionBox = tls1->boundingBox().joined(tls2->boundingBox());
 
-	//// line 1
-	//painter.setPen(ColorManager::randColor());
-	//tls1->boundingBox().draw(painter);
+	//// draw lines
+	//painter.setPen(ColorManager::blue());
+	//tls1->convexHull().draw(painter);
+	//tls2->convexHull().draw(painter);
+
+	//QVector<QSharedPointer<Pixel>> pixels;
+	//QSharedPointer<WSTextLineSet> tls1_;
+	//QSharedPointer<WSTextLineSet> tls2_;
+
 	//if (tls1->size() >= tls2->size()) {
-	//	Line tmpR = tls1->line().extendBorder(unionBox);
-	//	tmpR.draw(painter);
+	//	tls1_ = tls1;
+	//	tls2_ = tls2;
+	//	pixels = pixels2;
 	//}
 	//else {
-	//	int idxBound = std::min(5, pixels1.size());
-	//	for (int i = 0; i < idxBound; ++i) {
-	//		auto p = pixels1[i];
-	//		painter.drawText(p->center().x() - 4, p->center().y() - 15, QString::number(std::round(tls2->line().distance(p->center()))));
-	//	}
+	//	tls1_ = tls2;
+	//	tls2_ = tls1;
+	//	pixels = pixels1;
 	//}
 
-	//for (int i = 0; i < pixels1.size(); ++i) {
-	//	auto p = pixels1[i];
-	//	p->draw(painter);
-	//}
+	//double maxDist = (tls1_->avgPixelHeight() / 2.0);
+	//Line cLine = tls1_->line().extendBorder(unionBox);
+	//Line tLine = cLine.moved(Vector2D(0, maxDist));
+	//Line bLine = cLine.moved(Vector2D(0, -maxDist));
 
-	//// line 2
-	//painter.setPen(ColorManager::randColor());
-	//tls2->boundingBox().draw(painter);
+	//painter.setPen(ColorManager::blue().lighter());
+	//cLine.draw(painter);
 
-	//if (tls1->size() < tls2->size()) {
-	//	Line tmpR = tls2->line().extendBorder(unionBox);
-	//	tmpR.draw(painter);
-	//}
-	//else {
-	//	int idxBound = std::min(5, pixels2.size());
-	//	for (int i = 0; i < idxBound; ++i) {
-	//		auto p = pixels2[i];
-	//		painter.drawText(p->center().x() - 4, p->center().y() - 15, QString::number(std::round(tls1->line().distance(p->center()))));
-	//	}
-	//}
+	//painter.setPen(QPen(ColorManager::blue().lighter(), 1, Qt::DashLine));
+	//tLine.draw(painter);
+	//bLine.draw(painter);
 
-	//for (int i = 0; i < pixels2.size(); ++i) {
-	//	auto p = pixels2[i];
-	//	p->draw(painter);
+	//int idxBound = std::min(5, pixels.size());
+
+	//for (int i = 0; i < idxBound; ++i) {
+	//	auto p = pixels[i];
+	//	double pixDist = tls1_->line().distance(pixels[i]->center());
+
+	//	if (pixDist < maxDist)
+	//		painter.setPen(gPen);
+	//	else
+	//		painter.setPen(rPen);
+
+	//	p->bbox().draw(painter);
+
+	//	QPen tmpPen = painter.pen();
+	//	QPen pen_(tmpPen);
+	//	pen_.setWidth(4);
+	//	painter.setPen(pen_);
+
+	//	p->center().draw(painter);
+	//	painter.setPen(tmpPen);
+
+	//	//painter.drawText(p->center().x() - 4, p->center().y() - 15, QString::number(std::round(tls1_->line().distance(p->center()))));
 	//}
 
 	//if (mergeLines)
-	//	painter.setPen(ColorManager::blue());
+	//	painter.setPen(gPen);
 	//else
-	//	painter.setPen(ColorManager::red());
-	//
+	//	painter.setPen(rPen);
+
 	//e->draw(painter);
 
 	//cv::Mat reuslts = Image::qImage2Mat(qImg);
-	//debug draw-------------------------------------------------------------------------------
+	//cv::Mat croppedResults = reuslts(unionBox.toCvRect());
+
+	//debug draw end-------------------------------------------------------------------------------
 	
 	return mergeLines;
 }
 
-bool TextLinehypothesizer::isContinuousMerge(const QSharedPointer<WSTextLineSet>& tls, const QVector<QSharedPointer<Pixel>>& pixels) const{
+bool TextLineHypothesizer::isContinuousMerge(const QSharedPointer<WSTextLineSet>& tls, const QVector<QSharedPointer<Pixel>>& pixels) const{
 
 	double agreements = 0;
 	double idxBound = std::min(5, pixels.size());
@@ -1717,10 +1937,12 @@ bool TextLinehypothesizer::isContinuousMerge(const QSharedPointer<WSTextLineSet>
 
 }
 
-void TextLinehypothesizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextLineSet>>& textLines) const {
+void TextLineHypothesizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextLineSet>>& textLines) const {
 
 	//TODO fix parameters
-	//TODO simplify merging of components that vertically overlapping and close to each other
+	//TODO simplify merging of components that vertically overlapping and are close to each other
+	//TODO add additional check for horizontal overlap of text lines (avoid merging neighboring text lines , due to nearby components)
+
 	//void TextLineHelper::mergeStableTextLines(QVector<QSharedPointer<TextLineSet>>& textLines)
 
 	QVector<QSharedPointer<TextLineSet>> textLines_;
@@ -1729,15 +1951,14 @@ void TextLinehypothesizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 
 	QVector<QSharedPointer<TextLineSet>> unstable = TextLineHelper::filterAngle(textLines_);
 
-	QImage qImg = Image::mat2QImage(mImg, true);
-	QPainter painter(&qImg);
+	//QImage qImg = Image::mat2QImage(mImg, true);
+	//QPainter painter(&qImg);
 	//for (auto tl : unstable) {
 	//	painter.setPen(ColorManager::randColor());
 	//	tl->draw(painter, PixelSet::DrawFlags() | PixelSet::draw_poly | PixelSet::draw_pixels /*, Pixel::draw_stats*/);
 	//}
 	//cv::Mat ulImg = Image::qImage2Mat(qImg);
 	
-	//// parameter - how much do we extend the text line?
 	double tlExtFactor = 1.2;
 
 	QVector<Polygon> polys;
@@ -1767,15 +1988,15 @@ void TextLinehypothesizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 		// find merging candidates (textlines that contain the right/left most point)
 		for (int idx = 0; idx < textLines.size(); idx++) {
 
-			// do not merge myself
 			if (textLines[idx]->id() == utl->id())
 				continue;
 
 			// find all candidate textlines
-
 			if (polys[idx].contains(vl) || polys[idx].contains(vr)) {
 
 				Line mLine = Line(textLines[idx]->center(), textLines[uIdx]->center());
+
+				//TODO move separator check to own function - used again later on
 				bool crossesSeparator = false;
 				for (const Line& line : mStopLines) {
 					if (mLine.intersects(line)) {
@@ -1888,6 +2109,7 @@ void TextLinehypothesizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 
 	numRemoved = 0;
 
+	//TODO move this part to own function, mergeLines (could be used again inlater stages)
 	//merge text lines if they are close to each other and have similar size and orientation
 	for (int i = 0; i < textLines.size(); ++i) {
 		auto tl1 = textLines[i];
@@ -1901,7 +2123,6 @@ void TextLinehypothesizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 			double overlap = std::min(tl1R.bottom(), tl2R.bottom()) - std::max(tl1R.top(), tl2R.top());
 			if (overlap > 0) {
 				double relOverlap = overlap / std::max(tl1R.height(), tl2R.height());
-				//double relOverlap = overlap / std::min(tl1R.height(), tl2R.height());
 
 				//check if separator is inbetween
 				Line mLine = Line(tl1->center(), tl2->center());
@@ -1963,11 +2184,10 @@ void TextLinehypothesizer::mergeUnstableTextLines(QVector<QSharedPointer<WSTextL
 	qDebug() << "Merged " << numRemoved << " nearby text lines having similar size and orientation.";
 }
 
-void TextLinehypothesizer::removeShortTextLines() {
+void TextLineHypothesizer::removeShortTextLines() {
 	//TODO fix parameter settings
 	int minTextLineSize = config()->minLineLength();
 
-	//TODO refine process of identifying short text lines
 	QVector<QSharedPointer<WSTextLineSet>> removeTl;
 	for (auto tl : mTextLines) {
 		if (tl->size() < minTextLineSize) {
@@ -1980,7 +2200,7 @@ void TextLinehypothesizer::removeShortTextLines() {
 	}
 }
 
-QVector<QSharedPointer<TextLine>> TextLinehypothesizer::textLines() const {
+QVector<QSharedPointer<TextLine>> TextLineHypothesizer::textLines() const {
 
 	QVector<QSharedPointer<TextLine>> tls;
 	for (auto set : mTextLines)
@@ -1989,27 +2209,27 @@ QVector<QSharedPointer<TextLine>> TextLinehypothesizer::textLines() const {
 	return tls;
 }
 
-QVector<QSharedPointer<WSTextLineSet>> TextLinehypothesizer::textLineSets() const {
+QVector<QSharedPointer<WSTextLineSet>> TextLineHypothesizer::textLineSets() const {
 	return mTextLines;
 }
 
-bool TextLinehypothesizer::isEmpty() const{
+bool TextLineHypothesizer::isEmpty() const{
 	return mSet.isEmpty();
 }
 
-void TextLinehypothesizer::addSeparatorLines(const QVector<Line>& lines) {
+void TextLineHypothesizer::addSeparatorLines(const QVector<Line>& lines) {
 	mStopLines << lines;
 }
 
-bool TextLinehypothesizer::checkInput() const {
+bool TextLineHypothesizer::checkInput() const {
 	return !mSet.isEmpty();
 }
 
-QSharedPointer<TextLinehypothesizerConfig> TextLinehypothesizer::config() const {
-	return qSharedPointerDynamicCast<TextLinehypothesizerConfig>(mConfig);
+QSharedPointer<TextLineHypothesizerConfig> TextLineHypothesizer::config() const {
+	return qSharedPointerDynamicCast<TextLineHypothesizerConfig>(mConfig);
 }
 
-cv::Mat TextLinehypothesizer::draw(const cv::Mat& img, const QColor& col) const{
+cv::Mat TextLineHypothesizer::draw(const cv::Mat& img, const QColor& col) const{
 
 	QImage qImg = Image::mat2QImage(img, true);
 	cv::Mat img_final;
@@ -2026,18 +2246,45 @@ cv::Mat TextLinehypothesizer::draw(const cv::Mat& img, const QColor& col) const{
 	return img_final;
 }
 
-cv::Mat TextLinehypothesizer::drawGraphEdges(const cv::Mat& img, const QColor& col) {
+cv::Mat TextLineHypothesizer::drawGraphEdges(const cv::Mat& img, const QColor& col) {
 	
 	QImage qImg = Image::mat2QImage(img, true);
-	QPainter p(&qImg);
-	p.setPen(col);
+	QPainter painter(&qImg);
+	QPen pen(col);
+	
+	QPen pen1(ColorManager::red());
 
-	mPg.draw(p);
+	QPen pen2(col);
+	pen2.setWidth(4);
+
+	painter.setPen(pen);
+
+	//mPg.draw(painter);
+
+	//rnn ex 1: 1000, 1347 - 1023, 1381 
+	//rnn ex 2: 452, 1986 - 472, 2032
+	Rect r = Rect(452, 1986, 472 - 452, 2032 - 1986);
+
+	for (auto p : mSet.pixels())
+		p->bbox().draw(painter);
+
+	for (auto e : mPg.edges()) {
+		
+		//if (!r.contains(e->first()->bbox()))
+		//	continue;
+
+		painter.setPen(pen1);
+		e->draw(painter);
+			
+		painter.setPen(pen2);
+		painter.drawPoint(e->first()->center().toQPointF());
+		painter.drawPoint(e->second()->center().toQPointF());
+	}
 
 	return Image::qImage2Mat(qImg);
 }
 
-cv::Mat TextLinehypothesizer::drawTextLineHypotheses(const cv::Mat& img) const{
+cv::Mat TextLineHypothesizer::drawTextLineHypotheses(const cv::Mat& img) const{
 	QImage qImg = Image::mat2QImage(img, true);
 	QPainter painter(&qImg);
 
@@ -2064,14 +2311,61 @@ cv::Mat TextLinehypothesizer::drawTextLineHypotheses(const cv::Mat& img) const{
 	return Image::qImage2Mat(qImg);
 }
 
+// WhiteSpaceSegmentationConfig ------------------------------------------------------------------------------
+
+WhiteSpaceSegmentationConfig::WhiteSpaceSegmentationConfig() : ModuleConfig("White Space Segmentation Module") {
+}
+
+QString WhiteSpaceSegmentationConfig::toString() const {
+	return ModuleConfig::toString();
+}
+
+void WhiteSpaceSegmentationConfig::setMinLengthMultiplier(double mlm) {
+	mMinLengthMultiplier = mlm;
+}
+
+double WhiteSpaceSegmentationConfig::minLengthMultiplier() const {
+	return checkParam(mMinLengthMultiplier, 0.0, DBL_MAX, "minLengthMultiplier");
+}
+
+void WhiteSpaceSegmentationConfig::setSlicingSizeMultiplier(double ssm) {
+	mSlicingSizeMultiplier = ssm;
+}
+
+double WhiteSpaceSegmentationConfig::slicingSizeMultiplier() const {
+	return checkParam(mSlicingSizeMultiplier, 0.0, DBL_MAX, "slicingSizeMultiplier");
+}
+
+void WhiteSpaceSegmentationConfig::setFindWhiteSpaceGaps(bool wsGaps){
+	mFindWhiteSpaceGaps = wsGaps;
+}
+
+bool WhiteSpaceSegmentationConfig::findWhiteSpaceGaps() const{
+	return mFindWhiteSpaceGaps;
+}
+
+void WhiteSpaceSegmentationConfig::load(const QSettings & settings) {
+	mSlicingSizeMultiplier = settings.value("minLengthMultiplier", minLengthMultiplier()).toDouble();
+	mMinLengthMultiplier = settings.value("slicingSizeMultiplier", slicingSizeMultiplier()).toDouble();
+	mFindWhiteSpaceGaps = settings.value("findWhiteSpaceGaps", findWhiteSpaceGaps()).toBool();
+}
+
+void WhiteSpaceSegmentationConfig::save(QSettings & settings) const {
+	settings.setValue("minLengthMultiplier", minLengthMultiplier());
+	settings.setValue("slicingSizeMultiplier", slicingSizeMultiplier());
+	settings.setValue("findWhiteSpaceGaps", findWhiteSpaceGaps());
+}
+
 // WhiteSpaceSegmentation --------------------------------------------------------------------
 
 WhiteSpaceSegmentation::WhiteSpaceSegmentation() {
+	mConfig = QSharedPointer<WhiteSpaceSegmentationConfig>::create();
 }
 
 WhiteSpaceSegmentation::WhiteSpaceSegmentation(const cv::Mat img, const QVector<QSharedPointer<WSTextLineSet>>& tlsM) {
 	mImg = img;
 	mInitialTls = tlsM;
+	mConfig = QSharedPointer<WhiteSpaceSegmentationConfig>::create();
 }
 
 bool WhiteSpaceSegmentation::isEmpty() const {
@@ -2109,7 +2403,7 @@ bool WhiteSpaceSegmentation::compute() {
 		//graphResult = drawPixelGraph(mImg);
 
 		updatedTextLines = removeIsolatedBCR(mPg);
-		//noIsolatedTextLines = drawSplitTextLines(mImg);
+		//noIsolatedTextLines = drawSplitTextLines(cv::Mat());
 		
 		updatedTextLines = mergeShortTextLines() || updatedTextLines;
 		//noShortTextLines = drawSplitTextLines(mImg);
@@ -2142,15 +2436,21 @@ bool WhiteSpaceSegmentation::compute() {
 
 	//cv::Mat segmentedTextLines = drawSplitTextLines(mImg);
 	//cv::Mat finalWhiteSpaceRuns = drawWhiteSpaceRuns(mImg);
-
+	
 	//split text lines crossing elongated vertical (white space) gaps
-	mWhiteSeparatorLines = findWhiteSeparators();
-	splitAtWhiteSeparators();
+	if (config()->findWhiteSpaceGaps()) {
+		mWhiteSeparatorLines = computeWhiteSpaceGaps();
+		splitAtWhiteSeparators();
+		//cv::Mat whiteSeparators = drawWhiteSeparators(segmentedTextLines);
+	}
 
 	refineTextLineResults();
-	//cv::Mat finalTextLines = drawSplitTextLines(mImg);
 
 	return true;
+}
+
+QSharedPointer<WhiteSpaceSegmentationConfig> WhiteSpaceSegmentation::config() const{
+	return qSharedPointerDynamicCast<WhiteSpaceSegmentationConfig>(mConfig);
 }
 
 bool WhiteSpaceSegmentation::checkInput() const {
@@ -2289,7 +2589,7 @@ PixelGraph WhiteSpaceSegmentation::computeSegmentationGraph() const{
 		pgSet.add(qSharedPointerCast<Pixel>(bcr));
 	}
 
-	//find horizontally overalapping white spaces
+	//find horizontally overlapping white spaces
 	WSConnector wspc;
 	wspc.setLineSpacing(computeLineSpacing());
 	wspc.setStopLines(mSeparatorLines);
@@ -2690,7 +2990,7 @@ void WhiteSpaceSegmentation::updateBCRStatus() {
 		double croppedWsGap = 0, tmpGap = 0;
 		for(int i=0; i < wsr->whiteSpaces().size(); ++i){
 			auto ws = wsr->whiteSpaces()[i];
-			double wsGap = ws->bbox().width();
+			//double wsGap = ws->bbox().width();
 
 			//TODO debug and test this section
 			if (i + 1 < wsr->whiteSpaces().size()) {
@@ -2759,24 +3059,6 @@ bool WhiteSpaceSegmentation::refineWhiteSpaceRuns() {
 			continue;
 		}
 
-		if (wsr->whiteSpaces().size() > 1) {
-			double maxGapWsr = 0;
-			for (auto ws : wsr->whiteSpaces()) {
-				auto ntl = mBcrNeighbors.value(ws->id());
-				for (auto tl : ntl) {
-					if (maxGapWsr < tl->maxGap()) {
-						maxGapWsr = tl->maxGap(); 
-					}
-				}
-			}
-
-			bool isObsolete = true;
-			for (auto ws : wsr->whiteSpaces()) {
-				if (ws->bbox().width() < maxGapWsr)
-					isObsolete = false;
-			}
-		}
-
 		//delete whole white space run if no or only one bcr is contained
 		if (bcrCount <= 1) {
 			obsoleteWhiteSpaces << wsr->whiteSpaces();
@@ -2838,9 +3120,23 @@ bool WhiteSpaceSegmentation::refineWhiteSpaceRuns() {
 	return false;
 }
 
-QVector<Line> WhiteSpaceSegmentation::findWhiteSeparators() {
+QVector<Line> WhiteSpaceSegmentation::computeWhiteSpaceGaps() {
 
 	//TODO test skew estimation based on estimated text lines
+	//TODO evaluate influence of minLength/slicingSize multiplier variables on segmentation performance
+	//TODO create debug draw function and move code from main function
+
+	//int minLengthMultiplier = 4;
+	//int slicingSizeMultiplier = 6;
+
+	//double minLengthMultiplier = config()->minLengthMultiplier();
+	//double slicingSizeMultiplier = config()->slicingSizeMultiplier();
+
+	double minLengthMultiplier = 2.5 * 3;
+	double slicingSizeMultiplier = 2.5 * 3;
+
+	//qDebug() << "minLengthMultiplier = " << minLengthMultiplier;
+	//qDebug() << "slicingSizeMultiplier = " << slicingSizeMultiplier;
 
 	bool debugDraw = false;
 	cv::Mat debugImg_hpp = cv::Mat::zeros(mImg.size(), CV_8UC1);
@@ -2884,13 +3180,19 @@ QVector<Line> WhiteSpaceSegmentation::findWhiteSeparators() {
 	qDebug() << "Document skew (in degrees) is " << std::round(documentSkew) << " according to weighted text line angles.";
 
 	//create text region mask
-	//	merge nearby text regions
-	//	widen text region mask in horizontal direction
-	cv::Mat kernel = cv::Mat::ones(tlhE*1.25, tlhE*2.5*2.0, CV_8UC1);
-	cv::morphologyEx(tlImg, tlImg, cv::MORPH_CLOSE, kernel, cv::Point(-1, -1), 1, cv::BORDER_CONSTANT, cv::Scalar(0));
-	kernel = cv::Mat::ones(1, tlhE * 2, CV_8UC1);
-	cv::dilate(tlImg, tlImg, kernel, cv::Point(-1, -1), 1, cv::BORDER_CONSTANT, cv::Scalar(0));
+	int tlhE_ = qRound(tlhE);
+	int border = qRound(tlhE_ * 2.5 * 2.0) + 1;
 
+	cv::Mat tlImg_buffer;
+	copyMakeBorder(tlImg, tlImg_buffer, border, border, border, border, cv::BORDER_CONSTANT, cv::Scalar(0));
+
+	cv::Mat kernel = cv::Mat::ones(qRound(tlhE_*1.25), border-1, CV_8UC1);
+	cv::morphologyEx(tlImg_buffer, tlImg_buffer, cv::MORPH_CLOSE, kernel, cv::Point(-1, -1), 1, cv::BORDER_CONSTANT, cv::Scalar(0));
+
+	kernel = cv::Mat::ones(1, tlhE_ * 2, CV_8UC1);
+	cv::dilate(tlImg_buffer, tlImg_buffer, kernel, cv::Point(-1, -1), 1, cv::BORDER_CONSTANT, cv::Scalar(0));
+	tlImg = cv::Mat(tlImg_buffer, cv::Rect(border, border, tlImg.cols, tlImg.rows));
+	
 	//deskewing of binarized input image
 	cv::Point2f rotCenter(mImg.cols*0.5f, mImg.rows*0.5f);
 
@@ -2904,7 +3206,8 @@ QVector<Line> WhiteSpaceSegmentation::findWhiteSeparators() {
 	//stage 2: compute local vertical projection profiles
 	cv::Mat slice, vPP, vPPMask;
 
-	int slicingSize = (int)round(tlhE*2.5) * 3;
+	//int slicingSize = qRound(tlhE*2.5) * 3;
+	int slicingSize = qRound(tlhE * slicingSizeMultiplier);
 	int startIdx = 0;
 	int endIdx = slicingSize;
 
@@ -2947,9 +3250,10 @@ QVector<Line> WhiteSpaceSegmentation::findWhiteSeparators() {
 
 	///////////
 	//stage 3: determine vertical white space gaps (lines) separating text regions
+	//TODO check if morphological operations are needed
 
-	//TODO evaluate influence of minLength variable on segmentation performance and how it can be reduced/improved
-	int minLength = (int)round(tlhE*2.5) * 3;
+	//int minLength = (int)round(tlhE*2.5) * 3;
+	int minLength = qRound(tlhE * minLengthMultiplier);
 
 	//multiply white space image with text line region mask -> gap areas splitting current lines
 	cv::Mat vWSR = wsImg.mul(tlImg);
@@ -2957,8 +3261,10 @@ QVector<Line> WhiteSpaceSegmentation::findWhiteSeparators() {
 	//refine white separator regions
 	kernel = cv::Mat::ones(1, 7, CV_8UC1);//eliminate narrow gaps
 	cv::morphologyEx(vWSR, vWSR, cv::MORPH_OPEN, kernel, cv::Point(-1, -1), 1, cv::BORDER_CONSTANT, cv::Scalar(0));
+
 	kernel = cv::Mat::ones((int)round(tlhE*1.25), 1, CV_8UC1);//vertically connect nearby gap regions
 	cv::morphologyEx(vWSR, vWSR, cv::MORPH_CLOSE, kernel, cv::Point(-1, -1), 1, cv::BORDER_CONSTANT, cv::Scalar(0));
+
 	kernel = cv::Mat::ones(minLength, 1, CV_8UC1); //remove short gap regions	
 	cv::morphologyEx(vWSR, vWSR, cv::MORPH_OPEN, kernel, cv::Point(-1, -1), 1, cv::BORDER_CONSTANT, cv::Scalar(0));
 
@@ -2971,7 +3277,7 @@ QVector<Line> WhiteSpaceSegmentation::findWhiteSeparators() {
 
 	//filter lines (by orientation and length)
 	QVector<Line> vLines = lt.lines();
-	vLines = lt.lineFilter().filterLineAngle(vLines, CV_PI*0.5, 10 * DK_DEG2RAD);
+	vLines = lt.lineFilter().filterLineAngle(vLines, CV_PI*0.5, 10 * DK_DEG2RAD);	//TODO reduce angleDiff parameter (test)
 	vLines = lt.lineFilter().removeSmall(vLines, minLength);
 
 	if (vLines.isEmpty())
@@ -3010,7 +3316,7 @@ void WhiteSpaceSegmentation::splitAtWhiteSeparators() {
 
 			QSharedPointer<WhiteSpacePixel> splitPixel;
 			if (sl.intersects(bl)) {
-				int ix = sl.intersection(bl).x();	//x coordinate of intersection
+				int ix = (int)round(sl.intersection(bl).x());	//x coordinate of intersection
 				for (auto wsp : tl->whiteSpacePixels()) {
 					if (wsp->bbox().left() <= ix+3 && ix-3 <= wsp->bbox().right()) {
 						splitPixel = wsp;
@@ -3044,7 +3350,7 @@ bool WhiteSpaceSegmentation::refineTextLineResults() {
 	//remove text lines containing only one text element
 	QVector<QSharedPointer<WSTextLineSet>> removeTl;
 	for (auto tl : mTlsM) {
-		if (tl->isEmpty() || tl->size() < 2) {
+		if (tl->isEmpty() || tl->size() < 3) {
 			removeTl << tl;
 		}
 	}
@@ -3080,18 +3386,23 @@ cv::Mat WhiteSpaceSegmentation::drawSplitTextLines(const cv::Mat & img, const QC
 
 	QImage qImg;
 
-	if (img.empty())
+	if (img.empty()) {
 		qImg = QImage(mImg.size().width, mImg.size().height, QImage::Format_ARGB32);
+		qImg.fill(ColorManager::white());
+	}
 	else
 		qImg = Image::mat2QImage(img, true);
 
 	QPainter painter(&qImg);
 
 	for (auto tl : mTlsM) {
-		painter.setPen(ColorManager::blue());
-		tl->boundingBox().draw(painter);
-		QString maxGap = QString::number(tl->maxGap());
-		painter.drawText(tl->boundingBox().toQRect(), Qt::AlignCenter, maxGap);
+		QPen pen = ColorManager::blue();
+		pen.setWidth(3);
+		painter.setPen(pen);
+		//tl->boundingBox().draw(painter);
+		tl->convexHull().draw(painter);
+		//QString maxGap = QString::number(tl->maxGap());
+		//painter.drawText(tl->boundingBox().toQRect(), Qt::AlignCenter, maxGap);
 
 		//for (auto ws : tl->whiteSpacePixels()) {
 		//	painter.setPen(ColorManager::darkGray());
@@ -3100,23 +3411,22 @@ cv::Mat WhiteSpaceSegmentation::drawSplitTextLines(const cv::Mat & img, const QC
 		//	painter.drawText(ws->bbox().toQRect(), Qt::AlignCenter, wsGap);
 		//}
 	}
+	
+	//for (auto bcr : mBcrM) {
+	//	if(bcr->isBCR())
+	//		painter.setPen(ColorManager::red());
+	//	else
+	//		painter.setPen(ColorManager::darkGray());
 
-	//painter.setPen(ColorManager::red());
-	for (auto bcr : mBcrM) {
-		if(bcr->isBCR())
-			painter.setPen(ColorManager::red());
-		else
-			painter.setPen(ColorManager::darkGray());
-
-		bcr->bbox().draw(painter);
-		QString wsGap = QString::number(bcr->bbox().width());
-		painter.drawText(bcr->bbox().toQRect(), Qt::AlignCenter, wsGap);
-	}
+	//	bcr->bbox().draw(painter);
+	//	QString wsGap = QString::number(bcr->bbox().width());
+	//	painter.drawText(bcr->bbox().toQRect(), Qt::AlignCenter, wsGap);
+	//}
 
 	cv::Mat output = Image::qImage2Mat(qImg);
 
 	//additionally draw white separator
-	output = drawWhiteSeparators(output);
+	//output = drawWhiteSeparators(output);
 	
 	return output;
 }
@@ -3147,6 +3457,7 @@ cv::Mat WhiteSpaceSegmentation::drawWhiteSpaceRuns(const cv::Mat & img, const QC
 
 	//QImage qImg = Image::mat2QImage(img, true);
 	QImage qImg(img.size().width, img.size().height, QImage::Format_ARGB32);
+	qImg.fill(ColorManager::white());
 	QPainter painter(&qImg);
 
 	for (auto wsr : mWsrM) {
@@ -3162,7 +3473,10 @@ cv::Mat WhiteSpaceSegmentation::drawWhiteSpaceRuns(const cv::Mat & img, const QC
 
 	painter.setPen(ColorManager::blue());
 	for (auto wsr : mWsrM) {
-		wsr->boundingBox().draw(painter);
+		Rect wsrBox = wsr->boundingBox();
+		double lx = wsrBox.center().x();
+		Line l(lx, wsrBox.top(), lx, wsrBox.bottom());
+		l.draw(painter);
 	}
 
 	return Image::qImage2Mat(qImg);
@@ -3187,14 +3501,50 @@ cv::Mat WhiteSpaceSegmentation::drawWhiteSeparators(const cv::Mat & img, const Q
 	return Image::qImage2Mat(qImg);
 }
 
+// TextBlockFormationConfig--------------------------------------------------------------------
+TextBlockFormationConfig::TextBlockFormationConfig() : ModuleConfig("Text Block Formation Module") {
+}
+
+QString TextBlockFormationConfig::toString() const {
+	return ModuleConfig::toString();
+}
+
+void TextBlockFormationConfig::setPolygonType(int pt){
+	mPolygonType = pt;
+}
+
+int TextBlockFormationConfig::polygonType() const{
+	return ModuleConfig::checkParam(mPolygonType, 0, INT_MAX, "polygonType");
+}
+
+void TextBlockFormationConfig::load(const QSettings & settings){
+	mPolygonType = settings.value("polygonType", polygonType()).toInt();
+}
+
+void TextBlockFormationConfig::save(QSettings & settings) const{
+	settings.setValue("polygonType", polygonType());
+}
+
 // TextBlockFormation --------------------------------------------------------------------
 
 TextBlockFormation::TextBlockFormation() {
+	mConfig = QSharedPointer<TextBlockFormationConfig>::create();
+	mConfig->loadSettings();
 }
 
 TextBlockFormation::TextBlockFormation(const cv::Mat img, const QVector<QSharedPointer<WSTextLineSet>> textLines) {
 	mImg = img;
 	mTextLines = textLines;
+
+	mConfig = QSharedPointer<TextBlockFormationConfig>::create();
+	mConfig->loadSettings();
+}
+
+bool TextBlockFormation::isEmpty() const{
+	if (!mImg.empty() && !mTextLines.isEmpty())
+		return false;
+	else
+		return true;
 }
 
 bool TextBlockFormation::compute() {
@@ -3217,11 +3567,16 @@ bool TextBlockFormation::compute() {
 	PixelGraph  pg = computeTextLineGraph(pgSet);
 
 	computeTextBlocks(pg);
-	refineTextBlocks();
+	//cv::Mat imgTb = draw(mImg);
 
-	//cv::Mat imgBf = draw(mImg);
+	refineTextBlocks();
+	//cv::Mat imgSplitTB = draw(mImg);
 
 	return true;
+}
+
+QSharedPointer<TextBlockFormationConfig> TextBlockFormation::config() const {
+	return qSharedPointerDynamicCast<TextBlockFormationConfig>(mConfig);
 }
 
 PixelGraph TextBlockFormation::computeTextLineGraph(PixelSet pgSet) {
@@ -3233,16 +3588,17 @@ PixelGraph TextBlockFormation::computeTextLineGraph(PixelSet pgSet) {
 	PixelGraph pg(pgSet);
 	pg.connect(tlpc);
 
-	//debug
+	//debug draw
 	//QImage qImg = Image::mat2QImage(mImg, true);
 	//QPainter painter(&qImg);
 	//
-	//for (auto tl : mTextLines)
-	//	tl->draw(painter);
+	//for (auto tl : mTextLines) {
+	//	tl->convexHull().draw(painter);
+	//	//tl->draw(painter);
+	//}
 	//
 	//pg.draw(painter);
 	//cv::Mat results = Image::qImage2Mat(qImg);
-	//debugEND
 
 	return pg;
 }
@@ -3294,9 +3650,19 @@ void TextBlockFormation::computeTextBlocks(PixelGraph pg) {
 	}
 }
 
+bool TextBlockFormation::checkInput() const{
+	return !isEmpty();
+}
+
 void TextBlockFormation::computeAdjacency(PixelGraph pg) {
 
+	//TODO consider using height ratio check after text block formation
+		//deleting links to headlines might reduce performance
+		//avoid linking with erroneous text lines by using lower threshold in adjacency computation
+		//use higher threshold for splitting tb later on
 	//TODO fix minHeightRatio parameter and computation of heightRatio value
+	
+	bool debugDraw = false;
 	double minHeightRatio = 0.75;
 
 	for (auto pixel : pg.set().pixels()) {
@@ -3318,7 +3684,6 @@ void TextBlockFormation::computeAdjacency(PixelGraph pg) {
 
 			double mph1 = lineSet1->pixelHeight();
 			double mph2 = lineSet2->pixelHeight();
-			//double heightRatio = mph1 / mph2;
 			double heightRatio = std::min(mph1, mph2) / std::max(mph1, mph2);
 
 			// find nearest neighbor text line set having similar height
@@ -3344,7 +3709,7 @@ void TextBlockFormation::computeAdjacency(PixelGraph pg) {
 			neighbors_final << nearestNeighbor;
 			Rect nnB = nearestNeighbor->boundingBox();
 
-			//TODO should check overlap with bboxes of all neighbors (neighbors_final)
+			//TODO should check overlap with neighbors_final instead of only nearestNeighbor
 			for (auto n : neighbors) {
 
 				if (n == nearestNeighbor)
@@ -3374,116 +3739,283 @@ void TextBlockFormation::computeAdjacency(PixelGraph pg) {
 	}
 
 	//debug
-	//QImage qImg(mImg.size().width, mImg.size().height, QImage::Format_ARGB32);	//blank image
-	////QImage qImg = Image::mat2QImage(mImg, true);
-	//QPainter painter(&qImg);
-	
-	//for (auto tl : mTextLines) {
-	//	painter.setPen(ColorManager::darkGray());
-	//	tl->draw(painter);
-	//	QString text = "annC = " + QString::number(annCount.value(tl->id())) + ", bnnC = " + QString::number(bnnIndices.value(tl->id()).size()) + ", pH = " + QString::number(tl->pixelHeight());
-	//	painter.drawText(tl->boundingBox().toQRect(), Qt::AlignCenter, text);
-	//	tl->draw(painter);
-	
-	//	auto indices = bnnIndices.value(tl->id());
-	//	for (int i : indices) {
-	//		Line edge = Line(tl->center(),  mTextLines[i]->center());
-	//		edge.draw(painter);
+	if (debugDraw) {
+		//QImage qImg(mImg.size().width, mImg.size().height, QImage::Format_ARGB32);	//blank image
+		QImage qImg = Image::mat2QImage(mImg, true);
+		QPainter painter(&qImg);
 
-	//		double mph1 = tl->pixelHeight();
-	//		double mph2 = mTextLines[i]->pixelHeight();
-	//		double heightRatio = std::min(mph1, mph2) / std::max(mph1, mph2);
-	//		painter.drawText(edge.center().toQPoint(), QString::number(heightRatio));
-	//	}
-	//}
+		for (auto tl : mTextLines) {
 
-	//cv::Mat results = Image::qImage2Mat(qImg);
-	//debugEND
+			QPen dotPen(ColorManager::darkGray());
+			dotPen.setWidth(10);
+
+			painter.setPen(ColorManager::darkGray());
+			tl->convexHull().draw(painter);
+
+			//QString text = "annC = " + QString::number(annCount.value(tl->id())) + ", bnnC = " + QString::number(bnnIndices.value(tl->id()).size()) + ", pH = " + QString::number(tl->pixelHeight());
+			//painter.drawText(tl->boundingBox().toQRect(), Qt::AlignCenter, text);
+
+			//draw BNNs
+			auto currBnnIndices = bnnIndices.value(tl->id());
+			for (int i : currBnnIndices) {
+				painter.setPen(ColorManager::blue());
+				Line edge = Line(tl->boundingBox().center(), mTextLines[i]->boundingBox().center());
+				edge.setThickness(3.0);
+				edge.draw(painter);
+
+				painter.setPen(dotPen);
+				mTextLines[i]->boundingBox().center().draw(painter);
+				tl->boundingBox().center().draw(painter);
+
+				//painter.setPen(ColorManager::blue());
+				//double mph1 = tl->pixelHeight();
+				//double mph2 = mTextLines[i]->pixelHeight();
+				//double heightRatio = std::min(mph1, mph2) / std::max(mph1, mph2);
+				//painter.drawText(edge.center().toQPoint(), QString::number(heightRatio));
+			}
+
+			//draw lines rejected due to height ratio
+			//QString linePixelID = lineLookUp.key(tl);
+			//QVector<int> eIndices = pg.edgeIndexes(linePixelID);
+			//linePen.setColor(ColorManager::red());
+
+			////for (auto i : eIndices) {
+			////	auto bnn = lineLookUp.value(pg.edges()[i]->second()->id());
+			////	if (!currBnnIndices.contains(mTextLines.indexOf(bnn))) {
+
+			////		double mph1 = tl->pixelHeight();
+			////		double mph2 = bnn->pixelHeight();
+			////		double heightRatio = std::min(mph1, mph2) / std::max(mph1, mph2);
+
+			////		if (minHeightRatio < heightRatio)
+			////			continue;
+
+			////		painter.setPen(ColorManager::red());
+			////		Line edge = Line(tl->boundingBox().center(), bnn->boundingBox().center());
+			////		painter.drawText(edge.center().toQPoint(), QString::number(heightRatio));
+			////		edge.draw(painter);
+
+			////		painter.setPen(dotPen);
+			////		bnn->boundingBox().center().draw(painter);
+			////	 }
+			////}
+		}
+
+		cv::Mat results = Image::qImage2Mat(qImg);
+	}
 }
 
 TextBlock TextBlockFormation::createTextBlock(const QVector<QSharedPointer<TextLineSet>>& lines) {
-	
-	Rect bbox = Rect();
-	QPolygonF poly;
+
+	QVector<QSharedPointer<TextLine>> lines_;
 	PixelSet pSet;
-
-	QImage qPolyImg (mImg.size().width, mImg.size().height, QImage::Format_RGB888);
-	qPolyImg.fill(QColor(0, 0, 0));
-	QPainter painter(&qPolyImg);
-	painter.setPen(QColor(255, 255, 255));
-	painter.setBrush(QColor(255, 255, 255));
-	
-	for(int i = 0; i < lines.length(); i++){
-
-		auto l1 = lines[i];
-		pSet.append(l1->pixels());
-
-		if (i == 0) {
-			poly = l1->convexHull().polygon();
-			painter.drawPolygon(poly);
-		}
-		else if (i > 0) {
-			
-			auto l2 = l1;
-			l1 = lines[i-1];
-
-			PixelSet mergedSet;
-			mergedSet.append(l1->pixels());
-			mergedSet.append(l2->pixels());
-			QPolygonF hull_poly = mergedSet.convexHull().polygon();
-
-			auto poly1 = l1->convexHull().polygon();
-			auto poly2 = l2->convexHull().polygon();
-
-			//compute rect containing min left and right bound the text lines
-			auto rect1 = poly1.boundingRect();
-			auto rect2 = poly2.boundingRect();
-			
-			double top = std::min(rect1.top(), rect2.top());
-			double left = std::max(rect1.left(), rect2.left());
-			double bottom = std::max(rect1.bottom(), rect2.bottom());
-			double right = std::min(rect1.right(), rect2.right());
-
-			Rect rect = Rect(left, top, right - left, bottom - top);
-			QPolygonF rect_poly = Polygon::fromRect(rect).polygon();
-
-			auto cut_poly = hull_poly.intersected(rect_poly);
-
-			//QPolygonF cut_poly1, cut_poly2;
-			//cut_poly1 = cut_poly.united(poly1);
-			//cut_poly2 = cut_poly.united(poly2);
-			//QPolygonF cut_poly_final = cut_poly1.united(cut_poly2);
-
-			////final merged polygon
-			//poly = poly.united(cut_poly_final);
-
-			painter.drawPolygon(poly2);
-			painter.drawPolygon(cut_poly);
-		}
+	for (auto tl : lines) {
+		lines_ << tl->toTextLine();
+		pSet.append(tl->pixels());
 	}
 
-	cv::Mat polyImg = Image::qImage2Mat(qPolyImg);
-	cvtColor(polyImg, polyImg, cv::COLOR_RGB2GRAY);
+	QPolygonF poly = computeTextBlockPoly(lines_, config()->polygonType());
 
-	std::vector<std::vector<cv::Point>> contours;
-	cv::findContours(polyImg, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+	//QPolygonF poly;
+	//Rect bbox = Rect();
+	//PixelSet pSet;
 
-	//debug
-	//cv::Mat contour_img = cv::Mat::zeros(mImg.size().height, mImg.size().width, CV_8UC1);
-	//cv::fillPoly(contour_img, contours, 255, 8);
+	//QImage qPolyImg(mImg.size().width, mImg.size().height, QImage::Format_RGB888);
+	//qPolyImg.fill(QColor(0, 0, 0));
+	//QPainter painter(&qPolyImg);
+	//painter.setPen(QColor(255, 255, 255));
+	//painter.setBrush(QColor(255, 255, 255));
 
-	if (contours.size() > 1)
-		qWarning() << "Found more than one contour element for a single text block. Using only the first one.";
+	//for (int i = 0; i < lines.length(); i++) {
 
-	poly = Polygon::fromCvPoints(contours[0]).polygon();
+	//	auto l1 = lines[i];
+	//	pSet.append(l1->pixels());
 
-	//poly = pSet.convexHull();
+	//	if (i == 0) {
+	//		poly = l1->convexHull().polygon();
+	//		painter.drawPolygon(poly);
+	//	}
+	//	else if (i > 0) {
+
+	//		auto l2 = l1;
+	//		l1 = lines[i - 1];
+
+	//		PixelSet mergedSet;
+	//		mergedSet.append(l1->pixels());
+	//		mergedSet.append(l2->pixels());
+	//		QPolygonF hull_poly = mergedSet.convexHull().polygon();
+
+	//		auto poly1 = l1->convexHull().polygon();
+	//		auto poly2 = l2->convexHull().polygon();
+
+	//		//compute rect containing max left and min right bound of the text lines
+	//		auto rect1 = poly1.boundingRect();
+	//		auto rect2 = poly2.boundingRect();
+
+	//		double top = std::min(rect1.top(), rect2.top());
+	//		double left = std::max(rect1.left(), rect2.left());
+	//		double bottom = std::max(rect1.bottom(), rect2.bottom());
+	//		double right = std::min(rect1.right(), rect2.right());
+
+	//		Rect rect = Rect(left, top, right - left, bottom - top);
+	//		QPolygonF rect_poly = Polygon::fromRect(rect).polygon();
+
+	//		auto cut_poly = hull_poly.intersected(rect_poly);
+
+	//		//QPolygonF cut_poly1, cut_poly2;
+	//		//cut_poly1 = cut_poly.united(poly1);
+	//		//cut_poly2 = cut_poly.united(poly2);
+	//		//QPolygonF cut_poly_final = cut_poly1.united(cut_poly2);
+
+	//		////final merged polygon
+	//		//poly = poly.united(cut_poly_final);
+
+	//		painter.drawPolygon(poly2);
+	//		painter.drawPolygon(cut_poly);
+	//	}
+	//}
+
+	//cv::Mat polyImg = Image::qImage2Mat(qPolyImg);
+	//cvtColor(polyImg, polyImg, cv::COLOR_RGB2GRAY);
+
+	//std::vector<std::vector<cv::Point>> contours;
+	//cv::findContours(polyImg, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+
+	////debug
+	////cv::Mat contour_img = cv::Mat::zeros(mImg.size().height, mImg.size().width, CV_8UC1);
+	////cv::fillPoly(contour_img, contours, 255, 8);
+
+	//if (contours.size() > 1)
+	//	qWarning() << "Found more than one contour element for a single text block. Using only the first one.";
+
+	//poly = Polygon::fromCvPoints(contours[0]).polygon();
+
 	TextBlock tb(poly);
 
 	tb.setTextLines(lines);
 	tb.addPixels(pSet);
 
 	return tb;
+}
+
+QPolygonF TextBlockFormation::computeTextBlockPoly(const QVector<QSharedPointer<TextLine>>& textLines, int polyType) {
+
+	QPolygonF poly;
+
+	if (polyType < 0 || polyType >= PolygonType::poly_end) {
+		qWarning() << "Could not determine text block polygon type! Using contour polygon instead!";
+		polyType = PolygonType::poly_contour;
+	}
+
+	if (polyType == PolygonType::poly_contour) {
+		Rect bbox = Rect();
+		PixelSet pSet;
+
+		QImage qPolyImg(mImg.size().width, mImg.size().height, QImage::Format_RGB888);
+		qPolyImg.fill(QColor(0, 0, 0));
+		QPainter painter(&qPolyImg);
+		painter.setPen(QColor(255, 255, 255));
+		painter.setBrush(QColor(255, 255, 255));
+
+		for (int i = 0; i < textLines.length(); i++) {
+
+			auto l1 = textLines[i];
+
+			if (i == 0) {
+				poly = l1->polygon().polygon();
+				painter.drawPolygon(poly);
+			}
+			else if (i > 0) {
+
+				auto l2 = l1;
+				l1 = textLines[i - 1];
+
+				//compute convex hull over both lines
+				std::vector<cv::Point> pts = l1->polygon().toCvPoints();
+				std::vector<cv::Point> pts2 = l2->polygon().toCvPoints();
+				pts.insert(pts.end(), pts2.begin(), pts2.end());
+
+				std::vector<cv::Point> cPts;
+				cv::convexHull(pts, cPts, true);
+				Polygon tmp_poly = Polygon::fromCvPoints(cPts);
+				QPolygonF hull_poly = tmp_poly.polygon();
+
+				auto poly1 = l1->polygon().polygon();
+				auto poly2 = l2->polygon().polygon();
+
+				//compute rect containing max left and min right bound of the text lines
+				auto rect1 = poly1.boundingRect();
+				auto rect2 = poly2.boundingRect();
+
+				double top = std::min(rect1.top(), rect2.top());
+				double left = std::max(rect1.left(), rect2.left());
+				double bottom = std::max(rect1.bottom(), rect2.bottom());
+				double right = std::min(rect1.right(), rect2.right());
+
+				Rect rect = Rect(left, top, right - left, bottom - top);
+				QPolygonF rect_poly = Polygon::fromRect(rect).polygon();
+
+				auto cut_poly = hull_poly.intersected(rect_poly);
+
+				//QPolygonF cut_poly1, cut_poly2;
+				//cut_poly1 = cut_poly.united(poly1);
+				//cut_poly2 = cut_poly.united(poly2);
+				//QPolygonF cut_poly_final = cut_poly1.united(cut_poly2);
+
+				////final merged polygon
+				//poly = poly.united(cut_poly_final);
+
+				painter.drawPolygon(poly2);
+				painter.drawPolygon(cut_poly);
+			}
+		}
+
+		cv::Mat polyImg = Image::qImage2Mat(qPolyImg);
+		cvtColor(polyImg, polyImg, cv::COLOR_RGB2GRAY);
+
+		std::vector<std::vector<cv::Point>> contours;
+		cv::findContours(polyImg, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+
+		//debug
+		//cv::Mat contour_img = cv::Mat::zeros(mImg.size().height, mImg.size().width, CV_8UC1);
+		//cv::fillPoly(contour_img, contours, 255, 8);
+
+		if (contours.size() > 1)
+			qWarning() << "Found more than one contour element for a single text block. Using only the first one.";
+
+		poly = Polygon::fromCvPoints(contours[0]).polygon();
+	}
+	else if (polyType == PolygonType::poly_convex) {
+
+		QVector<Vector2D> pts;
+		for (auto tl : textLines)
+			pts << tl->polygon().toPoints();
+		
+		std::vector<cv::Point> ptsCV;
+		for (auto p : pts)
+			ptsCV.push_back(p.toCvPoint());
+
+		std::vector<cv::Point> cPts;
+		cv::convexHull(ptsCV, cPts, true);
+		Polygon tmp_poly = Polygon::fromCvPoints(cPts);
+		poly = tmp_poly.polygon();
+	}
+	else if (polyType == PolygonType::poly_bb) {
+
+		QVector<Vector2D> pts;
+		for (auto tl : textLines)
+			pts << tl->polygon().toPoints();
+
+		Rect box = Rect::fromPoints(pts);
+		poly = Polygon::fromRect(box).polygon();
+	}
+
+	//clip polygon to image boundaries
+	Rect imgRect = Rect(0, 0, mImg.cols-1, mImg.rows-1);
+	QPolygonF imgPoly = Polygon::fromRect(imgRect).polygon();
+	poly = poly.intersected(imgPoly);
+
+	return poly;
 }
 
 void TextBlockFormation::refineTextBlocks() {
@@ -3522,7 +4054,7 @@ void TextBlockFormation::refineTextBlocks() {
 				cv::Mat mask = polyImg1.mul(polyImg2!=0);
 				int tb2Size = cv::countNonZero(polyImg2);
 				int overlapSize = cv::countNonZero(mask);
-				double overlapRatio = (double)overlapSize / tb2Size;
+				double overlapRatio = (double)overlapSize / (double)tb2Size;
 
 				if (overlapRatio > 0.75) {
 					filtered << tb2;
@@ -3595,7 +4127,7 @@ void TextBlockFormation::refineTextBlocks() {
 		}
 
 		if (splitIndices.isEmpty() || splitIndices.size() > (distanceMap.size() / 2.0))
-			continue; //do not split text block if majority of lines will be speparated
+			continue; //do not split text block if majority of lines will be separated
 		else
 			filtered << tb;
 
@@ -3628,7 +4160,7 @@ void TextBlockFormation::refineTextBlocks() {
 
 double TextBlockFormation::computeInterLineDistance(const QSharedPointer<WSTextLineSet>& ls1, const QSharedPointer<WSTextLineSet>& ls2) {
 
-	//TODO assert ls1 lies above ls2 lies and they do not intersect
+	//TODO assert ls1 lies above ls2 and they do not intersect
 
 	Line l1 = ls1->fitLine();
 	Line l2 = ls2->fitLine();
@@ -3660,26 +4192,26 @@ cv::Mat TextBlockFormation::draw(const cv::Mat & img, const QColor & col) {
 	QImage qImg = Image::mat2QImage(img, true);
 	QPainter painter(&qImg);
 
+	//painter.setPen(ColorManager::darkGray());
+	//for (int i = 0; i < mTextLines.size(); ++i) {
+	//	auto tl = mTextLines[i];
+	//	Polygon tlP = tl->convexHull();
+	//	tlP.draw(painter);
+
+	//	//for (int j : bnnIndices[i]) {
+	//	//	auto tl2 = mTextLines[j];
+	//	//	painter.drawLine(tl->center().toQPoint(), tl2->center().toQPoint());
+	//	//}
+
+	//	//QString bC = QString::number(bnnIndices[i].size());
+	//	//QString aC = QString::number(annCount[i]);
+	//	//painter.drawText(tlR.toQRect(), Qt::AlignCenter, "aC=" + aC + ", bC=" + bC);
+	//}
+
 	painter.setPen(ColorManager::blue());
 	for (auto tb : mTextBlockSet.textBlocks()) {
-		Rect tbR = Rect::fromPoints(tb->poly().toPoints());
-		tbR.draw(painter);
-	}
-
-	painter.setPen(ColorManager::darkGray());
-	for (int i = 0; i < mTextLines.size(); ++i) {
-		auto tl = mTextLines[i];
-		Rect tlR = tl->boundingBox();
-		tlR.draw(painter);
-
-		//for (int j : bnnIndices[i]) {
-		//	auto tl2 = mTextLines[j];
-		//	painter.drawLine(tl->center().toQPoint(), tl2->center().toQPoint());
-		//}
-
-		//QString bC = QString::number(bnnIndices[i].size());
-		//QString aC = QString::number(annCount[i]);
-		//painter.drawText(tlR.toQRect(), Qt::AlignCenter, "aC=" + aC + ", bC=" + bC);
+		//Rect tbR = Rect::fromPoints(tb->poly().toPoints());
+		tb->poly().draw(painter);
 	}
 
 	return Image::qImage2Mat(qImg);
@@ -3705,7 +4237,6 @@ QVector<QSharedPointer<PixelEdge>> RightNNConnector::connect(const QVector<QShar
 	double maxHeightRatio = 3.0;
 	double minVertOverlapRatio = 0.30;
 	double distMultiplier = 5;
-	double textHeightEstimate = 0;	// individual value computed below
 	bool filterEdges = true;		// based on maxHeightRatio + minVertOverlapRatio
 	int maxRnnCount = 3;
 
@@ -3722,9 +4253,9 @@ QVector<QSharedPointer<PixelEdge>> RightNNConnector::connect(const QVector<QShar
 		spacings << p->bbox().height();
 	}
 
-	textHeightEstimate = Algorithms::statMoment(spacings, 0.5);
+	double medianTextHeight = Algorithms::statMoment(spacings, 0.5);
 
-
+	//TODO speed up this process by doing undirected linking and computing a RNN look up table
 	for (const QSharedPointer<Pixel>& p1 : mPixels) {
 
 		QVector<QSharedPointer<Pixel>> rnn;
@@ -3748,7 +4279,7 @@ QVector<QSharedPointer<PixelEdge>> RightNNConnector::connect(const QVector<QShar
 				//filter pixels according to the x-distance between them
 				double xDist = p2R.left() - p1R.right();
 				
-				if(xDist < textHeightEstimate*distMultiplier){
+				if(xDist < medianTextHeight*distMultiplier){
 					rnn << p2;
 				}
 			}
@@ -3775,10 +4306,9 @@ QVector<QSharedPointer<PixelEdge>> RightNNConnector::connect(const QVector<QShar
 				Rect p1R = p1->bbox();
 				Rect p2R = rnn.at(idx)->bbox();
 
-				//check height ratio
-				double heightRatio = p1R.height() / p2R.height();
+				double heightRatio = std::max(p1R.height(), p2R.height())  / std::min(p1R.height(), p2R.height());
 
-				if ((1 / maxHeightRatio) < heightRatio && heightRatio < maxHeightRatio) {
+				if(heightRatio < maxHeightRatio){
 
 					//check if relative y-overlap is bigger than 1/3 of bigger component
 					double yOverlap = std::min(p1R.bottom(), p2R.bottom()) - std::max(p1R.top(), p2R.top());
@@ -3904,8 +4434,7 @@ TLConnector::TLConnector(cv::Mat img){
 
 QVector<QSharedPointer<PixelEdge>> TLConnector::connect(const QVector<QSharedPointer<Pixel>>& pixels) const{
 	
-	//double extFactor = 2.5;
-	double extFactor = 1.5;
+	double extFactor = 1.5;	//alternative values: 1-3
 
 	QVector<QSharedPointer<PixelEdge> > edges;
 	QVector<QSharedPointer<Pixel>> mPixels(pixels);

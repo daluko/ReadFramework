@@ -228,14 +228,23 @@ int main(int argc, char** argv) {
 			QString dirPath;
 			//dirPath = "F:/dev/da/data/HBR2013/test/tr";
 			//dirPath = "E:/data/test/HBR13_test";
-			//dirPath = "E:/data/test/HBR2013_training/test";
+			//dirPath = "F:/dev/da/data/HBR2013/eval/train";
+			//dirPath = "F:/dev/da/data/HBR2013/eval/test";
 
 			bool testTHE = false;
 			bool testWSA = false;
 			bool testFSC = true;
+			bool testTBF = false;
+
+			if (testTBF) {
+				rdf::TextBlockFormationTest tbft(dc);
+				tbft.run();
+			}
 
 			if (testTHE) {
 				rdf::TextHeightEstimationTest thet(dc);
+				//thet.drawTextHeightRect(QRect(0,0,75,75));
+				////EGBA -> x > 50 -> ~60-75
 
 				if (!dirPath.isEmpty())
 					thet.processDirectory(dirPath);
@@ -244,50 +253,63 @@ int main(int argc, char** argv) {
 				}
 			}
 
-			if (testWSA) {
-				rdf::WhiteSpaceTest wst(dc);
-
+			if (testWSA) {			
 				if (!dirPath.isEmpty())
-					wst.processDirectory(dirPath);
-				else {
-					wst.run();
-				}
+					dc.setOutputPath(dirPath);
+				else
+					dc.setOutputPath(dc.imagePath());
+
+				rdf::WhiteSpaceTest wst(dc);
+				wst.testFontHeightRatio();
+
+				//parameter tests
+				//wst.testParameterSettings(dirPath);
+				
+				//process directory
+				//if (!dirPath.isEmpty())
+				//	wst.processDirectory(dirPath);
+				//else {
+				//	wst.run();
+				//}
 			}
 
 			if (testFSC) {
 				rdf::FontStyleClassificationTest fct(dc);
 
-				//if (!dirPath.isEmpty())
-				//	fct.processDirectory(dirPath);
-				//else
-				//	fct.run();
+				//QString trainDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA";
+				//fct.testClassifierTraining(trainDir);
 
-				if (!dc.fontDataPath().isEmpty()) {
+				if (!dirPath.isEmpty())
+					fct.processDirectory(dirPath);
+				else
+					fct.run();
 
-					//test text patch processing
-					//QString testPath = dc.fontDataPath() + "/fontDataTwain/";
-					//fct.testSyntheticDataSet(testPath);
+				//if (!dc.fontDataPath().isEmpty()) {
 
-					//test different amounts of sample 
-					//int maxSampleCount = 250;
-					//while(maxSampleCount <= 3500) {
-					//	fct.testSyntheticDataSet(dc.fontDataPath(), maxSampleCount);
-					//	maxSampleCount = maxSampleCount + 250;
-					//}
+				//	//test text patch processing
+				//	//QString testPath = dc.fontDataPath() + "/fontDataTwain/";
+				//	//fct.testSyntheticDataSet(testPath);
 
-					//test synthetic page processing
-					QString pageDataPath = dc.fontDataPath() + "syntheticPage/pageData.txt";
-					QString trainDataPath = dc.fontDataPath() + "syntheticPage/FontTrainData.txt";
-					
-					qDebug() << "synthPage input path 1: " << pageDataPath;
-					qDebug() << "synthPage input path 2: " << trainDataPath;
+				//	//test different amounts of sample 
+				//	//int maxSampleCount = 250;
+				//	//while(maxSampleCount <= 3500) {
+				//	//	fct.testSyntheticDataSet(dc.fontDataPath(), maxSampleCount);
+				//	//	maxSampleCount = maxSampleCount + 250;
+				//	//}
 
-					fct.testSyntheticPage(pageDataPath, trainDataPath);
-				}
-				else {
-					qWarning() << "Can't test font style classification with synthetic data.";
-					qInfo() << "Use -w option to specify path to .txt file containing text samples (words).";
-				}
+				//	//test synthetic page processing
+				//	QString pageDataPath = dc.fontDataPath() + "syntheticPage/pageData.txt";
+				//	QString trainDataPath = dc.fontDataPath() + "syntheticPage/FontTrainData.txt";
+				//	
+				//	qDebug() << "synthPage input path 1: " << pageDataPath;
+				//	qDebug() << "synthPage input path 2: " << trainDataPath;
+
+				//	fct.testSyntheticPage(pageDataPath, trainDataPath);
+				//}
+				//else {
+				//	qWarning() << "Can't test font style classification with synthetic data.";
+				//	qInfo() << "Use -w option to specify path to .txt file containing text samples (words).";
+				//}
 			}
 		}
 		// my section
@@ -335,9 +357,20 @@ void applyDebugSettings(rdf::DebugConfig& dc) {
 		//dc.setImagePath("E:/data/test/HBR2013_training/training/00452456.tif");
 		//dc.setImagePath("E:/data/test/HBR2013_training/test/00046981.tif");
 
-		//dc.setImagePath("F:/dev/da/data/HBR2013/test/test/00451351.tif");
-		dc.setImagePath("F:/dev/da/data/catalogue/1905_Venice_Biennale/1905_Venice_Biennale_0035.jpg");
-				
+		//dc.setImagePath("F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA/1907_Brussels_BeauxArts_0014.jpg");
+		//dc.setImagePath("F:/dev/da/data/HBR2013/eval/train/00485679.tif");//athena example
+		//dc.setImagePath("F:/dev/da/data/HBR2013/eval/test/00058028.tif"); //black separator example
+		//dc.setImagePath("F:/dev/da/data/HBR2013/eval/test/00672923.tif"); //rnn example - add pixel, merge lines
+		//dc.setImagePath("F:/dev/da/data/HBR2013/eval/train/00456592.tif"); //rnn example - merge lines
+		//dc.setImagePath("F:/dev/da/data/HBR2013/eval/test/00439450.tif"); //wss example
+		//dc.setImagePath("F:/dev/da/data/HBR2013/eval/train/00456592.tif"); //mss example
+		//dc.setImagePath("F:/dev/da/data/HBR2013/eval/test/00454868.tif"); //mss2 example
+		dc.setImagePath("F:/dev/da/data/HBR2013/eval/test/00425629.tif"); //tbf1 example
+		dc.setImagePath("F:/dev/da/data/HBR2013/eval/train/00465433.tif"); //tbf poly example
+		dc.setImagePath("F:/dev/da/data/HBR2013/eval/test/00485661.tif");  //tbf poly clipping test
+		//tbf example 00441830
+		//tbf example 00486100 - debug
+		
 
 		qInfo() << dc.imagePath() << "added as image path";
 	}

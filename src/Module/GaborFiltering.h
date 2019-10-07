@@ -83,7 +83,7 @@ class DllCoreExport GaborFiltering {
 public:
 	static cv::Mat createGaborKernel(int ksize, double lambda, double theta, double sigma);
 	static GaborFilterBank createGaborFilterBank(QVector<double> lambda, QVector<double> theta,
-		int ksize, double sigma = -1, double psi = 0.0, double gamma = 1.0, bool openCV = false);
+		int ksize, double sigma = -1, double psi = 0.0, double gamma = 1.0, bool openCV = true);
 
 	static cv::Mat extractGaborFeatures(cv::Mat img, GaborFilterBank);
 };

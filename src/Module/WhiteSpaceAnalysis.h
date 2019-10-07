@@ -60,7 +60,6 @@
 namespace rdf {
 
 	// read defines
-
 #define mDebug		qDebug().noquote()		<< debugName()
 #define mInfo		qInfo().noquote()		<< debugName()
 #define mWarning	qWarning().noquote()	<< debugName()
@@ -84,12 +83,44 @@ namespace rdf {
 
 	};
 
-	class DllCoreExport TextBlockFormation {
+	class DllCoreExport TextBlockFormationConfig : public ModuleConfig {
+
 	public:
+		TextBlockFormationConfig();
+
+		virtual QString toString() const override;
+
+		void setPolygonType(int pt);
+		int polygonType() const;
+
+	protected:
+
+		void load(const QSettings& settings) override;
+		void save(QSettings& settings) const override;
+
+		int mPolygonType = 0;
+	};
+
+
+	class DllCoreExport TextBlockFormation : public Module {
+
+	public:
+
 		TextBlockFormation();
 		TextBlockFormation(const cv::Mat img, const QVector<QSharedPointer<WSTextLineSet>> textLines);
 
-		bool compute();
+		enum PolygonType {
+			poly_contour = 0,
+			poly_convex,
+			poly_bb,
+			//poly_morph,
+			poly_end
+		};
+
+		bool isEmpty() const override;
+		bool compute() override;
+
+		QSharedPointer<TextBlockFormationConfig> config() const;
 
 		void computeTextBlocks(PixelGraph pg);
 		void addSeparatorLines(const QVector<Line>& lines);
@@ -99,10 +130,14 @@ namespace rdf {
 		cv::Mat draw(const cv::Mat& img, const QColor& col = QColor());
 
 	protected:
+		bool checkInput() const override;
+
 		void computeAdjacency(PixelGraph pg);
 		void refineTextBlocks();
 		
-		TextBlock createTextBlock(const QVector<QSharedPointer<TextLineSet> >& textLines);
+		TextBlock createTextBlock(const QVector<QSharedPointer<TextLineSet>>& textLines);
+		QPolygonF computeTextBlockPoly(const QVector<QSharedPointer<TextLine>>& textLines, int polyType = PolygonType::poly_contour);
+
 		double computeInterLineDistance(const QSharedPointer<WSTextLineSet>& ls1, const QSharedPointer<WSTextLineSet>& ls2);
 
 		//input
@@ -160,10 +195,10 @@ namespace rdf {
 		cv::Mat mImg;
 	};
 
-	class DllCoreExport TextLinehypothesizerConfig : public ModuleConfig {
+	class DllCoreExport TextLineHypothesizerConfig : public ModuleConfig {
 
 	public:
-		TextLinehypothesizerConfig();
+		TextLineHypothesizerConfig();
 
 		virtual QString toString() const override;
 
@@ -184,13 +219,13 @@ namespace rdf {
 		void save(QSettings& settings) const override;
 	};
 
-	class DllCoreExport TextLinehypothesizer : public Module {
+	class DllCoreExport TextLineHypothesizer : public Module {
 	public:
-		TextLinehypothesizer(const cv::Mat img, const PixelSet& set = PixelSet());
+		TextLineHypothesizer(const cv::Mat img, const PixelSet& set = PixelSet());
 		
 		bool isEmpty() const override;
 		bool compute();
-		QSharedPointer<TextLinehypothesizerConfig> config() const;
+		QSharedPointer<TextLineHypothesizerConfig> config() const;
 
 		QVector<QSharedPointer<TextLine> > textLines() const;
 		QVector<QSharedPointer<WSTextLineSet>> textLineSets() const;
@@ -223,6 +258,33 @@ namespace rdf {
 		void extractWhiteSpaces(QSharedPointer<WSTextLineSet>& textLine) const;
 	};
 
+	class DllCoreExport WhiteSpaceSegmentationConfig : public ModuleConfig {
+
+	public:
+		WhiteSpaceSegmentationConfig();
+
+		virtual QString toString() const override;
+
+		void setMinLengthMultiplier(double mlm);
+		double minLengthMultiplier() const;
+
+		void setSlicingSizeMultiplier(double ssm);
+		double slicingSizeMultiplier() const;
+
+		void setFindWhiteSpaceGaps(bool wsGaps);
+		bool findWhiteSpaceGaps() const;
+
+	protected:
+
+		double mMinLengthMultiplier = 2.5 * 3;
+		double mSlicingSizeMultiplier = 2.5 * 3;
+
+		bool mFindWhiteSpaceGaps = true;
+
+		void load(const QSettings& settings) override;
+		void save(QSettings& settings) const override;
+	};
+
 	class DllCoreExport WhiteSpaceSegmentation : public Module {
 	public:
 		WhiteSpaceSegmentation();
@@ -230,6 +292,7 @@ namespace rdf {
 
 		bool isEmpty() const override;
 		bool compute();
+		QSharedPointer<WhiteSpaceSegmentationConfig> config() const;
 
 		void addSeparatorLines(const QVector<Line>& lines);
 
@@ -267,7 +330,7 @@ namespace rdf {
 		bool findWhiteSpaceRuns(const PixelGraph pg);
 		void updateBCRStatus();
 		bool refineWhiteSpaceRuns();
-		QVector<Line> findWhiteSeparators();
+		QVector<Line> computeWhiteSpaceGaps();
 		void splitAtWhiteSeparators();
 		bool refineTextLineResults();
 	};
@@ -285,11 +348,20 @@ namespace rdf {
 		void setMaxImgSide(int maxImgSide);
 		int maxImgSide() const;
 
+		void setTextHeightMultiplier(double maxImgSide);
+		double textHeightMultiplier() const;
+
 		void setDebugDraw(bool show);
 		bool debugDraw() const;
 
-		void setScaleInput(bool show);
+		void setScaleInput(bool scaleInput);
 		bool scaleInput() const;
+
+		void setAthenaScaling(bool athenaScaling);
+		bool athenaScaling() const;
+
+		void setBlackSeparators(bool bs);
+		bool blackSeparators() const;
 
 		void setDebugPath(const QString & dp);
 		QString debugPath() const;
@@ -303,8 +375,12 @@ namespace rdf {
 		int mNumErosionLayers = 0;
 		int mMaxImgSide = 2000;
 
+		//THE and scaling parameters
+		double mTextHeightMultiplier = 2.0;
 		bool mScaleInput = true;
-		bool mUseAthenaTHE = false;
+		bool mAthenaScaling = false;
+		bool mBlackSeparators = false;
+
 		bool mDebugDraw = false;
 		QString mDebugPath;
 	};
@@ -317,8 +393,13 @@ namespace rdf {
 
 		bool isEmpty() const override;
 		bool compute() override;
+
 		QSharedPointer<WhiteSpaceAnalysisConfig> config() const;
 
+		void setTlhConfig(QSharedPointer<TextLineHypothesizerConfig> tlhConfig);
+		void setWssConfig(QSharedPointer<WhiteSpaceSegmentationConfig> wssConfig);
+		void setTbfConfig(QSharedPointer<TextBlockFormationConfig> tbfConfig);
+		
 		QVector<QSharedPointer<TextRegion>> textLineRegions() const;
 		QSharedPointer<Region> textBlockRegions() const;
 		QVector<QSharedPointer<Region>> evalTextBlockRegions() const;
@@ -331,6 +412,10 @@ namespace rdf {
 		cv::Mat mImg;
 		int mMinPixelsPerBlock;
 		int mMinTextHeight = 50;
+		QSharedPointer<TextLineHypothesizerConfig> mTlhConfig;
+		QSharedPointer<WhiteSpaceSegmentationConfig> mWssConfig;
+		QSharedPointer<TextBlockFormationConfig> mTbfConfig;
+
 
 		//debug output
 		Rect filterRect = Rect();
@@ -340,6 +425,10 @@ namespace rdf {
 		// output
 		PixelSet pSet;
 		int mtextHeightEstimate = -1;
+		int mtextHeightAthena = -1;
+		bool roughEstimateValid = false;
+		bool athenaEstimateValid = false;
+
 		QSharedPointer<ScaleFactory> mScaleFactory;
 		QVector<Line> mBlackSeparators;
 		QVector<QSharedPointer<WSTextLineSet>> mTextLineHypotheses;
@@ -355,12 +444,15 @@ namespace rdf {
 		bool computeLocalStats(PixelSet & pixels) const;
 		Rect filterPixels(PixelSet& pixels);
 		QVector<QVector<QSharedPointer<rdf::Pixel>>> findPixelGroups(PixelSet& set);
-		QVector<Line> findBlackSeparators(double pixelHeight = -1) const;
+		QVector<Line> findBlackSeparators() const;
 
+		//debug
 		void drawDebugImages(const cv::Mat& img);
 		cv::Mat drawWhiteSpaces(const cv::Mat& img);
-		cv::Mat drawFilteredPixels(const cv::Mat& img);
+		cv::Mat drawFilteredPixels(const cv::Mat& img, QColor fpCol = ColorManager::blue(), 
+										QColor bpCol = ColorManager::lightGray(), QColor opCol = ColorManager::red());
 		cv::Mat drawBlackSeparators(const cv::Mat & img);
+		void drawTheDebugImages(const cv::Mat & img);
 	};
 
 	namespace WSAHelper {
