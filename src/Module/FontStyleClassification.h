@@ -63,8 +63,8 @@ namespace rdf {
 
 	public:
 		TextPatch();
-		TextPatch(cv::Mat textImg, const QString& id = QString());
-		TextPatch(QString text, const LabelInfo label, const QString & id = QString());
+		TextPatch(cv::Mat textImg, int fixedPatchSize = -1, int textureSize = -1, const QString& id = QString());
+		TextPatch(QString text, const LabelInfo label, int fixedPatchSize = -1, int textureSize = -1, const QString & id = QString());
 
 		bool isEmpty() const;
 		int textureSize() const;
@@ -97,6 +97,9 @@ namespace rdf {
 
 		bool generatePatchTexture();
 		bool generateTextImage(QString text, QFont font, bool cropImg = false);
+
+		void adaptPatchHeight(int textPatchSize);
+		void adaptTextureLineHeight(int textureSize, int textPatchSize);
 	};
 
 	class DllCoreExport FontStyleClassifier{

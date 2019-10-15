@@ -577,19 +577,24 @@ void FontStyleClassificationTest::testSyntheticDataSet(QString fontDataDir, int 
 	
 	//fonts used for test
 	QVector<QFont> fonts = generateFonts(4, {"Georgia"});
-
+	//QVector<QFont> styles = generateFontStyles();
+	//QVector<QFont> fonts = generateFonts(4, { "Arial" , "Franklin Gothic Medium" , "Times New Roman" , "Georgia" }, styles.mid(0,1));
+	
 	qDebug() << "trainDataSetPath" << trainDataSetPath;
 	qDebug() << "testDataSetPath" << testDataSetPath;
 
 	//load or generate data sets from file
-	if (!QFileInfo(trainDataSetPath).exists() || !QFileInfo(testDataSetPath).exists()){
-		
+	if (!QFileInfo(trainDataSetPath).exists() || !QFileInfo(testDataSetPath).exists()) {
+
 		QStringList wordList = loadWordSamples(rtPath);
 		if (wordList.isEmpty())
 			return;
 
 		QVector<QStringList> sampleSets = splitSampleSet(wordList);
-			
+
+		//if (sampleSets[0].size() > maxSampleCount)
+		//	sampleSets[0] = sampleSets[0].mid(0, maxSampleCount);
+
 		if (!generateDataSet(sampleSets[0], fonts, trainDataSetPath) || !generateDataSet(sampleSets[1], fonts, testDataSetPath))
 			return;
 	}
@@ -597,8 +602,10 @@ void FontStyleClassificationTest::testSyntheticDataSet(QString fontDataDir, int 
 	if (!readDataSet(trainDataSetPath, fcm_train, samples_train) || !readDataSet(testDataSetPath, fcm_test, samples_test))
 		return;
 
+	qDebug() << "Number of training samples reduced to: " << samples_train.size();
+
 	//reduce training data set size (for evaluation purpose)
-	if (maxSampleCount > 0) {
+	if (maxSampleCount > 0 && samples_train.size() > maxSampleCount) {
 		reduceSampleCount(fcm_train, maxSampleCount);
 		samples_train = samples_train.mid(0, maxSampleCount);
 		qDebug() << "Number of training samples reduced to: " << samples_train.size();
@@ -797,6 +804,7 @@ void FontStyleClassificationTest::testClassifierTraining(QString dirPath){
 	QVector<QSharedPointer<TextPatch>> textPatches = QVector<QSharedPointer<TextPatch>>();
 
 	int i = 0;
+	int wordRegionCount = 0;
 	for (auto f : fileInfoList) {
 
 		QString imagePath = f.absoluteFilePath();
@@ -811,6 +819,8 @@ void FontStyleClassificationTest::testClassifierTraining(QString dirPath){
 			qWarning() << "No word regions found, skipping image";
 			continue;
 		}
+
+		wordRegionCount += wordRegions.size();
 			
 		QImage qImg(mConfig.imagePath());
 		cv::Mat imgCv = Image::qImage2Mat(qImg);
@@ -821,14 +831,15 @@ void FontStyleClassificationTest::testClassifierTraining(QString dirPath){
 		}
 
 		++i;
-		qDebug() << "training image #" << QString::number(i) << " : " << f.absoluteFilePath();
+		qDebug() << "loaded text patches from image #" << QString::number(i) << " : " << f.absoluteFilePath();
 
-		//implement training on text regions
 		textPatches << generateTextPatches(wordRegions, imgCv, 75);
-		qDebug() << "number of word regions = " + QString::number(wordRegions.size());
 	}
 
-	qDebug() << "number of texture patches = " + QString::number(textPatches.size());
+	//implement training on text regions
+
+	qDebug() << "number of word regions = " << wordRegionCount;
+	qDebug() << "number of texture patches = " << textPatches.size();
 }
 
 bool FontStyleClassificationTest::generateDataSet(QStringList samples,
@@ -1100,12 +1111,19 @@ QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateTextPatc
 
 	QVector<QSharedPointer<TextPatch>> textPatches;
 	for (auto l : fontStyleLabels) {
+
 		for (auto s : textSamples) {
-			auto tp = QSharedPointer<TextPatch>::create(s, l);
+			//debug output
+			//TextPatch sample = TextPatch(s, l, 36);
+			//cv::Mat patch = sample.textPatchImg();
+			//cv::Mat tex = sample.patchTexture();
+
+			QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(s, l);
+			//QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(s, l, 38);
+
 			if (!tp->isEmpty()) {
 				textPatches << tp;
 			}
-				
 		}
 	}
 
@@ -1192,7 +1210,6 @@ QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateTextPatc
 			//TODO refine this process
 			trRect.setSize(Vector2D(trRect.width(), WindowSize));
 			patchTexture = img(trRect.toCvRect());
-
 		}
 		else {
 			patchTexture = img(trRect.toCvRect());
@@ -1225,6 +1242,7 @@ FeatureCollectionManager FontStyleClassificationTest::generatePatchFeatures(QVec
 
 	//save feature collection manager
 	FeatureCollectionManager fcm = FontStyleClassification::generateFCM(textPatches, tpFeatures);
+	//TODO make sure patches are sorted according to order of features in FCM
 	
 	return fcm;
 }

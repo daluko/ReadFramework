@@ -1,4 +1,6 @@
 #include "FontStyleClassification.h"
+#include "FontStyleClassification.h"
+#include "FontStyleClassification.h"
 /*******************************************************************************************************
 ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ.
 
@@ -55,25 +57,37 @@ namespace rdf {
 		mLabel->setTrueLabel(LabelInfo(1, "unknown_font"));
 	}
 
-	TextPatch::TextPatch(const cv::Mat textImg, const QString& id) : BaseElement(id) {
+	TextPatch::TextPatch(cv::Mat textImg, int fixedPatchSize, int textureSize,
+		const QString & id) : BaseElement(id) {
 
-		mTextPatch = textImg;
+		mTextPatch = textImg.clone();
 
-		if (!generatePatchTexture()) {
+		if (fixedPatchSize!=-1)
+			adaptPatchHeight(fixedPatchSize);
+
+		if (textureSize != -1)
+			adaptTextureLineHeight(textureSize, fixedPatchSize);
+
+		if (!generatePatchTexture())
 			qWarning() << "Failed to generate texture from text patch.";
-		}
 
 		mLabel->setTrueLabel(LabelInfo(1, "unknown_font"));
 	}
 
-	TextPatch::TextPatch(QString text, const LabelInfo label, const QString& id) : BaseElement(id) {
+	TextPatch::TextPatch(QString text, const LabelInfo label, int fixedPatchSize,
+		int textureSize, const QString & id) : BaseElement(id){
 
 		QFont font = FontStyleClassification::labelNameToFont(label.name());
-
-		generateTextImage(text, font);
 		mLabel->setTrueLabel(label);
+		generateTextImage(text, font);
 
-		if (!generatePatchTexture())
+		if(fixedPatchSize != -1)
+			adaptPatchHeight(fixedPatchSize);
+
+		if(textureSize != -1)
+			adaptTextureLineHeight(textureSize, fixedPatchSize);
+
+		if(!generatePatchTexture())
 			qWarning() << "Failed to generate texture from text patch.";
 	}
 
@@ -102,6 +116,8 @@ namespace rdf {
 
 	bool TextPatch::generatePatchTexture() {
 
+		//TODO fix bug with texture repition (texture just repition of first line)
+
 		if (mTextPatch.empty()) {
 			qWarning() << "Couldn't create patch texture -> text patch is empty";
 			mPatchTexture = cv::Mat();
@@ -114,7 +130,7 @@ namespace rdf {
 			return false;
 		}
 
-		//get text input image and resize + replicate it to fill an image patch fo size sz
+		//get text input image and resize + replicate it to fill an image patch of size sz
 		double sf = mTextureLineHeight / (double)mTextPatch.size().height;
 		cv::Mat patchScaled = mTextPatch.clone();
 		resize(mTextPatch, patchScaled, cv::Size(), sf, sf, cv::INTER_LINEAR); //TODO test different interpolation modes
@@ -199,6 +215,49 @@ namespace rdf {
 		}
 
 		return true;
+	}
+
+	void TextPatch::adaptPatchHeight(int textPatchSize){
+
+		//adapt text patch height according to passed parameter
+		if (mTextPatch.size().height != textPatchSize) {
+			if (mTextPatch.size().height < textPatchSize) {
+				int diff = textPatchSize - mTextPatch.size().height;
+
+				if (diff % 2 == 0) {
+					diff = qRound((double)diff / 2);
+					cv::copyMakeBorder(mTextPatch, mTextPatch, diff, diff, 0, 0, cv::BORDER_REPLICATE);
+				}
+				else {
+					diff = diff - 1;
+					diff = qRound((double)diff / 2);
+					cv::copyMakeBorder(mTextPatch, mTextPatch, diff + 1, diff, 0, 0, cv::BORDER_REPLICATE);
+				}
+			}
+			else {
+				int diff = mTextPatch.size().height - textPatchSize;
+				cv::Rect roi;
+				if (diff % 2 == 0) {
+					diff = qRound((double)diff / 2);
+					roi = cv::Rect(0, diff, mTextPatch.size().width, textPatchSize);
+				}
+				else {
+					diff = diff - 1;
+					diff = qRound((double)diff / 2);
+					roi = cv::Rect(0, diff + 1, mTextPatch.size().width, textPatchSize);
+				}
+
+				mTextPatch = cv::Mat(mTextPatch, roi);
+			}
+		}
+	}
+
+	void TextPatch::adaptTextureLineHeight(int textureSize, int textPatchSize){
+		setTextureSize(textureSize);
+		double x =  (double)textureSize / textPatchSize;
+		int lineHeight = qRound((double)textureSize / qRound(x));
+		setTextureLineHeight(lineHeight);
+		qDebug() << "Adapting mTextureLineHeight: " <<"x = " << x << ", mTextureLineHeight = " << lineHeight ;
 	}
 
 	QSharedPointer<PixelLabel> TextPatch::label() const {

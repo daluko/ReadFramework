@@ -279,16 +279,18 @@ int main(int argc, char** argv) {
 				//QString trainDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA";
 				//fct.testClassifierTraining(trainDir);
 
-				if (!dirPath.isEmpty())
-					fct.processDirectory(dirPath);
-				else
-					fct.run();
+				//if (!dirPath.isEmpty())
+				//	fct.processDirectory(dirPath);
+				//else
+				//	fct.run();
 
-				//if (!dc.fontDataPath().isEmpty()) {
+				if (!dc.fontDataPath().isEmpty()) {
 
-				//	//test text patch processing
-				//	//QString testPath = dc.fontDataPath() + "/fontDataTwain/";
-				//	//fct.testSyntheticDataSet(testPath);
+					//test text patch processing
+					//QString testPath = dc.fontDataPath() + "/fontDataTwain/";
+
+					QString testPath = dc.fontDataPath() + "/fontDataFixedSize/";
+					fct.testSyntheticDataSet(testPath, 500);
 
 				//	//test different amounts of sample 
 				//	//int maxSampleCount = 250;
@@ -305,11 +307,11 @@ int main(int argc, char** argv) {
 				//	qDebug() << "synthPage input path 2: " << trainDataPath;
 
 				//	fct.testSyntheticPage(pageDataPath, trainDataPath);
-				//}
-				//else {
-				//	qWarning() << "Can't test font style classification with synthetic data.";
-				//	qInfo() << "Use -w option to specify path to .txt file containing text samples (words).";
-				//}
+				}
+				else {
+					qWarning() << "Can't test font style classification with synthetic data.";
+					qInfo() << "Use -w option to specify path to .txt file containing text samples (words).";
+				}
 			}
 		}
 		// my section
