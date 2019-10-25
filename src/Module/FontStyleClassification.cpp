@@ -38,10 +38,15 @@ related links:
 #include "Image.h"
 #include "Utils.h"
 #include "Elements.h"
+#include "ElementsHelper.h"
 #include "WhiteSpaceAnalysis.h"
 #include "ImageProcessor.h"
+#include "PageParser.h"
+#include "DebugDavid.h"
 
 #pragma warning(push, 0)	// no warnings from includes
+#include <QDir>
+#include <QFileInfo>
 #include <QPainter>
 #include "opencv2/imgproc.hpp"
 
@@ -503,7 +508,60 @@ namespace rdf {
 		return model;
 	}
 
+	//FontDataGenerator --------------------------------------------------------------------
+	int FontDataGenerator::computePatchSizeEstimate(QString dataSetDir) {
 
+		int patchSize = -1;
+
+		QDir dir(dataSetDir);
+		if (!dir.exists()) {
+			qWarning() << "Failed to compute patch size estimate. Directory does not exist: " << dataSetDir;
+			return patchSize;
+		}
+
+		qInfo() << "Loading patches from directory: " << dataSetDir;
+
+		QStringList filters;
+		filters << "*.tif" << "*.jpg";
+		QFileInfoList fileInfoList = dir.entryInfoList(filters, QDir::Files | QDir::NoDotAndDotDot);
+		
+		QVector<QSharedPointer<TextLine>> wordRegions = QVector<QSharedPointer<TextLine>>();
+		for (auto f : fileInfoList) {
+
+			QString imagePath = f.absoluteFilePath();
+			QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(imagePath);
+
+			if (!QFileInfo(xmlPath).exists())
+				continue;
+
+			//TODO consider using text lines regions instead or check dynamically for both region types
+			//wordRegions = loadRegions<TextLine>(imagePath, Region::type_word);
+			wordRegions = loadRegions<TextLine>(imagePath, Region::type_word);
+		}
+
+		if (wordRegions.isEmpty()) {
+			qCritical() << "Failed to compute patch size estimate! No word regions found!";
+			return patchSize;
+		}
+
+		//TODO use advanced method for catalogue data 
+		QList<int> heights;
+		for (auto wr : wordRegions) {
+			Rect wrr = Rect::fromPoints(wr->polygon().toPoints());
+			int wrh = qRound(wrr.height());
+			heights << wrh;
+		}
+
+		patchSize = qRound(Algorithms::statMoment(heights, 0.95));
+		int hMax_ = qRound(Algorithms::statMoment(heights, 1));
+		int hMin_ = qRound(Algorithms::statMoment(heights, 0));
+
+		//qDebug() << heights;
+		qDebug() << "patchSize = " << patchSize << "; hMax_ " << hMax_ << "; hMin_ = " << hMin_;
+
+		return patchSize;
+	}
+	
 	// FontStyleClassificationConfig --------------------------------------------------------------------
 	FontStyleClassificationConfig::FontStyleClassificationConfig() : ModuleConfig("Font Style Classification Module") {
 	}
@@ -816,7 +874,7 @@ namespace rdf {
 		cv::Mat features;
 		if (!loadFeatures()) {
 			features = computeGaborFeatures(mTextPatches, mGfb);
-			mFCM_test = generateFCM(features);	//do not pass additional patches with GT labels (if availabel)
+			mFCM_test = generateFCM(features);	//do not pass additional patches with GT labels (if available)
 		}
 
 		if (mFCM_test.isEmpty())
@@ -915,6 +973,9 @@ namespace rdf {
 
 	QString FontStyleClassification::fontToLabelName(QFont font){
 
+		//TODO include font size property in labelName
+		//TODO add additional property for flagging label as GT
+
 		QString labelName = "fsl_";
 		labelName += font.family() + "_";
 
@@ -932,7 +993,7 @@ namespace rdf {
 	}
 
 	QFont FontStyleClassification::labelNameToFont(QString labelName){
-		
+
 		QStringList lp = labelName.split("_");
 		if (lp.first() != "fsl" || lp.size()!= 4) {
 			qWarning() << "Failed to create font from label name: " << labelName;
@@ -1049,7 +1110,6 @@ namespace rdf {
 		for (auto c : collections)
 			fcm.add(c);
 
-
 		return fcm;
 	}
 
@@ -1128,7 +1188,6 @@ namespace rdf {
 
 			for (int i = 0; i < patches.size(); ++i) {
 				int predLabelID = patches[i]->label()->predicted().id();
-				int trueLabelID = patches[i]->label()->trueLabel().id();
 				QColor predLabelColor = ColorManager::getColor(predLabelID, 0.5);
 
 				painter.setBrush(predLabelColor);

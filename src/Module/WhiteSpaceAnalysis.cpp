@@ -304,25 +304,25 @@ bool WhiteSpaceAnalysis::compute() {
 	// WHITE SPACE SEGMENTATION: compute white space segmentation for estimated text lines
 	Timer dt3;
 
-	////cv::Mat wsImg = drawWhiteSpaces(mImg);
+	//cv::Mat wsImg = drawWhiteSpaces(mImg);
 
-	//WhiteSpaceSegmentation wss(mImg, mTextLineHypotheses);
-	//wss.addSeparatorLines(mBlackSeparators);
-	//wss.setConfig(mWssConfig);
+	WhiteSpaceSegmentation wss(mImg, mTextLineHypotheses);
+	wss.addSeparatorLines(mBlackSeparators);
+	wss.setConfig(mWssConfig);
 
-	//if (!wss.compute()) {
-	//	qWarning() << "Could not compute white space segmentation!";
-	//	return false;
-	//}
+	if (!wss.compute()) {
+		qWarning() << "Could not compute white space segmentation!";
+		return false;
+	}
 
-	////get segmented text lines
-	//mWSTextLines = wss.textLineSets();
+	//get segmented text lines
+	mWSTextLines = wss.textLineSets();
 
-	//if (config()->debugDraw()) {
-	//	QString imgPath = Utils::createFilePath(config()->debugPath(), "_whiteSpaces","png");
-	//	cv::Mat imgDebugWSS = wss.drawSplitTextLines(mImg);
-	//	Image::save(imgDebugWSS, imgPath);
-	//}
+	if (config()->debugDraw()) {
+		QString imgPath = Utils::createFilePath(config()->debugPath(), "_whiteSpaces","png");
+		cv::Mat imgDebugWSS = wss.drawSplitTextLines(mImg);
+		Image::save(imgDebugWSS, imgPath);
+	}
 
 	QString tt3 = dt3.getTotal();
 	qInfo() << "Finished white space segmentation. Computation took: " << tt3;

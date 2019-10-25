@@ -38,6 +38,7 @@ related links:
 #include "ScaleFactory.h"
 #include "GaborFiltering.h"
 #include "SuperPixelTrainer.h"
+#include "Elements.h"
 
 #pragma warning(push, 0)	// no warnings from includes
 // Qt Includes
@@ -145,6 +146,44 @@ namespace rdf {
 		static cv::Ptr<cv::ml::StatModel> readStatModel(QJsonObject & jo, ClassifierMode mode);
 	};
 
+	class DllCoreExport FontDataGenerator{
+
+	public:
+		static int computePatchSizeEstimate(QString dataSetDir);
+
+		template <typename T>
+		static QVector< QSharedPointer<T>> loadRegions(QString imagePath, Region::Type type) {
+			QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(imagePath);
+
+			rdf::PageXmlParser parser;
+			bool xml_found = parser.read(xmlPath);
+
+			if (!xml_found) {
+				qInfo() << xmlPath << "NOT found...";
+				return QVector<QSharedPointer<T>>();
+			}
+
+			QSharedPointer<PageElement> xmlPage = parser.page();
+			QVector<QSharedPointer<T>> regions = RegionManager::filter<T>(xmlPage->rootRegion(), type);
+
+			return regions;
+		}
+
+		//bool isEmpty() const;
+		//bool isTrained() const;
+
+		//cv::Ptr<cv::ml::StatModel> model() const;
+		//LabelManager manager() const;
+		//QVector<LabelInfo> classify(cv::Mat testFeat);
+
+	private:
+		//FeatureCollectionManager mFcm;
+
+		//bool checkInput() const;
+
+		//static cv::Ptr<cv::ml::StatModel> readStatModel(QJsonObject & jo, ClassifierMode mode);
+	};
+
 	class DllCoreExport FontStyleClassificationConfig : public ModuleConfig {
 
 	public:
@@ -199,7 +238,7 @@ namespace rdf {
 		//static QVector<cv::Mat> generateSyntheticTextPatches(QFont font, QStringList trainingWords);
 		static GaborFilterBank createGaborKernels(QVector<double> theta = QVector<double>(), QVector<double> lambda = QVector<double>(), bool openCV = true);
 		static cv::Mat computeGaborFeatures(QVector<QSharedPointer<TextPatch>> patches, GaborFilterBank gfb, cv::ml::SampleTypes featureType = cv::ml::ROW_SAMPLE);
-		FeatureCollectionManager generateFCM(cv::Mat features);
+		static FeatureCollectionManager generateFCM(cv::Mat features);
 		static FeatureCollectionManager generateFCM(QVector<QSharedPointer<TextPatch>> patches, cv::Mat features);
 
 		//output
@@ -234,5 +273,4 @@ namespace rdf {
 		bool processPatches();
 		bool loadFeatures();
 	};
-
 }

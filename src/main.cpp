@@ -276,8 +276,8 @@ int main(int argc, char** argv) {
 			if (testFSC) {
 				rdf::FontStyleClassificationTest fct(dc);
 
-				//QString trainDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA";
-				//fct.testClassifierTraining(trainDir);
+				QString trainDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA";
+				fct.testClassifierTraining(trainDir);
 
 				//if (!dirPath.isEmpty())
 				//	fct.processDirectory(dirPath);
@@ -289,8 +289,8 @@ int main(int argc, char** argv) {
 					//test text patch processing
 					//QString testPath = dc.fontDataPath() + "/fontDataTwain/";
 
-					QString testPath = dc.fontDataPath() + "/fontDataFixedSize/";
-					fct.testSyntheticDataSet(testPath, 500);
+					//QString testPath = dc.fontDataPath() + "/fontDataFixedSize/";
+					//fct.testSyntheticDataSet(testPath, 500);
 
 				//	//test different amounts of sample 
 				//	//int maxSampleCount = 250;

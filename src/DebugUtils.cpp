@@ -75,10 +75,6 @@ void DebugConfig::setClassifierPath(const QString & path) {
 }
 
 QString DebugConfig::classifierPath() const {
-	
-	//if (mClassifierPath.isEmpty())
-	//	return Config::instance().global().superPixelClassifierPath;
-
 	return mClassifierPath;
 }
 

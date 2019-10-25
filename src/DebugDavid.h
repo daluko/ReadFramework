@@ -78,14 +78,13 @@ public:
 	void processDirectory(const QString dirPath);
 	void testSyntheticDataSet(QString filePath, int maxSampleCount = -1);
 	void testSyntheticPage(QString filePath, QString trainDataPath);
-	void testClassifierTraining(QString dirPath);
+	void testCatalogueRegions(QString dirPath);
 
 protected:
 	QStringList loadTextSamples(QString filePath);
 	QVector<QSharedPointer<TextLine>> loadTextLines(QString imagePath);
-	QVector< QSharedPointer<TextRegion>> loadWordRegions(QString imagePath);
-	template <typename T>
-	QVector< QSharedPointer<T>> loadRegions(QString imagePath, Region::Type type);
+	
+	QVector< QSharedPointer<TextPatch>> loadPatches(QString folderPath, int patchSize = 75, QSharedPointer<LabelManager> lm = QSharedPointer<LabelManager>::create());
 	QVector<QSharedPointer<TextPatch>> regionsToTextPatches(QVector<QSharedPointer<TextRegion>> wordRegions, LabelManager lm,  cv::Mat img);
 
 	bool readDataSet(QString inputFilePath, FeatureCollectionManager & fcm, QStringList & samples) const;
@@ -97,13 +96,17 @@ protected:
 	
 	bool generateSnytheticTestPage(QString filePath, QString outputFilePath, QVector<QFont> synthPageFonts);
 	bool generateGroundTruthData(QTextDocument& doc, QString filePath);
-	bool generateDataSet(QStringList sample, QVector<QFont> fonts, QString outputFilePath);
+	bool generateDataSet(QStringList sample, QVector<QFont> fonts, QString outputFilePath, bool addLabels = true);
+	bool generateDataSet(QString dataSetPath, int patchSize, QString outputFilePath = QString(), bool addLabels = true);
 
+	QSharedPointer<FontStyleClassifier> trainFontStyleClassifier(QString trainDir, int patchSize, QString classifierFilePath = QString(), bool saveToFile = true);
 	LabelManager generateFontLabelManager(QVector<QFont> fonts);
-	QVector<QSharedPointer<TextPatch>> generateTextPatches(QStringList textSamples, LabelManager labelManager);
-	QVector<QSharedPointer<TextPatch>> generateTextPatches(QVector<QSharedPointer<TextLine>> wordRegions, cv::Mat img, int PatchSize = 50);
-	FeatureCollectionManager generatePatchFeatures(QVector<QSharedPointer<TextPatch>> textPatches);
+	FeatureCollectionManager generatePatchFeatures(QVector<QSharedPointer<TextPatch>> textPatches, bool addLabels = true);
 
+	QVector<QSharedPointer<TextPatch>> generateTextPatches(QStringList textSamples, LabelManager labelManager);
+	QVector<QSharedPointer<TextPatch>> generateTextPatches(QVector<QSharedPointer<TextLine>> wordRegions, cv::Mat img, 
+		QSharedPointer<LabelManager> manager = QSharedPointer<LabelManager>::create(), int PatchSize = 50);
+	
 	QVector<QFont> generateFontStyles() const;
 	QVector<QFont> generateFonts(int fontCount = 4, QStringList fonts = QStringList(), QVector<QFont> fontStyles = QVector<QFont>()) const;
 
@@ -141,19 +144,6 @@ protected:
 	void mergeLineRegions(QVector<QSharedPointer<TextLine>>& textLines, Rect mergRect = Rect());
 	QSharedPointer<TextRegion> mergeLinesToBlock(QVector<QSharedPointer<TextLine>> textLines, Rect mergRect);
 	Polygon computeTextBlockPolygon(QVector<QSharedPointer<TextLine>> textLines);
-};
-
-class DebugDavidUtils {
-
-public:
-	//static DebugDavidUtils& instance();
-	template <typename T>
-	static QVector< QSharedPointer<T>> loadRegions(QString imagePath, Region::Type type);
-
-private:
-	//DebugDavidUtils();
-	//DebugDavidUtils(const DebugDavidUtils&);
-
 };
 
 }

@@ -116,7 +116,7 @@ bool FontStyleTrainer::compute() {
 		//mInfo << "Training SVM model with" << mFeatureManager.numFeatures() << "features, this might take a while...";
 		//model->train(mFeatureManager.toCvTrainData(-1, false));
 		//mModel = model;
-		qCritical() << "SVM classification mode not implemented";
+		qCritical() << "Failed to train classifier. SVM classification mode not implemented";
 		return false;
 	}
 	else{
