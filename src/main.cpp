@@ -277,7 +277,7 @@ int main(int argc, char** argv) {
 				rdf::FontStyleClassificationTest fct(dc);
 
 				QString trainDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA";
-				fct.testClassifierTraining(trainDir);
+				fct.testCatalogueRegions(trainDir);
 
 				//if (!dirPath.isEmpty())
 				//	fct.processDirectory(dirPath);
