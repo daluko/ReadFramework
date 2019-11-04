@@ -32,7 +32,6 @@
 
 
 #pragma warning(push, 0)	// no warnings from includes
-#include <QApplication>
 #include <QCoreApplication>
 #include <QCommandLineParser>
 #include <QDebug>
@@ -70,11 +69,7 @@ int main(int argc, char** argv) {
 	QCoreApplication::setApplicationName("READ Framework");
 	rdf::Utils::instance().initFramework();
 
-#ifdef WIN32
-	QApplication app(argc, (char**)argv);		// enable QPainter
-#else
 	QCoreApplication app(argc, (char**)argv);	// enable headless
-#endif
 
 	// CMD parser --------------------------------------------------------------------
 	QCommandLineParser parser;

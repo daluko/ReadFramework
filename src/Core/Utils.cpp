@@ -35,7 +35,6 @@
 #include "Network.h"
 
 #pragma warning(push, 0)	// no warnings from includes
-#include <QApplication>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QPolygon>
