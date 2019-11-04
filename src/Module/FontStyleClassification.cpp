@@ -97,10 +97,10 @@ namespace rdf {
 	}
 
 	bool TextPatch::isEmpty() const {
-		if(!mTextPatch.empty())
-			return false;
-		else
+		if(mTextPatch.empty() || mPatchTexture.empty())
 			return true;
+		else
+			return false;
 	}
 
 	int TextPatch::textureSize() const {
@@ -121,16 +121,16 @@ namespace rdf {
 
 	bool TextPatch::generatePatchTexture() {
 
-		//TODO fix bug with texture repition (texture just repition of first line)
+		//TODO test influence of updated texture generation
 
 		if (mTextPatch.empty()) {
-			qWarning() << "Couldn't create patch texture -> text patch is empty";
+			qWarning() << "Couldn't create patch texture! Text patch is empty";
 			mPatchTexture = cv::Mat();
 			return false;
 		}
 
 		if (mTextureLineHeight > mTextureSize) {
-			qWarning() << "Couldn't create patch texture -> lineHeight > patchSize";
+			qWarning() << "Couldn't create patch texture! texture line height > patch size";
 			mPatchTexture = cv::Mat();
 			return false;
 		}
@@ -138,49 +138,82 @@ namespace rdf {
 		//get text input image and resize + replicate it to fill an image patch of size sz
 		double sf = mTextureLineHeight / (double)mTextPatch.size().height;
 		cv::Mat patchScaled = mTextPatch.clone();
+		if (sf*mTextPatch.size().height < 1 || sf * mTextPatch.size().width < 1) {
+			mPatchTexture = cv::Mat();
+			qWarning() << "Couldn't create patch texture! Scaling text patch results in size < 1 pixel.";
+			return false;
+		}
+			
 		resize(mTextPatch, patchScaled, cv::Size(), sf, sf, cv::INTER_LINEAR); //TODO test different interpolation modes
 
-		if (patchScaled.size().width > mTextureSize) {
+		//reimplementationSTART
+		cv::Mat texture = patchScaled.clone();
+		double lineNum = ceil((double)mTextureSize / (double)mTextureLineHeight);
 
-			cv::Mat firstPatchLine = patchScaled(cv::Range::all(), cv::Range(0, mTextureSize));
-			mPatchTexture = firstPatchLine.clone();
-
-			cv::Mat tmpImg = patchScaled(cv::Range::all(), cv::Range(mTextureSize, patchScaled.size().width));
-			while (tmpImg.size().width > mTextureSize) {
-				cv::Mat patchLine = tmpImg(cv::Range::all(), cv::Range(0, mTextureSize));
-				cv::vconcat(mPatchTexture, patchLine, mPatchTexture);
-				tmpImg = tmpImg(cv::Range::all(), cv::Range(mTextureSize, tmpImg.size().width));
-			}
-
-			if (!tmpImg.empty()) {
-				cv::hconcat(tmpImg, firstPatchLine, tmpImg);
-				tmpImg = tmpImg(cv::Range::all(), cv::Range(0, mTextureSize));
-				cv::vconcat(mPatchTexture, tmpImg, mPatchTexture);
-			}
-
-			if (mPatchTexture.size().height > mTextureSize) {
-				qWarning() << "Could not fit text into text patch. Cropping image according to patch size. Some text information might be lost.";
-			}
-
-			while (mPatchTexture.size().height < mTextureSize) {
-				cv::vconcat(mPatchTexture, mPatchTexture, mPatchTexture);
-			}
-		}
-		else {
-			cv::Mat textPatchLine = patchScaled.clone();
-
-			while (textPatchLine.size().width < mTextureSize) {
-				cv::hconcat(textPatchLine, patchScaled, textPatchLine);
-			}
-
-			textPatchLine = textPatchLine(cv::Range::all(), cv::Range(0, mTextureSize));
-			mPatchTexture = textPatchLine.clone();
-			while (mPatchTexture.size().height < mTextureSize) {
-				cv::vconcat(mPatchTexture, textPatchLine, mPatchTexture);
-			}
+		while (texture.size().width < mTextureSize*lineNum) {
+			cv::hconcat(texture, patchScaled, texture);
 		}
 
-		mPatchTexture = mPatchTexture(cv::Range(0, mTextureSize), cv::Range(0, mTextureSize));
+		int i = 0;
+		cv::Mat mPatchTexture_ = cv::Mat();
+		while (i < lineNum) {
+			int start = i* mTextureSize;
+			int end = (i+1) * mTextureSize;
+			cv::Mat textureLine = texture(cv::Range::all(), cv::Range(start, end));
+			
+			if (mPatchTexture_.empty())
+				mPatchTexture_ = textureLine.clone();
+			else
+				cv::vconcat(mPatchTexture_, textureLine, mPatchTexture_);
+			i++;
+		}
+		
+		mPatchTexture_ = mPatchTexture_(cv::Range(0, mTextureSize), cv::Range(0, mTextureSize));
+		mPatchTexture = mPatchTexture_.clone();
+
+		//reimplementationEND
+
+		//if (patchScaled.size().width > mTextureSize) {
+
+		//	cv::Mat firstPatchLine = patchScaled(cv::Range::all(), cv::Range(0, mTextureSize));
+		//	mPatchTexture = firstPatchLine.clone();
+
+		//	cv::Mat tmpImg = patchScaled(cv::Range::all(), cv::Range(mTextureSize, patchScaled.size().width));
+		//	while (tmpImg.size().width > mTextureSize) {
+		//		cv::Mat patchLine = tmpImg(cv::Range::all(), cv::Range(0, mTextureSize));
+		//		cv::vconcat(mPatchTexture, patchLine, mPatchTexture);
+		//		tmpImg = tmpImg(cv::Range::all(), cv::Range(mTextureSize, tmpImg.size().width));
+		//	}
+
+		//	if (!tmpImg.empty()) {
+		//		cv::hconcat(tmpImg, firstPatchLine, tmpImg);
+		//		tmpImg = tmpImg(cv::Range::all(), cv::Range(0, mTextureSize));
+		//		cv::vconcat(mPatchTexture, tmpImg, mPatchTexture);
+		//	}
+
+		//	if (mPatchTexture.size().height > mTextureSize) {
+		//		qWarning() << "Could not fit text into text patch. Cropping image according to patch size. Some text information might be lost.";
+		//	}
+
+		//	while (mPatchTexture.size().height < mTextureSize) {
+		//		cv::vconcat(mPatchTexture, mPatchTexture, mPatchTexture);
+		//	}
+		//}
+		//else {
+		//	cv::Mat textPatchLine = patchScaled.clone();
+
+		//	while (textPatchLine.size().width < mTextureSize) {
+		//		cv::hconcat(textPatchLine, patchScaled, textPatchLine);
+		//	}
+
+		//	textPatchLine = textPatchLine(cv::Range::all(), cv::Range(0, mTextureSize));
+		//	mPatchTexture = textPatchLine.clone();
+		//	while (mPatchTexture.size().height < mTextureSize) {
+		//		cv::vconcat(mPatchTexture, textPatchLine, mPatchTexture);
+		//	}
+		//}
+
+		//mPatchTexture = mPatchTexture(cv::Range(0, mTextureSize), cv::Range(0, mTextureSize));
 
 		return true;
 	}
@@ -518,8 +551,8 @@ namespace rdf {
 			qWarning() << "Failed to compute patch size estimate. Directory does not exist: " << dataSetDir;
 			return patchSize;
 		}
-
-		qInfo() << "Loading patches from directory: " << dataSetDir;
+		
+		qInfo() << "Computing patch size estimate for files in directory: " << dataSetDir;
 
 		QStringList filters;
 		filters << "*.tif" << "*.jpg";

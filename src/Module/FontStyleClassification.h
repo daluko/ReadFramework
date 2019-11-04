@@ -159,7 +159,7 @@ namespace rdf {
 			bool xml_found = parser.read(xmlPath);
 
 			if (!xml_found) {
-				qInfo() << xmlPath << "NOT found...";
+				qWarning() << "Did not find XML file: " << xmlPath;
 				return QVector<QSharedPointer<T>>();
 			}
 
@@ -169,19 +169,7 @@ namespace rdf {
 			return regions;
 		}
 
-		//bool isEmpty() const;
-		//bool isTrained() const;
-
-		//cv::Ptr<cv::ml::StatModel> model() const;
-		//LabelManager manager() const;
-		//QVector<LabelInfo> classify(cv::Mat testFeat);
-
 	private:
-		//FeatureCollectionManager mFcm;
-
-		//bool checkInput() const;
-
-		//static cv::Ptr<cv::ml::StatModel> readStatModel(QJsonObject & jo, ClassifierMode mode);
 	};
 
 	class DllCoreExport FontStyleClassificationConfig : public ModuleConfig {

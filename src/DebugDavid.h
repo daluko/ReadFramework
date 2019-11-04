@@ -41,6 +41,7 @@
 #pragma warning(push, 0)	// no warnings from includes
 // Qt Includes
 #include <QTextDocument>
+#include <QFileInfo>
 #pragma warning(pop)
 
 // Qt/CV defines
@@ -81,10 +82,13 @@ public:
 	void testCatalogueRegions(QString dirPath);
 
 protected:
+	QFileInfoList getImageList(QString dataDir);
+
 	QStringList loadTextSamples(QString filePath);
 	QVector<QSharedPointer<TextLine>> loadTextLines(QString imagePath);
 	
-	QVector< QSharedPointer<TextPatch>> loadPatches(QString folderPath, int patchSize = 75, QSharedPointer<LabelManager> lm = QSharedPointer<LabelManager>::create());
+	QVector< QSharedPointer<TextPatch>> generateDirTextPatches(QString folderPath, int patchSize = 75, QSharedPointer<LabelManager> lm = QSharedPointer<LabelManager>::create());
+	QVector< QSharedPointer<TextPatch>> generateTextPatches(QString imagePath, int patchSize = 75, QSharedPointer<LabelManager> lm = QSharedPointer<LabelManager>::create());
 	QVector<QSharedPointer<TextPatch>> regionsToTextPatches(QVector<QSharedPointer<TextRegion>> wordRegions, LabelManager lm,  cv::Mat img);
 
 	bool readDataSet(QString inputFilePath, FeatureCollectionManager & fcm, QStringList & samples) const;

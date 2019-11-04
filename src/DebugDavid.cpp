@@ -46,7 +46,6 @@
 #pragma warning(push, 0)	// no warnings from includes
 #include <QImage>
 #include <QDir>
-#include <QFileInfo>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QFontDataBase>
@@ -544,8 +543,8 @@ void FontStyleClassificationTest::processDirectory(const QString dirPath){
 void FontStyleClassificationTest::testSyntheticDataSet(QString fontDataDir, int maxSampleCount){
 
 	//TODO consider using duplicate words for training, should be avoided for test
-	//TODO store test and train data set (+ text patches) in one file only
-	//TODO create text image synthesizer class encapsulating functions for creating snythetic data
+	//TODO store data sets (+ text patches) in a single file only
+	//TODO encapsulate functions for creating snythetic data in font data generation class
 	//TODO refactoring
 
 	Timer dt;
@@ -562,7 +561,6 @@ void FontStyleClassificationTest::testSyntheticDataSet(QString fontDataDir, int 
 	trainDataSetPath = QFileInfo(fontDataDir, "FontStyleDataSet_train.txt").absoluteFilePath();
 	testDataSetPath = QFileInfo(fontDataDir, "FontStyleDataSet_test.txt").absoluteFilePath();
 	classifierPath = QFileInfo(fontDataDir, "FontStyleClassifier.txt").absoluteFilePath();
-	outputDir = QFileInfo(classifierPath).absolutePath();
 
 	if (maxSampleCount != -1) {
 		QString classifierDir = QFileInfo(fontDataDir + QDir::separator() + QString::number(maxSampleCount) + QDir::separator()).absoluteFilePath();
@@ -573,9 +571,12 @@ void FontStyleClassificationTest::testSyntheticDataSet(QString fontDataDir, int 
 		classifierPath = QFileInfo(classifierDir, "FontStyleClassifier.txt").absoluteFilePath();
 	}
 	
+	outputDir = QFileInfo(classifierPath).absolutePath();
+
 	//fonts used for test
 	QVector<QFont> fonts = generateFonts(4, {"Georgia"});
-	//QVector<QFont> styles = generateFontStyles();
+	//QVector<QFont> fonts = generateFonts(4, {"Times New Roman"});
+	//QVector<QFont> fonts = generateFonts();
 	//QVector<QFont> fonts = generateFonts(4, { "Arial" , "Franklin Gothic Medium" , "Times New Roman" , "Georgia" }, styles.mid(0,1));
 	
 	qDebug() << "trainDataSetPath" << trainDataSetPath;
@@ -599,8 +600,6 @@ void FontStyleClassificationTest::testSyntheticDataSet(QString fontDataDir, int 
 
 	if (!readDataSet(trainDataSetPath, fcm_train, samples_train) || !readDataSet(testDataSetPath, fcm_test, samples_test))
 		return;
-
-	qDebug() << "Number of training samples reduced to: " << samples_train.size();
 
 	//reduce training data set size (for evaluation purpose)
 	if (maxSampleCount > 0 && samples_train.size() > maxSampleCount) {
@@ -778,10 +777,10 @@ void FontStyleClassificationTest::testSyntheticPage(QString pageDataPath, QStrin
 	//compute evaluation results based on GT regions
 	evalSyntheticDataResults(gtPatches, lm, outputDir);
 
-	////debug/visualize results
+	//debug/visualize results
 	//cv::Mat predResults_gtPtaches = fsc.draw(synthPageCv, gtPatches, FontStyleClassification::draw_patch_results);
-	//cv::Mat trueResults_gtPtaches = fsc.draw(synthPageCv, gtPatches, FontStyleClassification::draw_comparison);
-	//cv::Mat compResults_gtPtaches = fsc.draw(synthPageCv, gtPatches, FontStyleClassification::draw_gt);
+	//cv::Mat compResults_gtPtaches = fsc.draw(synthPageCv, gtPatches, FontStyleClassification::draw_comparison);
+	//cv::Mat gtPtaches = fsc.draw(synthPageCv, gtPatches, FontStyleClassification::draw_gt);
 	//cv::Mat predResults = fsc.draw(synthPageCv);
 }
 
@@ -794,6 +793,7 @@ void FontStyleClassificationTest::testCatalogueRegions(QString dirPath){
 	QString classifierPath = QFileInfo(testDir, "FontStyleClassifier.txt").absoluteFilePath();
 
 	//find estimate for patchSize parameter for adaptive patch generation
+	//TODO save patch size estimate together with classifier and load it from file
 	int pse = FontDataGenerator::computePatchSizeEstimate(trainDir);
 
 	if (pse == -1) {
@@ -819,25 +819,63 @@ void FontStyleClassificationTest::testCatalogueRegions(QString dirPath){
 
 	//TODO add possibility to extract patches from text line regions (or word regions)
 
-	//load text patches from image files
-	auto textPatches_test = loadPatches(testDir, pse, QSharedPointer<LabelManager>::create(lm));
+	//process GT regions of input images
+	QFileInfoList fileInfoList = getImageList(testDir);
+	QVector<QSharedPointer<TextPatch>> textPatches_result = QVector<QSharedPointer<TextPatch>>();
 
-	if (textPatches_test.isEmpty()){
-		qCritical() << "Failed to load test text patches from directory: " << testDir;
-		return;
+	for (auto f : fileInfoList) {
+		
+		QString imagePath = f.absoluteFilePath();
+		auto imagePatches = generateTextPatches(imagePath, pse, QSharedPointer<LabelManager>::create(lm));
+
+		if (imagePatches.isEmpty()) {
+			qWarning() << "No text patches generated! Skipping image.";
+			continue;
+		}
+
+		if (imagePatches.isEmpty()){
+			qWarning() << "Failed to generate text patches from image: " << imagePath;
+			continue;
+		}
+
+		//compute font style classification results
+		FontStyleClassification fsc = FontStyleClassification(imagePatches);
+		fsc.setClassifier(fsClassifier);
+
+		if (!fsc.compute()) {
+			qCritical() << "Failed to compute font style classification results";
+			return;
+		}
+
+		//get evaluation results
+		auto imagePatchesResults = fsc.textPatches();
+		textPatches_result << imagePatchesResults;
+
+		//draw debug image
+		//QImage qImg(imagePath);
+		//cv::Mat imgCv = Image::qImage2Mat(qImg);
+		//cv::Mat predResults_gtPtaches = fsc.draw(imgCv, imagePatchesResults, FontStyleClassification::draw_patch_results);
+		//cv::Mat compResults_gtPtaches = fsc.draw(imgCv, imagePatchesResults, FontStyleClassification::draw_comparison);
+		//cv::Mat trueResults_gtPtaches = fsc.draw(imgCv, imagePatchesResults, FontStyleClassification::draw_gt);
+		//
+		//QString att = "_result_";			
+		//att += QDateTime::currentDateTime().toString("yyyy-MM-dd HH-mm");
+		//QString imgPath = Utils::createFilePath(imagePath, att, "png");
+		//QImage qDebugImg = Image::mat2QImage(predResults_gtPtaches);
+		//qDebugImg.save(imgPath, 0, 1);
+
+		//att = "_comp_";
+		//att += QDateTime::currentDateTime().toString("yyyy-MM-dd HH-mm");
+		//imgPath = Utils::createFilePath(imagePath, att, "png");
+		//qDebugImg = Image::mat2QImage(compResults_gtPtaches);
+		//qDebugImg.save(imgPath, 0, 1);
+
+		//att = "_gt_";
+		//att += QDateTime::currentDateTime().toString("yyyy-MM-dd HH-mm");
+		//imgPath = Utils::createFilePath(imagePath, att, "png");
+		//qDebugImg = Image::mat2QImage(trueResults_gtPtaches);
+		//qDebugImg.save(imgPath, 0, 1);
 	}
-
-	//compute font style classification results
-	FontStyleClassification fsc = FontStyleClassification(textPatches_test);
-	fsc.setClassifier(fsClassifier);
-
-	if (!fsc.compute()) {
-		qCritical() << "Failed to compute font style classification results";
-		return;
-	}
-
-	//get evaluation results
-	auto textPatches_result = fsc.textPatches();
 	
 	//debug output
 	//int i = 0;
@@ -888,7 +926,7 @@ bool FontStyleClassificationTest::generateDataSet(QString dataSetPath, int patch
 	Timer dt;
 
 	//generate train data set from image files
-	QVector<QSharedPointer<TextPatch>> textPatches = loadPatches(dataSetPath, patchSize);
+	QVector<QSharedPointer<TextPatch>> textPatches = generateDirTextPatches(dataSetPath, patchSize);
 
 	if (textPatches.isEmpty()) {
 		qCritical() << "Failed to load text patches from directory: " << dataSetPath;
@@ -1041,19 +1079,9 @@ QVector<QSharedPointer<TextLine>> FontStyleClassificationTest::loadTextLines(QSt
 	return textLineRegions;
 }
 
- QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::loadPatches(QString dirPath, int patchSize, QSharedPointer<LabelManager> lm){
+ QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateDirTextPatches(QString dirPath, int patchSize, QSharedPointer<LabelManager> lm){
 
-	 QDir dir(dirPath);
-	 if (!dir.exists()) {
-		 qWarning() << "Failed to load text patches. Directory does not exist: " << dirPath;
-		 return QVector<QSharedPointer<TextPatch>>();
-	 }
-
-	 qInfo() << "Loading patches from directory: " << dirPath;
-
-	 QStringList filters;
-	 filters << "*.tif" << "*.jpg";
-	 QFileInfoList fileInfoList = dir.entryInfoList(filters, QDir::Files | QDir::NoDotAndDotDot);
+	 QFileInfoList fileInfoList = getImageList(dirPath);
 
 	 QVector<QSharedPointer<TextPatch>> textPatches = QVector<QSharedPointer<TextPatch>>();
 
@@ -1062,36 +1090,47 @@ QVector<QSharedPointer<TextLine>> FontStyleClassificationTest::loadTextLines(QSt
 	 for (auto f : fileInfoList) {
 
 		 QString imagePath = f.absoluteFilePath();
-		 QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(imagePath);
+		 auto imagePatches = generateTextPatches(imagePath, patchSize, lm);
 
-		 if (!QFileInfo(xmlPath).exists())
-			 continue;
-
-		 QVector<QSharedPointer<TextLine>> wordRegions = FontDataGenerator::loadRegions<TextLine>(imagePath, Region::type_word);
-
-		 if (wordRegions.isEmpty()) {
-			 qWarning() << "No word regions found, skipping image";
+		 if (imagePatches.isEmpty()) {
+			 qWarning() << "No text patches generated! Skipping image.";
 			 continue;
 		 }
+		 i++;
+		 textPatches << imagePatches;
 
-		 wordRegionCount += wordRegions.size();
-
-		 QImage qImg(imagePath);
-		 cv::Mat imgCv = Image::qImage2Mat(qImg);
-
-		 if (imgCv.empty()) {
-			 qWarning() << "Could NOT load image: " << mConfig.imagePath();
-			 continue;
-		 }
-
-		 ++i;
-		 qDebug() << "loaded word regions from image #" << QString::number(i);
-
-		 textPatches << generateTextPatches(wordRegions, imgCv, lm, patchSize);	//used for word regions from catalogue images
-		 //TODO unify and simplify the functions generateTextPatches() and regionsToTextPatches()
+		 //qDebug() << "loaded "<< imagePatches.size() << " text patches from image #" << i;
 	 }
 
-	 qDebug() << "Loaded " << textPatches.size() << "text patches from " << i << " images.";
+	 qDebug() << "Loaded " << textPatches.size() << " text patches from " << i << " images overall." ;
+
+	 return textPatches;
+ }
+
+ QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateTextPatches(QString imagePath, int patchSize, QSharedPointer<LabelManager> lm){
+
+	 QVector<QSharedPointer<TextPatch>> textPatches = QVector<QSharedPointer<TextPatch>>();
+
+	 QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(imagePath);
+
+	 QImage qImg(imagePath);
+
+	 if (qImg.isNull() || !QFileInfo(xmlPath).exists()) {
+		 qWarning() << "Could NOT load image or xml for file: " << imagePath;
+		 return textPatches;
+	 }
+
+	 cv::Mat imgCv = Image::qImage2Mat(qImg);
+
+	 QVector<QSharedPointer<TextLine>> wordRegions = FontDataGenerator::loadRegions<TextLine>(imagePath, Region::type_word);
+
+	 if (wordRegions.isEmpty()) {
+		 qWarning() << "No word regions found, could not generate text patches for image: " << imagePath;
+		 return textPatches;
+	 }
+
+	 //TODO unify and simplify the functions generateTextPatches() and regionsToTextPatches()
+	 textPatches << generateTextPatches(wordRegions, imgCv, lm, patchSize);	//used for word regions from catalogue images
 
 	 return textPatches;
  }
@@ -1122,7 +1161,23 @@ QVector<QSharedPointer<TextLine>> FontStyleClassificationTest::loadTextLines(QSt
 	return textPatches;
 }
 
-QStringList FontStyleClassificationTest::loadTextSamples(QString filePath) {
+ QFileInfoList FontStyleClassificationTest::getImageList(QString dataDir){
+	 QDir dir(dataDir);
+	 if (!dir.exists()) {
+		 qWarning() << "Could not find images files. Directory does not exist: " << dataDir;
+		 return QFileInfoList();
+	 }
+
+	 //qInfo() << "Getting list of *.tif and *.jpg files in directory: " << dataDir;
+
+	 QStringList filters;
+	 filters << "*.tif" << "*.jpg";
+	 QFileInfoList fileInfoList = dir.entryInfoList(filters, QDir::Files | QDir::NoDotAndDotDot);
+
+	 return fileInfoList;
+ }
+
+ QStringList FontStyleClassificationTest::loadTextSamples(QString filePath) {
 
 	QFile textFile(filePath);
 	if (!textFile.open(QIODevice::ReadOnly)) {
@@ -1192,6 +1247,10 @@ QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateTextPatc
 
 	QVector<QSharedPointer<TextPatch>> textPatches = QVector<QSharedPointer<TextPatch>>();
 
+	//TODO enable generation of patches without labels
+	//TODO merge this function with adaptPatchHeight() in FSC class
+	//TODO improve reading in of labels (allow labels containing spaces)
+
 	if (wordRegions.isEmpty()) {
 		qWarning() << "No regions to convert here.";
 		return textPatches;
@@ -1221,6 +1280,9 @@ QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateTextPatc
 			trLabel = LabelInfo(lm->size(), trLabelName);
 			lm->add(trLabel);
 		}
+
+		//TODO make sure rect does not exceed image boundaries
+		//TODO refine reduction and enlargement of regions
 
 		//extract texture from image
 		Rect trRect = Rect::fromPoints(wr->polygon().toPoints());
@@ -1265,6 +1327,11 @@ QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateTextPatc
 		}
 
 		QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(patchTexture);
+		if (tp->isEmpty()) {
+			qWarning() << "Failed to create valid text patch! Skipping region.";
+			continue;
+		}
+			
 		tp->label()->setTrueLabel(trLabel);
 
 		tp->setPolygon(wr->polygon());
@@ -1301,6 +1368,8 @@ FeatureCollectionManager FontStyleClassificationTest::generatePatchFeatures(QVec
 }
 
 QSharedPointer<FontStyleClassifier> FontStyleClassificationTest::trainFontStyleClassifier(QString trainDir, int patchSize, QString classifierFilePath, bool saveToFile){
+
+	//TODO make sure GT line/word regions are horizontal -> perform skew correction if necessary
 
 	//load or generate train data set from file
 	QString trainDataSetPath = QFileInfo(trainDir, "FontStyleDataSet_train.txt").absoluteFilePath();

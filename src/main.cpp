@@ -276,8 +276,10 @@ int main(int argc, char** argv) {
 			if (testFSC) {
 				rdf::FontStyleClassificationTest fct(dc);
 
-				QString trainDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA";
-				fct.testCatalogueRegions(trainDir);
+				QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA";
+				//QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Paris_SdA";
+				//QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1905_Venice_EI";
+				fct.testCatalogueRegions(dataDir);
 
 				//if (!dirPath.isEmpty())
 				//	fct.processDirectory(dirPath);
@@ -288,16 +290,19 @@ int main(int argc, char** argv) {
 
 					//test text patch processing
 					//QString testPath = dc.fontDataPath() + "/fontDataTwain/";
+					//QString testPath = dc.fontDataPath() + "/sampleNumberTest/";
+					
 
 					//QString testPath = dc.fontDataPath() + "/fontDataFixedSize/";
 					//fct.testSyntheticDataSet(testPath, 500);
 
-				//	//test different amounts of sample 
-				//	//int maxSampleCount = 250;
-				//	//while(maxSampleCount <= 3500) {
-				//	//	fct.testSyntheticDataSet(dc.fontDataPath(), maxSampleCount);
-				//	//	maxSampleCount = maxSampleCount + 250;
-				//	//}
+					//test different amounts of sample 
+					//TODO write results of multiple runs in a single file for easier evaluation
+					//int maxSampleCount = 25;
+					//while(maxSampleCount <= 3600) {
+					//	fct.testSyntheticDataSet(testPath, maxSampleCount);
+					//	maxSampleCount = maxSampleCount + 25;
+					//}
 
 				//	//test synthetic page processing
 				//	QString pageDataPath = dc.fontDataPath() + "syntheticPage/pageData.txt";
