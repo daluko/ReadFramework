@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.0)
 ######################## begin of project
 project(ReadFramework)
 
-set(RDF_FRAMEWORK_VERSION 0.6)
+set(RDF_FRAMEWORK_VERSION 0.7)
 add_definitions(-DRDF_FRAMEWORK_VERSION="${RDF_FRAMEWORK_VERSION}")
 
 # Codecov
@@ -93,6 +93,10 @@ file(GLOB GC_HEADERS "src/3rdparty/graphcut/*.h")
 # external headers
 file(GLOB LSD_SOURCES "src/3rdparty/lsd/*.cpp")
 file(GLOB LSD_HEADERS "src/3rdparty/lsd/*.h")
+
+# external headers
+file(GLOB WV_SOURCES "src/3rdparty/word2vec/*.cpp")
+file(GLOB WV_HEADERS "src/3rdparty/word2vec/*.h")
 
 # external headers
 file(GLOB MC_SOURCES "src/3rdparty/maxclique/*.cpp")

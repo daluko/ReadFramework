@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #include "PageParser.h"
@@ -52,7 +52,7 @@ PageXmlParser::PageXmlParser() {
 
 }
 
-bool PageXmlParser::read(const QString & xmlPath, bool ignoreLayers) {
+bool PageXmlParser::read(const QString & xmlPath, bool ignoreLayers, bool silent) {
 
 	QByteArray ba;
 	bool ok = true;
@@ -97,7 +97,7 @@ bool PageXmlParser::read(const QString & xmlPath, bool ignoreLayers) {
 		mPage = mPage.create();
 		return false;
 	}
-	else
+	else if (!silent)
 		qInfo() << QFileInfo(xmlPath).fileName() << "loaded - #children:" << mPage->rootRegion()->children().size();
 
 	return ok;
@@ -380,8 +380,8 @@ void PageXmlParser::parseMetadata(QXmlStreamReader & reader, QSharedPointer<Page
 			reader.readNext();
 			page->setCreator(reader.text().toString());
 		}
-		else if (reader.tokenType() == QXmlStreamReader::StartElement)
-			qDebug() << "unknown meta data token:" << tag;
+		//else if (reader.tokenType() == QXmlStreamReader::StartElement)
+		//	qDebug() << "unknown meta data token:" << tag;
 
 	}
 }

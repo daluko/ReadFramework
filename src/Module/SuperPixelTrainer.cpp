@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #include "SuperPixelTrainer.h"
@@ -280,7 +280,8 @@ QImage SuperPixelLabeler::createLabelImage(const Rect & imgRect, bool visualize)
 		}
 	}
 
-	QPainter p(&img);
+	QMap<int, QVector<QSharedPointer<Region> > > mapRegions;
+
 	for (auto region : allRegions) {
 
 		if (!region)
@@ -291,15 +292,31 @@ QImage SuperPixelLabeler::createLabelImage(const Rect & imgRect, bool visualize)
 		if (ll == LabelInfo())
 			continue;
 
-		if (ll.isNull()) { 
+		if (ll.isNull()) {
 			qDebug() << "could not find region: " << RegionManager::instance().typeName(region->type());
 			continue;
 		}
 		
-		QColor labelC = (!visualize) ? ll.color() : ll.visColor();
-		p.setPen(labelC);
-		p.setBrush(labelC);
-		region->polygon().draw(p);
+		mapRegions[ll.zIndex()] << region;
+	}
+
+
+	QPainter p(&img);
+	// this allows for overlaying multiple classes
+	//p.setCompositionMode(QPainter::CompositionMode_Plus);
+
+	for (QVector<QSharedPointer<Region> > cRegions : mapRegions) {
+
+		for (auto region : cRegions) {
+			
+			LabelInfo ll = mManager.find(*region);
+
+			// draw the current region
+			QColor labelC = (!visualize) ? ll.color() : ll.visColor();
+			p.setPen(labelC);
+			p.setBrush(labelC);
+			region->polygon().draw(p);
+		}
 	}
 
 	if (visualize)

@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #include "ScaleFactory.h"
@@ -38,6 +38,7 @@
 #include <QSettings>
 
 #include <opencv2/imgproc.hpp>
+#include <opencv2/imgproc/imgproc_c.h>
 #pragma warning(pop)
 
 namespace rdf {

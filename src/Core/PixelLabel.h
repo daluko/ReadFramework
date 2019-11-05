@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #pragma once
@@ -91,6 +91,7 @@ public:
 	bool contains(const QString& key) const;
 
 	int id() const;
+	int zIndex() const;
 	QString name() const;
 	QColor color() const;
 	QColor visColor() const;
@@ -112,6 +113,7 @@ protected:
 
 	int mId = label_unknown;
 	bool mIsBackground = false;
+	int mZIndex = 0;
 	QString mName = "unknown";
 	QStringList mAlias;
 	QColor mVisColor = ColorManager::darkGray();

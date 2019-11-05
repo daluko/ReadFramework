@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #include "PixelLabel.h"
@@ -81,7 +81,7 @@ bool LabelInfo::contains(const QString& key) const {
 }
 
 QColor LabelInfo::color() const {
-	QColor c(id() << 8);	// << 8 away from alpha (RGBA)
+	QColor c(id() << 8); // away from alpha(RGBA)
 	return c;
 }
 
@@ -108,6 +108,10 @@ LabelInfo LabelInfo::unknownLabel() {
 
 int LabelInfo::id() const {
 	return mId;
+}
+
+int LabelInfo::zIndex() const {
+	return mZIndex;
 }
 
 QString LabelInfo::name() const {
@@ -178,12 +182,14 @@ LabelInfo LabelInfo::fromJson(const QJsonObject & jo) {
 	//"Class": {
 	//	"id": 5,
 	//	"name": "image",
+	//  "z-index": 1,
 	//	"alias": ["ImageRegion", "ChartRegion", "GraphicRegion"],
 	//	"color": "#990066", 
 	//},
 
 	LabelInfo ll;
 	ll.mId = jo.value("id").toInt(label_unknown);
+	ll.mZIndex = jo.value("z-index").toInt(0);
 	ll.mName = jo.value("name").toString();
 	ll.mIsBackground = jo.value("isBackground").toBool(false);
 	ll.mVisColor.setNamedColor(jo.value("color").toString());
@@ -208,6 +214,7 @@ void LabelInfo::toJson(QJsonObject & jo) const {
 
 	QJsonObject joc;
 	joc.insert("id", QJsonValue(mId));
+	joc.insert("z-index", QJsonValue(mZIndex));
 	joc.insert("name", QJsonValue(mName));
 	joc.insert("color", QJsonValue(mVisColor.name()));
 	joc.insert("isBackground", QJsonValue(mIsBackground));

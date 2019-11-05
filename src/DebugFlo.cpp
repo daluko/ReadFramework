@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #include "DebugFlo.h"
@@ -43,17 +43,19 @@
 #include "FormAnalysis.h"
 #include "PageParser.h"
 
+
 #pragma warning(push, 0)	// no warnings from includes
 // Qt Includes
 #include <QDebug>
 #include <QDir>
+#include <QSettings>
 #include <QImage>
 #include <QFileInfo>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
-#include <opencv/highgui.h>
 #include <opencv2/ml.hpp>
 #pragma warning(pop)
+
 
 
 namespace rdf {
@@ -375,6 +377,95 @@ namespace rdf {
 		return true;
 	}
 
+	bool TableProcessing::apply() const {
+		cv::Mat imgForm;
+		rdf::PageXmlParser parser;
+
+		if (!load(imgForm)) {
+			qWarning() << "could not load image for table processing ... ";
+			return false;
+		}
+
+		cv::Mat imgFormG = imgForm;
+
+		if (imgForm.channels() != 1)
+			cv::cvtColor(imgForm, imgFormG, CV_RGB2GRAY);
+		else {
+			cv::cvtColor(imgForm, imgForm, CV_GRAY2RGB);
+		}
+
+		//cv::Mat maskTempl = rdf::Algorithms::estimateMask(imgTemplG);
+
+		rdf::FormFeatures formF(imgFormG);
+		QFileInfo tableFile = QFileInfo(mConfig.imagePath());
+		formF.setFormName(tableFile.fileName());
+		formF.setSize(imgFormG.size());
+
+		if (mConfig.tableTemplate().isEmpty()) {
+			qWarning() << "no table template is set - please specify a template with --t ... ";
+			return false;
+		}
+
+		//TODO check if tableTemplate is correct
+		//QFileInfo templateInfo(mConfig.tableTemplate());
+		formF.setTemplateName(mConfig.tableTemplate());
+
+		QSharedPointer<rdf::FormFeaturesConfig> tmpConfig(new rdf::FormFeaturesConfig());
+		//(*tmpConfig) = mFormConfig;
+		tmpConfig->setTemplDatabase(mConfig.tableTemplate());
+		tmpConfig->setVariationThrLower(mFormConfig.variationThrLower());
+		tmpConfig->setVariationThrUpper(mFormConfig.variationThrUpper());
+		tmpConfig->setSaveChilds(mFormConfig.saveChilds());
+		formF.setConfig(tmpConfig);
+
+		//rdf::FormFeatures formTemplate;
+		QSharedPointer<rdf::FormFeatures> formTemplate(new rdf::FormFeatures());
+		if (!formF.readTemplate(formTemplate)) {
+			qWarning() << "could not read form template";
+			qInfo() << "please provide a correct table template with --t";
+			return false;
+		}
+
+		qDebug() << "applying template...";
+		if (!formF.applyTemplate()) {
+			qWarning() << "could not apply template " << mConfig.imagePath();
+			qInfo() << "could not apply template";
+			return false;
+		}
+
+		//Save output to xml
+		QString loadXmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.imagePath());
+
+		if (QFileInfo(mConfig.xmlPath()).exists())
+			loadXmlPath = mConfig.xmlPath();
+
+		rdf::PageXmlParser parserOut;
+		bool newXML = parserOut.read(loadXmlPath);
+		auto pe = parserOut.page();
+
+		if (!newXML) {
+			//xml is newly created
+			cv::Size imgSize = imgFormG.size();
+			QSize imgQtSize;
+			imgQtSize.setWidth(imgFormG.cols);
+			imgQtSize.setHeight(imgFormG.rows);
+
+			pe->setImageFileName(tableFile.fileName());
+			pe->setImageSize(imgQtSize);
+			pe->setCreator("CVL");
+			pe->setDateCreated(QDateTime::currentDateTime());
+		}
+
+		QSharedPointer<rdf::TableRegion> t = formF.tableRegion();
+		pe->rootRegion()->addUniqueChild(t);
+		formF.setSeparators(pe->rootRegion());
+
+		//save pageXml
+		parserOut.write(loadXmlPath, pe);
+
+		return true;
+	}
+
 	void TableProcessing::setTableConfig(const rdf::FormFeaturesConfig & tableConfig) 	{
 		mFormConfig = tableConfig;
 	}
@@ -409,5 +500,152 @@ namespace rdf {
 		return true;
 	}
 
+
+	LineProcessing::LineProcessing(const DebugConfig & config) 	{
+		mConfig = config;
+	}
+
+	bool LineProcessing::computeBinaryInput() 	{
+		
+		if (mSrcImg.empty() || mSrcImg.depth() != CV_8U) {
+			qWarning() << "image is empty or illegal image depth: " << mSrcImg.depth();
+			return false;
+		}
+
+		if (!mMask.empty() && mMask.depth() != CV_8U && mMask.channels() != 1) {
+			qWarning() << "illegal image depth or channel for mask: " << mMask.depth();
+			return false;
+		}
+
+		BinarizationSuAdapted binarizeImg(mSrcImg, mMask);
+		binarizeImg.compute();
+		mBwImg = binarizeImg.binaryImage();
+		if (mPreFilter)
+			mBwImg = IP::preFilterArea(mBwImg, preFilterArea);
+
+		return true;
+	}
+
+	bool LineProcessing::lineTrace() 	{
+
+		cv::Mat imgLine;
+		rdf::PageXmlParser parser;
+
+		if (!load(imgLine)) {
+			qWarning() << "could not load image for line processing ... ";
+			return false;
+		}
+
+		cv::Mat imgLineG = imgLine;
+
+		if (imgLine.channels() != 1)
+			cv::cvtColor(imgLine, imgLineG, CV_RGB2GRAY);
+		else {
+			cv::cvtColor(imgLine, imgLine, CV_GRAY2RGB);
+		}
+
+		//calculate lines
+	
+		if (mBwImg.empty()) {
+			//cv::normalize(imgLineG, imgimgLineG 255, 0, cv::NORM_MINMAX);
+			mSrcImg = imgLineG;
+
+			if (!computeBinaryInput()) {
+				qWarning() << "binary image was not set and could not be calculated";
+				return false;
+			}
+
+			qDebug() << "binary image was not set - was calculated";
+		}
+
+		
+		if (mEstimateSkew) {
+			BaseSkewEstimation skewE(imgLineG, mMask);
+			skewE.compute();
+			mPageAngle = skewE.getAngle();
+		}
+		//rdf::Image::save(mBwImg, "C:\\tmp\\test2.png");
+		//compute Lines
+		LineTrace lt(mBwImg, mMask);
+		lt.setAngle(mPageAngle);
+
+		lt.compute();
+		//mBwImg = lt.lineImage();
+		mLines = lt.getLines();
+		//rdf::Image::save(mBwImg, "C:\\tmp\\test3.png");
+		//mHorLines = lt.getHLines();
+		//mVerLines = lt.getVLines();
+
+		//Save output to xml
+		QString loadXmlPath = rdf::PageXmlParser::imagePathToXmlPath(mConfig.imagePath());
+
+
+		//if (QFileInfo(mConfig.xmlPath()).exists())
+		if (!mConfig.xmlPath().isEmpty()) {
+			if (!QFileInfo(mConfig.xmlPath()).exists())
+				qWarning() << "specified xml file doesn't exist - following file is created: " << mConfig.xmlPath();
+			loadXmlPath = mConfig.xmlPath();
+		}
+
+		rdf::PageXmlParser parserOut;
+		bool newXML = parserOut.read(loadXmlPath);
+		auto pe = parserOut.page();
+
+		if (!newXML) {
+			//xml is newly created
+			cv::Size imgSize = imgLineG.size();
+			QSize imgQtSize;
+			imgQtSize.setWidth(imgLineG.cols);
+			imgQtSize.setHeight(imgLineG.rows);
+
+			pe->setImageFileName(mConfig.imagePath());
+			pe->setImageSize(imgQtSize);
+			pe->setCreator("CVL");
+			pe->setDateCreated(QDateTime::currentDateTime());
+		}
+
+		//add Lines
+		for (int i = 0; i < mLines.size(); i++) {
+			QSharedPointer<rdf::SeparatorRegion> pSepR(new rdf::SeparatorRegion());
+			pSepR->setLine(mLines[i].qLine());
+
+			pe->rootRegion()->addUniqueChild(pSepR);
+		}
+
+
+		//save pageXml
+		parserOut.write(loadXmlPath, pe);
+
+		return true;
+
+	}
+
+	bool LineProcessing::load(cv::Mat & img) const 	{
+
+		QImage qImg = Image::load(mConfig.imagePath());
+
+		if (qImg.isNull()) {
+			qWarning() << "could not load image from" << mConfig.imagePath();
+			return false;
+		}
+
+		// convert image
+		img = Image::qImage2Mat(qImg);
+
+		return true;
+	}
+
+	bool LineProcessing::load(rdf::PageXmlParser & parser) const 	{
+		// load XML
+		parser.read(mConfig.xmlPath());
+
+		// fail if the XML was not loaded
+		if (parser.loadStatus() != PageXmlParser::status_ok) {
+			qWarning() << "could not load XML from" << mConfig.xmlPath();
+			return false;
+		}
+
+		return true;
+	}
 
 }

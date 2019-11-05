@@ -24,20 +24,21 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #pragma once
 
 #include "DebugUtils.h"
 #include "FormAnalysis.h"
+#include "BaseModule.h"
 
 #pragma warning(push, 0)	// no warnings from includes
  // Qt Includes
-//#include <QDebug>
+#include <QDebug>
 //#include <QDir>
 //#include <QImage>
 //#include <QFileInfo>
@@ -75,6 +76,7 @@ public:
 	TableProcessing(const DebugConfig& config = DebugConfig());
 
 	bool match() const;
+	bool apply() const;
 	void setTableConfig(const rdf::FormFeaturesConfig& tableConfig);
 
 protected:
@@ -83,6 +85,33 @@ protected:
 
 	bool load(cv::Mat& img) const;
 	bool load(rdf::PageXmlParser& parser) const;
+
+};
+
+class LineProcessing {
+public:
+	LineProcessing(const DebugConfig& config = DebugConfig());
+	bool lineTrace();
+
+
+protected:
+	bool mEstimateSkew = false;
+	bool mPreFilter = true;
+	cv::Mat mSrcImg = cv::Mat();
+	cv::Mat mBwImg = cv::Mat();
+	cv::Mat mMask = cv::Mat();
+	double mPageAngle = 0;
+	int preFilterArea = 10;
+	QVector<rdf::Line> mLines;
+	//QVector<rdf::Line> mHorLines;
+	//QVector<int> mUsedHorLineIdx;
+	//QVector<rdf::Line> mVerLines;
+	//QVector<int> mUsedVerLineIdx;
+	DebugConfig mConfig;
+
+	bool load(cv::Mat& img) const;
+	bool load(rdf::PageXmlParser& parser) const;
+	bool computeBinaryInput();
 
 };
 

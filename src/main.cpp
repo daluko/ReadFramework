@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 
@@ -40,6 +40,7 @@
 #pragma warning(pop)
 
 #include "Utils.h"
+#include "PieData.h"
 #include "Settings.h"
 #include "DebugUtils.h"
 #include "DebugMarkus.h"
@@ -65,7 +66,7 @@ int main(int argc, char** argv) {
 	qInfo().nospace() << "I am using OpenCV " << CV_MAJOR_VERSION << "." << CV_MINOR_VERSION << "." << CV_VERSION_REVISION;
 
 	QCoreApplication::setOrganizationName("TU Wien");
-	QCoreApplication::setOrganizationDomain("http://www.cvl.tuwien.ac.at/cvl");
+	QCoreApplication::setOrganizationDomain("https://cvl.tuwien.ac.at/");
 	QCoreApplication::setApplicationName("READ Framework");
 	rdf::Utils::instance().initFramework();
 
@@ -114,6 +115,10 @@ int main(int argc, char** argv) {
 	// font training data path
 	QCommandLineOption fontDataOpt(QStringList() << "w" << "font data", QObject::tr("Path to directory containing training data for font style classification."), "fontdata");
 	parser.addOption(fontDataOpt);
+
+	// pie db path
+	QCommandLineOption jsonOpt(QStringList() << "json", QObject::tr("Path to JSON file for PIE crawler"), "filepath");
+	parser.addOption(jsonOpt);
 
 	parser.process(*QCoreApplication::instance());
 	// CMD parser --------------------------------------------------------------------
@@ -176,8 +181,11 @@ int main(int argc, char** argv) {
 		dc.setFontDataPath(parser.value(fontDataOpt));
 
 	// apply debug settings - convenience if you don't want to always change the cmd args
-	applyDebugSettings(dc);
+	//applyDebugSettings(dc);
 
+	//rdf::XmlTest xmlTest(dc);
+	//xmlTest.parseXml();
+	
 	if (!dc.imagePath().isEmpty()) {
 
 		// flos section
@@ -188,30 +196,51 @@ int main(int argc, char** argv) {
 			test.binarizeTest();
 		}
 		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "table") {
-			qDebug() << "starting table matching ... (not yet)";
+			qDebug() << "starting table matching ...";
 			//TODO table
 			rdf::TableProcessing tableproc(dc);
 			tableproc.setTableConfig(fc);
 			tableproc.match();
 		}
+		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "atable") {
+			qDebug() << "applying table ...";
+			//TODO table
+			rdf::TableProcessing tableproc(dc);
+			tableproc.setTableConfig(fc);
+			tableproc.apply();
+		}
+		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "pie") {
 
+			QString jsonPath;
+			if (parser.isSet(jsonOpt))
+				jsonPath = parser.value(jsonOpt);
+			
+			rdf::PieData testDB(dc.imagePath(), jsonPath);
+			testDB.saveJsonDatabase();
+		}
+		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "separators") {
+			//TODO just calculate separators (visual lines) and write to xml
+			qDebug() << "starting line extraction ...";
+			rdf::LineProcessing lineproc(dc);
+			lineproc.lineTrace();
+		}
 		// stefans section
-		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "stefan") {
-			qDebug() << "loading stefan's debug code";
+		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "wi") {
+			qDebug() << "starting writer retrieval ...";
 
 			rdf::TestWriterRetrieval twr = rdf::TestWriterRetrieval();
 			twr.run();
 		}
 		// layout section
 		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "layout") {
-			qDebug() << "Starting layout analysis...";
+			qDebug() << "Starting layout analysis ...";
 
 			rdf::LayoutTest lt(dc);
 			lt.layoutToXml();
 		}
 		// thomas
-		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "thomas") {
-			qDebug() << "thomas";
+		else if (parser.isSet(modeOpt) && parser.value(modeOpt) == "apa") {
+			qDebug() << "Starting newspaper analysis ...";
 			rdf::ThomasTest test(dc);
 			test.test();
 		}
@@ -316,6 +345,8 @@ int main(int argc, char** argv) {
 		}
 		// my section
 		else {
+
+			qDebug() << "hey markus - your section is empty...";
 			//rdf::XmlTest test(dc);
 			//test.parseXml();
 			//test.linesToXml();
@@ -323,8 +354,8 @@ int main(int argc, char** argv) {
 			//rdf::LayoutTest lt(dc);
 			//lt.testComponents();
 
-			rdf::DeepMergeTest dm(dc);
-			dm.run();
+			//rdf::DeepMergeTest dm(dc);
+			//dm.run();
 		}
 
 	}

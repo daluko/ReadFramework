@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #include "Network.h"
@@ -64,7 +64,7 @@ QByteArray net::download(const QString & url, bool* ok) {
 	QNetworkAccessManager manager;
 
 	// do we need to support global proxies?
-	QNetworkProxyQuery npq(QUrl("http://www.nomacs.org"));
+	QNetworkProxyQuery npq(QUrl("https://google.com"));
 	QList<QNetworkProxy> listOfProxies = QNetworkProxyFactory::systemProxyForQuery(npq);
 
 	if (!listOfProxies.empty() && listOfProxies[0].hostName() != "") {

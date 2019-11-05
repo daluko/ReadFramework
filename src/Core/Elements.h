@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #pragma once
@@ -78,6 +78,7 @@ public:
 		type_graphic,
 		type_chart,
 		type_noise,
+		type_border,
 
 		type_end
 	};
@@ -247,8 +248,8 @@ protected:
 	int mRow = -1;
 	int mCol = -1;
 
-	int mRowSpan = -1;
-	int mColSpan = -1;
+	int mRowSpan = 1;  //intitialize with 1 if missing in the xml
+	int mColSpan = 1;  //intitialize with 1 if missing in the xml
 
 	bool mLeftBorderVisible = false;
 	bool mRightBorderVisible = false;

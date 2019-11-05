@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #include "Utils.h"
@@ -347,7 +347,7 @@ int64 Utils::writeJson(const QString & filePath, const QJsonObject & jo) {
 void Utils::initDefaultFramework() {
 
 	QCoreApplication::setOrganizationName("TU Wien");
-	QCoreApplication::setOrganizationDomain("http://www.cvl.tuwien.ac.at/cvl");
+	QCoreApplication::setOrganizationDomain("https://cvl.tuwien.ac.at");
 	QCoreApplication::setApplicationName("READ Framework");
 
 	rdf::Utils::instance().initFramework();

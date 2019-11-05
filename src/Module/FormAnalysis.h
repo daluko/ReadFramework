@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #pragma once
@@ -37,6 +37,10 @@
 #include "Elements.h"
 #pragma warning(push, 0)	// no warnings from includes
 #include <QObject>
+//#include <QJsonObject>
+//#include <QJsonArray>
+//#include <QDirIterator>
+//#include <QJsonDocument>
 
 #include <opencv2/core.hpp>
 #pragma warning(pop)
@@ -263,7 +267,7 @@ namespace rdf {
 		//cv::Mat getMatchedLineImg(const cv::Mat& srcImg, const Vector2D& offset = Vector2D(0, 0)) const;
 		//QVector<rdf::Line> horLinesMatched() const;
 		//QVector<rdf::Line> verLinesMatched() const;
-		bool readTemplate(QSharedPointer<rdf::FormFeatures> templateForm);
+		bool readTemplate(QSharedPointer<rdf::FormFeatures> templateForm, bool calcScaling = true);
 		bool estimateRoughAlignment(bool useBinaryImg = false);
 		cv::Mat drawAlignment(cv::Mat img = cv::Mat());
 		cv::Mat drawMatchedForm(cv::Mat img = cv::Mat(), float t = 10.0);
@@ -289,6 +293,7 @@ namespace rdf {
 
 		
 		bool matchTemplate();
+		bool applyTemplate();
 		//QVector<QSharedPointer<rdf::TableCellRaw>> findLineCandidatesForCells(QVector<QSharedPointer<rdf::TableCellRaw>> cellR);
 		//rdf::Line findLine(rdf::Line l, double distThreshold, bool &found, bool horizontal = true);
 		rdf::LineCandidates findLineCandidates(rdf::Line l, double distThreshold, bool horizontal = true);
@@ -397,5 +402,7 @@ namespace rdf {
 		//void load(const QSettings& settings) override;
 		//void save(QSettings& settings) const override;
 	};
+
+
 
 }

@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #include "FormAnalysis.h"
@@ -381,7 +381,7 @@ namespace rdf {
 	//}
 
 
-bool FormFeatures::readTemplate(QSharedPointer<rdf::FormFeatures> templateForm) {
+bool FormFeatures::readTemplate(QSharedPointer<rdf::FormFeatures> templateForm, bool calcScaling) {
 	
 	if (mTemplateName.isEmpty()) {
 		return false;
@@ -415,6 +415,11 @@ bool FormFeatures::readTemplate(QSharedPointer<rdf::FormFeatures> templateForm) 
 	}
 	if (scaleFactor >= 3) {
 		qWarning() << "ScaleFactor is <= 3... set to 1.0";
+		scaleFactor = 1.0;
+	}
+
+	//if no Scaling -> reset Scaling factor
+	if (!calcScaling) {
 		scaleFactor = 1.0;
 	}
 
@@ -669,11 +674,11 @@ cv::Mat FormFeatures::drawMatchedForm(cv::Mat img, float t) {
 
 	if (!img.empty()) {
 		cv::Mat tmp = img.clone();
-		rdf::LineTrace::generateLineImage(hLines, vLines, tmp, cv::Scalar(255,255,255), cv::Scalar(255,255,255));
+		rdf::LineTrace::generateLineImage(hLines, vLines, tmp, cv::Scalar(128,128,128), cv::Scalar(128, 128, 128));
 		return tmp;
 	} else {
 		cv::Mat tmp = mSrcImg.clone();
-		rdf::LineTrace::generateLineImage(hLines, vLines, tmp, cv::Scalar(255,255,255), cv::Scalar(255,255,255));
+		rdf::LineTrace::generateLineImage(hLines, vLines, tmp, cv::Scalar(128, 128, 128), cv::Scalar(128, 128, 128));
 		return tmp;
 	}
 
@@ -1213,8 +1218,15 @@ void FormFeatures::createReducedAssociationGraphNodes(QVector<QSharedPointer<rdf
 	}
 
 	cv::Mat cellDiffHor = table.clone();
-	cv::Mat tmpM = cellDiffHor(cv::Range(0, tableRows-1), cv::Range::all()) - cellDiffHor(cv::Range(1, tableRows), cv::Range::all());
-	tmpM.copyTo(cellDiffHor(cv::Range(0, tableRows - 1), cv::Range::all()));
+	cv::Mat tmpM;
+	//added - if only one row (or column exist) the difference function crashes
+	//logic not tested
+	if (tableRows != 1) {
+		tmpM = cellDiffHor(cv::Range(0, tableRows - 1), cv::Range::all()) - cellDiffHor(cv::Range(1, tableRows), cv::Range::all());
+		tmpM.copyTo(cellDiffHor(cv::Range(0, tableRows - 1), cv::Range::all()));
+	}/* else {
+		cellDiffHor = 1;
+	}*/
 	
 	//entries with zero indicate no lower border
 
@@ -1337,10 +1349,13 @@ void FormFeatures::createReducedAssociationGraphNodes(QVector<QSharedPointer<rdf
 	cv::Mat tableT = table.clone();
 	tableT = tableT.t();
 	cellDiffHor = tableT.clone();
-
-	tmpM = cellDiffHor(cv::Range(0, cellDiffHor.rows - 1), cv::Range::all()) - cellDiffHor(cv::Range(1, cellDiffHor.rows), cv::Range::all());
-	tmpM.copyTo(cellDiffHor(cv::Range(0, cellDiffHor.rows - 1), cv::Range::all()));
-
+	
+	//added - if only one row (or column exist) the difference function crashes
+	//logic not tested
+	if (cellDiffHor.rows != 1) {
+		tmpM = cellDiffHor(cv::Range(0, cellDiffHor.rows - 1), cv::Range::all()) - cellDiffHor(cv::Range(1, cellDiffHor.rows), cv::Range::all());
+		tmpM.copyTo(cellDiffHor(cv::Range(0, cellDiffHor.rows - 1), cv::Range::all()));
+	}
 
 	tmpU = rdf::Line();
 	idxUpper.clear();
@@ -2316,6 +2331,43 @@ bool FormFeatures::matchTemplate() {
 	qDebug() << "create Table from maxclique...";
 	//createTableFromMaxClique(cells); //cells needed for children
 	createTableFromMaxCliqueReduced(cells);
+
+	return true;
+}
+
+bool FormFeatures::applyTemplate() {
+
+	if (mTemplateForm.isNull()) {
+		qWarning() << "no template provided in matchTemplate";
+		return false;
+	}
+
+	QVector<QSharedPointer<rdf::TableCell>> cells = mTemplateForm->cells();
+	QSharedPointer<rdf::TableRegion> region = mTemplateForm->tableRegion();
+
+	QPolygonF imgP;
+	float w = (float)mSizeSrc.width;
+	float h = (float)mSizeSrc.height;
+
+	imgP << QPointF(0.0, 0.0) << QPointF(w, 0.0) << QPointF(w, h) << QPointF(0.0, h);
+
+	////check and crop coordinates:
+	//QPolygonF regP = region->polygon().polygon();
+	//regP = imgP.intersected(regP);
+	//rdf::Polygon tmpReg(regP);
+	//region->setPolygon(tmpReg);
+
+	////check and crop coordinates:
+	//for (auto c : cells) {
+	//	QPolygonF p = c->polygon().polygon();
+	//	p = imgP.intersected(p);
+	//	rdf::Polygon tmpP(p);
+	//	c->setPolygon(tmpP);
+	//}
+
+	mRegion = region;
+	mCells.clear();
+	mCells = cells;
 
 	return true;
 }
@@ -4144,5 +4196,6 @@ cv::Size FormFeatures::sizeImg() const
 		}
 
 	}
+
 
 }

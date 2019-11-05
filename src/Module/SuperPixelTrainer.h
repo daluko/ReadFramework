@@ -24,10 +24,10 @@
  research  and innovation programme under grant agreement No 674943
  
  related links:
- [1] http://www.cvl.tuwien.ac.at/cvl/
+ [1] https://cvl.tuwien.ac.at/
  [2] https://transkribus.eu/Transkribus/
  [3] https://github.com/TUWien/
- [4] http://nomacs.org
+ [4] https://nomacs.org
  *******************************************************************************************************/
 
 #pragma once
@@ -174,7 +174,7 @@ class DllCoreExport SuperPixelLabeler : public Module {
 
 public:
 	SuperPixelLabeler(const QVector<QSharedPointer<MserBlob> >& blobs, const Rect& imgRect);
-	SuperPixelLabeler(const PixelSet& set, const Rect& imgRect);
+	SuperPixelLabeler(const PixelSet& set = PixelSet(), const Rect& imgRect = Rect());
 
 	bool isEmpty() const override;
 	bool compute() override;
