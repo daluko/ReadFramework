@@ -105,13 +105,13 @@ void TextHeightEstimationTest::processDirectory(QString dirPath) {
 		return;
 	}
 
-	qInfo() << "Running Text Height Estimation test on all .tif images in directory: ";
+	qInfo() << "Running Text Height Estimation test on all *.tif and *.jpg files in directory: ";
 	qInfo() << dirPath;
 
 	Timer dt;
 
 	QStringList filters;
-	filters << "*.tif";
+	filters << "*.tif" << "*.jpg";
 	QFileInfoList fileInfoList = dir.entryInfoList(filters, QDir::Files | QDir::NoDotAndDotDot);
 
 	int i = 0;
@@ -193,6 +193,9 @@ void WhiteSpaceTest::run() {
 		qInfo() << mConfig.imagePath() << "loaded...";
 	else
 		qInfo() << mConfig.imagePath() << "NOT loaded...";
+
+	//disable white space gap detection
+	//mWssConfig->setFindWhiteSpaceGaps(false);
 
 	WhiteSpaceAnalysis wsa(imgCv);
 	wsa.setConfig(mWsaConfig);
@@ -286,13 +289,14 @@ void WhiteSpaceTest::processDirectory(QString dirPath) {
 		return;
 	}
 
-	qInfo() << "Running White Space Analysis test on all .tif images in directory: ";
+	qInfo() << "Running White Space Analysis test on all *.tif and *.jpg files in directory: ";
 	qInfo() << dirPath;
 
+	//TODO use function for loading fileInfoList
 	Timer dt;
 
 	QStringList filters;
-	filters << "*.tif";
+	filters << "*.tif" << "*.jpg";
 	QFileInfoList fileInfoList = dir.entryInfoList(filters, QDir::Files | QDir::NoDotAndDotDot);
 
 	int i = 0;
@@ -520,13 +524,14 @@ void FontStyleClassificationTest::processDirectory(const QString dirPath){
 		return;
 	}
 
-	qInfo() << "Running font style classification test on all .tif images in directory: ";
+	qInfo() << "Running font style classification test on all *.tif and *.jpg files in directory: ";
 	qInfo() << dirPath;
 
+	//TODO use function for loading fileInfoList
 	Timer dt;
 
 	QStringList filters;
-	filters << "*.tif";
+	filters << "*.tif" << ".jpg";
 	QFileInfoList fileInfoList = dir.entryInfoList(filters, QDir::Files | QDir::NoDotAndDotDot);
 
 	int i = 0;
@@ -761,7 +766,6 @@ void FontStyleClassificationTest::testSyntheticPage(QString pageDataPath, QStrin
 
 	//map style results to GT regions and compute evaluation results
 	auto gtRegions = FontDataGenerator::loadRegions<TextRegion>(syntheticImagePath, Region::type_text_region);
-	
 
 	////remove patches of short words
 	//QVector<QSharedPointer<TextRegion>> longWordRegions;
@@ -771,6 +775,7 @@ void FontStyleClassificationTest::testSyntheticPage(QString pageDataPath, QStrin
 	//}
 	//gtRegions = longWordRegions;
 
+	//TODO replace this function with generateTextPatches() -> incorporate patchHeight parameter and patchHeightEstimation()
 	auto gtPatches = regionsToTextPatches(gtRegions, lm, synthPageCv);
 	fsc.mapStyleToPatches(gtPatches);
 
@@ -800,6 +805,9 @@ void FontStyleClassificationTest::testCatalogueRegions(QString dirPath){
 		qCritical() << "Patch size estimation failed! Please specify training directory with text regions (xml)!";
 		return;
 	}
+	else {
+		qInfo() << "patchSizeEstimate = " << pse;
+	}
 		
 	//load or train font style classifier
 	QSharedPointer<FontStyleClassifier> fsClassifier;
@@ -817,7 +825,7 @@ void FontStyleClassificationTest::testCatalogueRegions(QString dirPath){
 	//get LabelManager for generation of test data (ensure that labels (IDs) match training data)
 	LabelManager lm = fsClassifier->manager();
 
-	//TODO add possibility to extract patches from text line regions (or word regions)
+	//TODO test extraction of patches from text line regions (or word regions)
 
 	//process GT regions of input images
 	QFileInfoList fileInfoList = getImageList(testDir);
@@ -852,17 +860,17 @@ void FontStyleClassificationTest::testCatalogueRegions(QString dirPath){
 		textPatches_result << imagePatchesResults;
 
 		//draw debug image
-		//QImage qImg(imagePath);
-		//cv::Mat imgCv = Image::qImage2Mat(qImg);
-		//cv::Mat predResults_gtPtaches = fsc.draw(imgCv, imagePatchesResults, FontStyleClassification::draw_patch_results);
+		QImage qImg(imagePath);
+		cv::Mat imgCv = Image::qImage2Mat(qImg);
+		cv::Mat predResults_gtPtaches = fsc.draw(imgCv, imagePatchesResults, FontStyleClassification::draw_patch_results);
 		//cv::Mat compResults_gtPtaches = fsc.draw(imgCv, imagePatchesResults, FontStyleClassification::draw_comparison);
 		//cv::Mat trueResults_gtPtaches = fsc.draw(imgCv, imagePatchesResults, FontStyleClassification::draw_gt);
-		//
-		//QString att = "_result_";			
-		//att += QDateTime::currentDateTime().toString("yyyy-MM-dd HH-mm");
-		//QString imgPath = Utils::createFilePath(imagePath, att, "png");
-		//QImage qDebugImg = Image::mat2QImage(predResults_gtPtaches);
-		//qDebugImg.save(imgPath, 0, 1);
+
+		QString att = "_result_";			
+		att += QDateTime::currentDateTime().toString("yyyy-MM-dd HH-mm");
+		QString imgPath = Utils::createFilePath(imagePath, att, "png");
+		QImage qDebugImg = Image::mat2QImage(predResults_gtPtaches);
+		qDebugImg.save(imgPath, 0, 1);
 
 		//att = "_comp_";
 		//att += QDateTime::currentDateTime().toString("yyyy-MM-dd HH-mm");
@@ -1050,7 +1058,7 @@ QVector<QStringList> FontStyleClassificationTest::splitSampleSet(QStringList sam
 	}
 
 	int wNum = sampleSet.size();
-	int s = (int)std::floor((double)wNum*0.8);
+	int s = (int)std::floor((double)wNum*ratio);
 
 	QStringList wordListTrain = sampleSet.mid(0, s);
 	QStringList wordListTest = sampleSet.mid(s);
@@ -1148,7 +1156,7 @@ QVector<QSharedPointer<TextLine>> FontStyleClassificationTest::loadTextLines(QSt
 		Rect trRect = Rect::fromPoints(wr->polygon().toPoints());
 		cv::Mat patchTexture = img(trRect.toCvRect());
 		
-		QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(patchTexture);
+		QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(img, patchTexture);
 
 		LabelInfo trLabel =  lm.find(wr->custom());
 		
@@ -1243,7 +1251,7 @@ QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateTextPatc
 }
 
 QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateTextPatches(QVector<QSharedPointer<TextLine>> wordRegions, cv::Mat img, 
-	QSharedPointer<LabelManager> lm, int patchSize) {
+	QSharedPointer<LabelManager> lm, int patchHeight) {
 
 	QVector<QSharedPointer<TextPatch>> textPatches = QVector<QSharedPointer<TextPatch>>();
 
@@ -1256,8 +1264,10 @@ QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateTextPatc
 		return textPatches;
 	}
 
+	Rect imgRec = Rect(img);
 	for (QSharedPointer<TextLine> wr : wordRegions) {
 
+		//TODO add function for finding label in string (other class)
 		//check if word region has a font style label
 		QString cs = wr->custom();
 		QStringList list = cs.split("\\b");		
@@ -1271,8 +1281,10 @@ QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateTextPatc
 			}
 		}
 
-		if (trLabelName.isNull())
+		//TODO consider processing of patch without valid font style label
+		if (trLabelName.isNull()) {
 			continue;
+		}			
 
 		LabelInfo trLabel = lm->find(trLabelName);
 		
@@ -1281,52 +1293,10 @@ QVector<QSharedPointer<TextPatch>> FontStyleClassificationTest::generateTextPatc
 			lm->add(trLabel);
 		}
 
-		//TODO make sure rect does not exceed image boundaries
-		//TODO refine reduction and enlargement of regions
+		Rect tpRect = Rect::fromPoints(wr->polygon().toPoints());
 
-		//extract texture from image
-		Rect trRect = Rect::fromPoints(wr->polygon().toPoints());
-		cv::Mat patchTexture;
-
-		if (trRect.height() < patchSize) {
-			int padding = patchSize - (int)trRect.height();
-
-			if (padding >= 10) {
-				Rect tr = trRect;
-				trRect.move(Vector2D(0, -5));
-				trRect.setSize(trRect.size() + Vector2D(0, 10));
-				patchTexture = img(trRect.toCvRect());
-				
-				padding = padding - 10;
-				if (padding > 0) {
-					double hp = floor((double)padding / 2.0);
-					int topBorder = (padding % 2 == 0) ? hp : hp + 1;
-
-					cv::Mat patchTexture_buffer(patchTexture.rows + topBorder + hp, patchTexture.cols, patchTexture.depth());
-					copyMakeBorder(patchTexture, patchTexture_buffer, topBorder, hp, 0, 0, cv::BORDER_REPLICATE);
-					patchTexture = patchTexture_buffer;
-				}
-			}
-			else {
-				double hp = floor((double)padding / 2.0);
-				int topBorder = (padding % 2 == 0) ? hp : hp + 1;
-
-				trRect.move(Vector2D(0, -topBorder));
-				trRect.setSize(trRect.size() + Vector2D(0, hp + topBorder));
-
-				patchTexture = img(trRect.toCvRect());
-			}
-
-		} else if (trRect.height() > patchSize) {
-			//TODO refine this process
-			trRect.setSize(Vector2D(trRect.width(), patchSize));
-			patchTexture = img(trRect.toCvRect());
-		}
-		else {
-			patchTexture = img(trRect.toCvRect());
-		}
-
-		QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(patchTexture);
+		//generate text patch
+		QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(img, tpRect, patchHeight);
 		if (tp->isEmpty()) {
 			qWarning() << "Failed to create valid text patch! Skipping region.";
 			continue;
@@ -1390,6 +1360,14 @@ QSharedPointer<FontStyleClassifier> FontStyleClassificationTest::trainFontStyleC
 		return QSharedPointer<FontStyleClassifier>::create();
 	}
 	
+	//test pruning number of samples
+	//1907_Brussels_EGBA ->140
+	//1907_Paris_SdA -> 110
+	//1905_Venice_EI -> 90
+
+	//int maxSampleCount = 110;
+	//reduceSampleCount(fcm_train, maxSampleCount);
+
 	//train classifier (and save it to file)
 	auto fst = FontStyleTrainer(fcm_train);
 

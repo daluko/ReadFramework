@@ -109,7 +109,7 @@ protected:
 
 	QVector<QSharedPointer<TextPatch>> generateTextPatches(QStringList textSamples, LabelManager labelManager);
 	QVector<QSharedPointer<TextPatch>> generateTextPatches(QVector<QSharedPointer<TextLine>> wordRegions, cv::Mat img, 
-		QSharedPointer<LabelManager> manager = QSharedPointer<LabelManager>::create(), int PatchSize = 50);
+		QSharedPointer<LabelManager> manager = QSharedPointer<LabelManager>::create(), int patchHeight = 50);
 	
 	QVector<QFont> generateFontStyles() const;
 	QVector<QFont> generateFonts(int fontCount = 4, QStringList fonts = QStringList(), QVector<QFont> fontStyles = QVector<QFont>()) const;

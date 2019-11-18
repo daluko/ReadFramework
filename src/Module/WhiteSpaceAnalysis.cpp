@@ -291,9 +291,11 @@ bool WhiteSpaceAnalysis::compute() {
 		return false;
 	}
 
-	//auto  textLines = tlh.textLineSets();
 	mTextLineHypotheses = tlh.textLineSets();
-	//cv::Mat imgDebugWhiteSpaces = drawWhiteSpaces(img);	//based on mTextLineHypotheses and computed white spaces
+
+	//debug outputs 
+	//cv::Mat imgDebugTextLines = tlh.drawTextLineHypotheses(mImg);
+	//cv::Mat imgDebugWhiteSpaces = drawWhiteSpaces(mImg);	//based on mTextLineHypotheses and computed white spaces
 
 	qInfo() << "Found " << tlh.textLineSets().size() << " text lines.";
 	
@@ -991,9 +993,10 @@ bool WhiteSpaceAnalysis::checkInput() const {
 	return !isEmpty();
 }
 
-void WhiteSpaceAnalysis::scaleInputImage(double sf){
+bool WhiteSpaceAnalysis::scaleInputImage(double sf){
 	
 	//use original scale to find suitable scale factor
+	bool scaled = false;
 	if (sf == 1) {
 		
 		qInfo() << "Trying to find alternative rough text height estimate for scaling input image.";
@@ -1004,7 +1007,7 @@ void WhiteSpaceAnalysis::scaleInputImage(double sf){
 		if (tmpSet.size() < 20) {
 			qWarning()<< "Too low number of super pixels, input image will not be scaled.";
 			pSet = tmpSet;
-			return;
+			return false;
 		}
 
 		//compute median of pixel heights
@@ -1028,6 +1031,9 @@ void WhiteSpaceAnalysis::scaleInputImage(double sf){
 		if (validateImageScale(scaledImg)) {
 			mImg = scaledImg;
 			roughEstimateValid = true;
+
+			if (sf < 1)
+				scaled = true;
 		}
 		else {
 			reconfigScaleFactory(mImg.rows);
@@ -1035,8 +1041,9 @@ void WhiteSpaceAnalysis::scaleInputImage(double sf){
 
 			qWarning() << "Could not find suitable scale factor for input image.";
 			qInfo() << "Using full scale input image instead.";
-			return;
 		}
+
+		return scaled;
 	}
 	else {
 		int maxImgSide = (sf < 1) ? (int)round(mImg.rows * sf) : mImg.rows;
@@ -1045,11 +1052,16 @@ void WhiteSpaceAnalysis::scaleInputImage(double sf){
 
 		if (validateImageScale(scaledImg)) {
 			mImg = scaledImg;
+
+			if (sf < 1)
+				scaled = true;
 		}
 		else {
 			qWarning() << "Scaling based on precomputed text height estimate seems inappropriate.";
-			scaleInputImage();
+			scaled = scaleInputImage();
 		}
+
+		return scaled;
 	}
 
 	//debug text file-----------------------------------------------------------------------------------

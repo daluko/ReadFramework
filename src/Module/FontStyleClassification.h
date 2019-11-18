@@ -64,7 +64,8 @@ namespace rdf {
 
 	public:
 		TextPatch();
-		TextPatch(cv::Mat textImg, int fixedPatchSize = -1, int textureSize = -1, const QString& id = QString());
+		TextPatch(cv::Mat tpImg, int fixedPatchSize = -1, int textureSize = -1, const QString& id = QString());
+		TextPatch(cv::Mat textImg, Rect tpRect, int fixedPatchSize = -1, int textureSize = -1, const QString& id = QString());
 		TextPatch(QString text, const LabelInfo label, int fixedPatchSize = -1, int textureSize = -1, const QString & id = QString());
 
 		bool isEmpty() const;
@@ -99,7 +100,8 @@ namespace rdf {
 		bool generatePatchTexture();
 		bool generateTextImage(QString text, QFont font, bool cropImg = false);
 
-		void adaptPatchHeight(int textPatchSize);
+		void adaptPatchHeight(int patchHeight);
+		void adaptPatchHeight(cv::Mat img, Rect tpRect, int patchHeight);
 		void adaptTextureLineHeight(int textureSize, int textPatchSize);
 	};
 
@@ -150,7 +152,6 @@ namespace rdf {
 
 	public:
 		static int computePatchSizeEstimate(QString dataSetDir);
-
 		template <typename T>
 		static QVector< QSharedPointer<T>> loadRegions(QString imagePath, Region::Type type) {
 			QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(imagePath);
@@ -168,7 +169,7 @@ namespace rdf {
 
 			return regions;
 		}
-
+		static cv::Mat drawTextPatches(QVector<QSharedPointer<TextPatch>> patches);
 	private:
 	};
 

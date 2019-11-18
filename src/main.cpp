@@ -181,7 +181,7 @@ int main(int argc, char** argv) {
 		dc.setFontDataPath(parser.value(fontDataOpt));
 
 	// apply debug settings - convenience if you don't want to always change the cmd args
-	//applyDebugSettings(dc);
+	applyDebugSettings(dc);
 
 	//rdf::XmlTest xmlTest(dc);
 	//xmlTest.parseXml();
@@ -253,7 +253,7 @@ int main(int argc, char** argv) {
 			//dirPath = "F:/dev/da/data/HBR2013/test/tr";
 			//dirPath = "E:/data/test/HBR13_test";
 			//dirPath = "F:/dev/da/data/HBR2013/eval/train";
-			//dirPath = "F:/dev/da/data/HBR2013/eval/test";
+			dirPath = "F:/dev/da/data/HBR2013/eval/test";
 
 			bool testTHE = false;
 			bool testWSA = false;
@@ -277,24 +277,28 @@ int main(int argc, char** argv) {
 				}
 			}
 
-			if (testWSA) {			
+			if (testWSA) {	
+				//dirPath = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA/LA Results";
+				//dirPath = "F:/dev/da/data/catalogue/fsc_selection/1905_Venice_EI/LA Results";
+				//dirPath = "F:/dev/da/data/catalogue/fsc_selection/1907_Paris_SdA/LA Results";
+
 				if (!dirPath.isEmpty())
 					dc.setOutputPath(dirPath);
 				else
 					dc.setOutputPath(dc.imagePath());
 
 				rdf::WhiteSpaceTest wst(dc);
-				wst.testFontHeightRatio();
 
 				//parameter tests
 				//wst.testParameterSettings(dirPath);
-				
+				//wst.testFontHeightRatio();
+
 				//process directory
-				//if (!dirPath.isEmpty())
-				//	wst.processDirectory(dirPath);
-				//else {
-				//	wst.run();
-				//}
+				if (!dirPath.isEmpty())
+					wst.processDirectory(dirPath);
+				else {
+					wst.run();
+				}
 			}
 
 			if (testFSC) {
@@ -314,8 +318,7 @@ int main(int argc, char** argv) {
 
 					//test text patch processing
 					//QString testPath = dc.fontDataPath() + "/fontDataTwain/";
-					//QString testPath = dc.fontDataPath() + "/sampleNumberTest/";
-					
+					//QString testPath = dc.fontDataPath() + "/sampleNumberTest/";			
 
 					//QString testPath = dc.fontDataPath() + "/fontDataFixedSize/";
 					//fct.testSyntheticDataSet(testPath, 500);

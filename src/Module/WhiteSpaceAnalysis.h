@@ -437,7 +437,7 @@ namespace rdf {
 		TextBlockSet mTextBlockSet;
 
 		bool checkInput() const override;
-		void scaleInputImage(double scaleFeactor = 1);
+		bool scaleInputImage(double scaleFeactor = 1);
 		bool validateImageScale(cv::Mat img);
 		void reconfigScaleFactory(int maxImgSide);
 		SuperPixel computeSuperPixels(const cv::Mat & img);
