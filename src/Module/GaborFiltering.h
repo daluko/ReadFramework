@@ -36,6 +36,7 @@
 
 #pragma warning(push, 0)	// no warnings from includes
 #include <QSharedPointer>
+#include <QJsonObject>
 #include <opencv2/core.hpp>
 
 #pragma warning(pop)
@@ -56,7 +57,7 @@ class DllCoreExport GaborFilterBank {
 
 public:
 	GaborFilterBank();
-	GaborFilterBank( QVector<double> lambda, QVector<double> theta, QVector<cv::Mat> kernels);
+	GaborFilterBank(QVector<double> lambda, QVector<double> theta, int kernelSize);
 
 	void setLambda(QVector<double> lambda);
 	void setTheta(QVector<double> theta);
@@ -65,14 +66,22 @@ public:
 	QVector<double> lambda() const;
 	QVector<double> theta() const;
 	QVector<cv::Mat> kernels() const;
+	int kernelSize() const;
 
-	bool isEmpty();
+	bool isEmpty() const;
 	QVector<cv::Mat> draw();
+	QString toString();
+
+	void toJson(QJsonObject& jo) const;
+	static GaborFilterBank fromJson(QJsonObject& jo);
+	static GaborFilterBank read(QString filePath);
+	static QString jsonKey();	
 
 private:
 	QVector<cv::Mat> mKernels;
 	QVector<double> mLambda;
 	QVector<double> mTheta;
+	int mKernelSize = 128;
 };
 
 /// <summary>
@@ -82,9 +91,8 @@ class DllCoreExport GaborFiltering {
 
 public:
 	static cv::Mat createGaborKernel(int ksize, double lambda, double theta, double sigma);
-	static GaborFilterBank createGaborFilterBank(QVector<double> lambda, QVector<double> theta,
+	static QVector<cv::Mat> createGaborKernels(QVector<double> lambda, QVector<double> theta,
 		int ksize, double sigma = -1, double psi = 0.0, double gamma = 1.0, bool openCV = true);
-
 	static cv::Mat extractGaborFeatures(cv::Mat img, GaborFilterBank);
 };
 

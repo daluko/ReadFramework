@@ -73,7 +73,7 @@ namespace rdf {
 		int textureLineHeight() const;
 
 		void setTextureSize(int numLayers);
-		void setTextureLineHeight(int minArea);
+		void setTextureLineHeight(int lineHeight);
 
 		QSharedPointer<PixelLabel> label() const;
 		cv::Mat patchTexture() const;
@@ -105,53 +105,27 @@ namespace rdf {
 		void adaptTextureLineHeight(int textureSize, int textPatchSize);
 	};
 
-	class DllCoreExport FontStyleClassifier{
-
-	public:
-
-		FontStyleClassifier(const FeatureCollectionManager& fcm = FeatureCollectionManager(), 
-			const cv::Ptr<cv::ml::StatModel> model = cv::ml::KNearest::create(), int modelType = FontStyleClassifier::classify_nn_wed);
-
-		enum ClassifierMode {
-			classify_nn = 0,
-			classify_nn_wed = 1,
-			classify_knn = 2,
-			classify_bayes = 3,
-			classify_svm = 4,
-			classify_end
-		};
-
-		bool isEmpty() const;
-		bool isTrained() const;
-
-		cv::Ptr<cv::ml::StatModel> model() const;
-		LabelManager manager() const;
-		QVector<LabelInfo> classify(cv::Mat testFeat);
-
-		cv::Ptr<cv::ml::SVM> svm() const;
-		cv::Ptr<cv::ml::NormalBayesClassifier> bayes() const;
-		cv::Ptr<cv::ml::KNearest> kNearest() const;
-
-		cv::Mat draw(const cv::Mat& img) const;
-
-		bool write(const QString & filePath) const;
-		static QSharedPointer<FontStyleClassifier> read(const QString & filePath);
-
-	private:
-		cv::Ptr<cv::ml::StatModel> mModel;
-		FeatureCollectionManager mFcm;
-		ClassifierMode mClassifierMode;
-
-		bool checkInput() const;
-
-		void toJson(QJsonObject & jo) const;
-		static cv::Ptr<cv::ml::StatModel> readStatModel(QJsonObject & jo, ClassifierMode mode);
-	};
-
-	class DllCoreExport FontDataGenerator{
+		class DllCoreExport FontDataGenerator{
 
 	public:
 		static int computePatchSizeEstimate(QString dataSetDir);
+
+		static QVector<QFont> generateFontStyles();
+		static QVector<QFont> generateFonts(int fontCount = 4, QStringList fonts = QStringList(), QVector<QFont> fontStyles = QVector<QFont>());
+		static LabelManager generateFontLabelManager(QVector<QFont> fonts);
+
+		static QVector<QSharedPointer<TextPatch>> generateDirTextPatches(QString dirPath, int patchHeight = 75, QSharedPointer<LabelManager> lm = QSharedPointer<LabelManager>::create());
+		static QVector<QSharedPointer<TextPatch>> generateTextPatches(QString imagePath, int patchHeight = 75, QSharedPointer<LabelManager> lm = QSharedPointer<LabelManager>::create());	
+		static QVector<QSharedPointer<TextPatch>> generateTextPatches(QStringList textSamples, LabelManager labelManager);
+		static QVector<QSharedPointer<TextPatch>> generateTextPatches(QVector<QSharedPointer<TextLine>> wordRegions, cv::Mat img, 
+			QSharedPointer<LabelManager> manager = QSharedPointer<LabelManager>::create(), int patchHeight = 50);
+
+		static FeatureCollectionManager computePatchFeatures(QVector<QSharedPointer<TextPatch>> textPatches, GaborFilterBank gfb = GaborFilterBank(), bool addLabels = true);
+
+		static bool readDataSet(QString inputFilePath, FeatureCollectionManager & fcm, QStringList & samples);
+		static bool generateDataSet(QStringList sample, QVector<QFont> fonts, GaborFilterBank gfb, QString outputFilePath, bool addLabels = true);
+		static bool generateDataSet(QString dataSetPath, GaborFilterBank gfb, int patchSize, QString outputFilePath = QString(), bool addLabels = true);
+
 		template <typename T>
 		static QVector< QSharedPointer<T>> loadRegions(QString imagePath, Region::Type type) {
 			QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(imagePath);
@@ -169,8 +143,89 @@ namespace rdf {
 
 			return regions;
 		}
-		static cv::Mat drawTextPatches(QVector<QSharedPointer<TextPatch>> patches);
+
+		static cv::Mat drawTextPatches(QVector<QSharedPointer<TextPatch>> patches, bool drawPatchTexture = false);
+	
 	private:
+		
+	};
+
+	class DllCoreExport FontStyleDataSet{
+
+	public:
+		FontStyleDataSet();
+		FontStyleDataSet(FeatureCollectionManager fcm, int patchHeight, GaborFilterBank gfb);
+
+		bool isEmpty() const;
+		int patchHeight() const;
+		GaborFilterBank gaborFilterBank() const;
+		FeatureCollectionManager featureCollectionManager() const;
+		LabelManager labelManager() const;
+
+		void setPatchHeight(int patchHeight);
+		void setGFB(GaborFilterBank gfb);
+		void setFCM(FeatureCollectionManager & fcm);
+
+		void toJson(QJsonObject & jo, const QString & filePath) const;
+		bool write(const QString & filePath) const;
+
+		static FontStyleDataSet fromJson(const QJsonObject & jo, const QString & filePath);
+		static FontStyleDataSet read(const QString & filePath);
+		static QString jsonKey();
+
+	protected:
+		
+		int mPatchHeight = -1;
+		GaborFilterBank mGFB;
+		FeatureCollectionManager mFCM;
+		LabelManager mLM;
+	};
+
+	class DllCoreExport FontStyleClassifier {
+
+	public:
+
+		FontStyleClassifier(FontStyleDataSet dataSet = FontStyleDataSet(),
+			const cv::Ptr<cv::ml::StatModel> model = cv::ml::KNearest::create(), int modelType = FontStyleClassifier::classify_nn_wed);
+
+		enum ClassifierMode {
+			classify_nn = 0,
+			classify_nn_wed = 1,
+			classify_knn = 2,
+			classify_bayes = 3,
+			classify_svm = 4,
+			classify_end
+		};
+
+		bool isEmpty() const;
+		bool isTrained() const;
+
+		QVector<LabelInfo> classify(cv::Mat testFeat);
+
+		LabelManager manager() const;
+		GaborFilterBank gaborFilterBank() const;
+
+		cv::Ptr<cv::ml::StatModel> model() const;
+		cv::Ptr<cv::ml::SVM> svm() const;
+		cv::Ptr<cv::ml::NormalBayesClassifier> bayes() const;
+		cv::Ptr<cv::ml::KNearest> kNearest() const;
+
+		cv::Mat draw(const cv::Mat& img) const;
+
+		bool write(const QString & filePath) const;
+		static QSharedPointer<FontStyleClassifier> read(const QString & filePath);
+
+	private:
+		cv::Ptr<cv::ml::StatModel> mModel;
+		ClassifierMode mClassifierMode;
+		FeatureCollectionManager mFCM;
+		GaborFilterBank mGFB;
+		
+		bool checkInput() const;
+
+		void toJson(QJsonObject & jo, QString filePath) const;
+		QString jsonKey() const;
+		static cv::Ptr<cv::ml::StatModel> readStatModel(QJsonObject & jo, ClassifierMode mode);
 	};
 
 	class DllCoreExport FontStyleClassificationConfig : public ModuleConfig {
@@ -225,7 +280,6 @@ namespace rdf {
 		static QString fontToLabelName(QFont font);
 
 		//static QVector<cv::Mat> generateSyntheticTextPatches(QFont font, QStringList trainingWords);
-		static GaborFilterBank createGaborKernels(QVector<double> theta = QVector<double>(), QVector<double> lambda = QVector<double>(), bool openCV = true);
 		static cv::Mat computeGaborFeatures(QVector<QSharedPointer<TextPatch>> patches, GaborFilterBank gfb, cv::ml::SampleTypes featureType = cv::ml::ROW_SAMPLE);
 		static FeatureCollectionManager generateFCM(cv::Mat features);
 		static FeatureCollectionManager generateFCM(QVector<QSharedPointer<TextPatch>> patches, cv::Mat features);

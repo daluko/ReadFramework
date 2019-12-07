@@ -401,6 +401,7 @@ namespace rdf {
 		void setTbfConfig(QSharedPointer<TextBlockFormationConfig> tbfConfig);
 		
 		QVector<QSharedPointer<TextRegion>> textLineRegions() const;
+		QVector<QSharedPointer<TextLine>> textLineHypotheses() const;
 		QSharedPointer<Region> textBlockRegions() const;
 		QVector<QSharedPointer<Region>> evalTextBlockRegions() const;
 
@@ -415,7 +416,6 @@ namespace rdf {
 		QSharedPointer<TextLineHypothesizerConfig> mTlhConfig;
 		QSharedPointer<WhiteSpaceSegmentationConfig> mWssConfig;
 		QSharedPointer<TextBlockFormationConfig> mTbfConfig;
-
 
 		//debug output
 		Rect filterRect = Rect();

@@ -84,8 +84,9 @@ void FontStyleTrainerConfig::save(QSettings & settings) const {
 }
 
 // FontStyleTrainer --------------------------------------------------------------------
-FontStyleTrainer::FontStyleTrainer(FeatureCollectionManager & fcm) {
-	mFeatureManager = fcm;
+FontStyleTrainer::FontStyleTrainer(FontStyleDataSet dataSet) {
+	mGFB = dataSet.gaborFilterBank();
+	mFeatureManager = dataSet.featureCollectionManager();
 	mConfig = QSharedPointer<FontStyleTrainerConfig>::create();
 	mConfig->loadSettings();
 }
@@ -210,7 +211,7 @@ bool FontStyleTrainer::write(const QString & filePath) const {
 }
 
 QSharedPointer<FontStyleClassifier> FontStyleTrainer::classifier() const {
-	QSharedPointer<FontStyleClassifier> sm(new FontStyleClassifier(mFeatureManager, mModel, mModelType));
+	QSharedPointer<FontStyleClassifier> sm(new FontStyleClassifier(FontStyleDataSet(mFeatureManager, mPatchHeight, mGFB), mModel, mModelType));
 	return sm;
 }
 

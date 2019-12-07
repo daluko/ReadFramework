@@ -1,6 +1,5 @@
 #include "FontStyleClassification.h"
 #include "FontStyleClassification.h"
-#include "FontStyleClassification.h"
 /*******************************************************************************************************
 ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ.
 
@@ -66,6 +65,11 @@ namespace rdf {
 	TextPatch::TextPatch(cv::Mat tpImg, int fixedPatchSize, int textureSize, const QString & id) : BaseElement(id) {
 
 		mTextPatch = tpImg.clone();
+
+		if (fixedPatchSize != -1 && fixedPatchSize < 1) {
+			qDebug() << "Patch size parameter invalid. Patch size won't be modified.";
+			fixedPatchSize = -1;
+		}		
 
 		if (fixedPatchSize != -1)
 			adaptPatchHeight(fixedPatchSize);
@@ -245,7 +249,6 @@ namespace rdf {
 
 		QImage qImg(1, 1, QImage::Format_ARGB32);	//used only for estimating bb size
 		QPainter painter(&qImg);
-
 		painter.setFont(font);
 		QRect tbb = painter.boundingRect(QRect(0, 0, 1, 1), Qt::AlignTop | Qt::AlignLeft, text);
 		painter.end();
@@ -364,230 +367,6 @@ namespace rdf {
 		return mPoly;
 	}
 
-	// FontStyleClassifier --------------------------------------------------------------------
-	FontStyleClassifier::FontStyleClassifier(const FeatureCollectionManager & fcm, const cv::Ptr<cv::ml::StatModel> model, int classifierMode) {
-		mModel = model;
-		mFcm = fcm;
-		mClassifierMode = (ClassifierMode) classifierMode;
-	}
-
-	bool FontStyleClassifier::isEmpty() const {
-		return mModel->empty() || mFcm.isEmpty();
-	}
-
-	bool FontStyleClassifier::isTrained() const{
-		return mModel->isTrained();
-	}
-
-	cv::Ptr<cv::ml::StatModel> FontStyleClassifier::model() const {
-		return mModel;
-	}
-
-	LabelManager FontStyleClassifier::manager() const {
-		return mFcm.toLabelManager();
-	}
-
-	QVector<LabelInfo> FontStyleClassifier::classify(cv::Mat testFeat) {
-
-		//TODO compute output probability results for each class
-		//TODO test influence of normalization (test + training data)
-		//TODO consider using additional weights
-		
-		if (!checkInput())
-			return QVector<LabelInfo>();
-
-		cv::Mat cFeatures = testFeat;
-		cFeatures.convertTo(cFeatures, CV_32FC1);
-
-		float rawLabel = 0;
-		QVector<LabelInfo> labelInfos;
-		LabelManager labelManager = mFcm.toLabelManager();
-
-		cv::Mat featStdDev;
-		QVector<cv::Mat> cCentroids;
-		if (mClassifierMode == ClassifierMode::classify_nn || mClassifierMode == ClassifierMode::classify_nn_wed) {
-			cCentroids = mFcm.collectionCentroids();
-			featStdDev = mFcm.featureSTD();
-		}		
-
-		for (int rIdx = 0; rIdx < cFeatures.rows; rIdx++) {			
-			cv::Mat cr = cFeatures.row(rIdx);
-
-			if (svm()) {
-				rawLabel = svm()->predict(cr);
-			}
-			else if (bayes()) {
-				rawLabel = bayes()->predict(cr);
-				//bayes()->predictProb(InputArray inputs, OutputArray outputs, OutputArray outputProbs, int flags = 0);
-			}
-			else {
-				if (mClassifierMode == ClassifierMode::classify_nn || mClassifierMode == ClassifierMode::classify_knn) {
-					rawLabel = kNearest()->predict(cr);
-				}
-				else if ( mClassifierMode == ClassifierMode::classify_nn_wed) {
-
-					//compute weighted euclidean distance by normalizing features by their standard deviation
-					cv::divide(cr, featStdDev, cr);
-
-					rawLabel = kNearest()->predict(cr);
-				}
-				else {
-					qCritical() << "Unable to perform font style classification. Classifier mode is unknown.";
-					return QVector<LabelInfo>();
-				}
-			}
-
-			// get label
-			int labelId = qRound(rawLabel);
-			LabelInfo li = labelManager.find(labelId);
-			labelInfos << li;
-		}
-
-		return labelInfos;
-	}
-
-	cv::Ptr<cv::ml::SVM> FontStyleClassifier::svm() const {
-		return mModel.dynamicCast<cv::ml::SVM>();
-	}
-
-	cv::Ptr<cv::ml::NormalBayesClassifier> FontStyleClassifier::bayes() const {
-		return mModel.dynamicCast<cv::ml::NormalBayesClassifier>();
-	}
-
-	cv::Ptr<cv::ml::KNearest> FontStyleClassifier::kNearest() const {
-		return mModel.dynamicCast<cv::ml::KNearest>();
-	}
-
-	cv::Mat FontStyleClassifier::draw(const cv::Mat& img) const {
-
-		if (!checkInput())
-			return cv::Mat();
-
-		QImage qImg = Image::mat2QImage(img, true);
-		QPainter p(&qImg);
-
-		// draw legend
-		mFcm.toLabelManager().draw(p);
-
-		return Image::qImage2Mat(qImg);
-	}
-
-	bool FontStyleClassifier::checkInput() const {
-
-		if (!isEmpty() && !isTrained())
-			qCritical() << "I cannot classify, since the model is not trained";
-
-		return !isEmpty() && isTrained();
-	}
-
-	bool FontStyleClassifier::write(const QString & filePath) const {
-
-		if (mModel && !mModel->isTrained())
-			qWarning() << "Writing classifier that is NOT trained!";
-
-		// write features
-		QJsonObject jo = mFcm.toJson(filePath);
-
-		// write classifier model
-		toJson(jo);
-
-		int64 bw = Utils::writeJson(filePath, jo);
-
-		return bw > 0;	// if we wrote more than 0 bytes, it's ok
-	}
-
-	void FontStyleClassifier::toJson(QJsonObject& jo) const {
-
-		if (!mModel) {
-			qWarning() << "cannot save FontStyleClassifier because statModel is NULL.";
-			return;
-		}
-
-		cv::FileStorage fs(".xml", cv::FileStorage::WRITE | cv::FileStorage::MEMORY | cv::FileStorage::FORMAT_XML);
-		mModel->write(fs);
-#if CV_MAJOR_VERSION == 3 && CV_MINOR_VERSION == 1
-		fs << "format" << 3;	// fixes bug #4402
-#endif
-		std::string data = fs.releaseAndGetString();
-
-		QByteArray ba(data.c_str(), (int)data.length());
-		QString ba64Str = ba.toBase64();
-
-		jo.insert("FontStyleClassifier", ba64Str);
-
-		jo.insert("ClassifierMode", QJsonValue(mClassifierMode));
-	}
-
-	QSharedPointer<FontStyleClassifier> FontStyleClassifier::read(const QString & filePath) {
-
-		Timer dt;
-
-		QJsonObject jo = Utils::readJson(filePath);
-
-		if (jo.isEmpty()) {
-			qCritical() << "Failed to load font style classifier from" << filePath;
-			return QSharedPointer<FontStyleClassifier>::create();
-		}
-
-		QSharedPointer<FontStyleClassifier> fsc = QSharedPointer<FontStyleClassifier>::create();
-		auto fcm = FeatureCollectionManager::read(filePath);
-		fsc->mFcm = fcm;
-
-		if (jo.contains("ClassifierMode")) {
-			fsc->mClassifierMode = (ClassifierMode) jo.value("ClassifierMode").toInt();
-		}
-		else
-			fsc->mClassifierMode = (ClassifierMode) -1;
-
-		fsc->mModel = FontStyleClassifier::readStatModel(jo, fsc->mClassifierMode);
-
-		if (!fsc->mFcm.isEmpty() && !fsc->mModel->empty()) {
-			qInfo() << "Font style classifier loaded from" << filePath << "in" << dt;
-		}
-		else {
-			qCritical() << "Failed to load font style classifier from" << filePath;
-			return QSharedPointer<FontStyleClassifier>::create();
-		}
-
-		return fsc;
-	}
-
-	cv::Ptr<cv::ml::StatModel> FontStyleClassifier::readStatModel(QJsonObject & jo, ClassifierMode mode) {
-
-		// decode data
-		QByteArray ba = jo.value("FontStyleClassifier").toVariant().toByteArray();
-		ba = QByteArray::fromBase64(ba);
-
-		if (!ba.length()) {
-			qCritical() << "Can not read font style classifier from file.";
-			return cv::Ptr<cv::ml::StatModel>();
-		}
-
-		// read model from memory
-		cv::String dataStr(ba.data(), ba.length());
-		cv::FileStorage fs(dataStr, cv::FileStorage::READ | cv::FileStorage::MEMORY | cv::FileStorage::FORMAT_XML);
-		cv::FileNode root = fs.root();
-
-		if (root.empty()) {
-			qCritical() << "Can not read font style classifier from file";
-			return cv::Ptr<cv::ml::StatModel>();
-		}
-		
-		cv::Ptr<cv::ml::StatModel> model;
-		if(mode == FontStyleClassifier::classify_bayes)
-			model = cv::Algorithm::read<cv::ml::NormalBayesClassifier>(root);
-		else if(mode == FontStyleClassifier::classify_svm)
-			model = cv::Algorithm::read<cv::ml::SVM>(root);
-		else if(mode == classify_knn || mode == classify_nn || mode == classify_nn_wed)
-			model = cv::Algorithm::read<cv::ml::KNearest>(root);
-		else {
-			qCritical() << "Can not read font style classifier from file. Classifier mode unknown.";
-			return cv::Ptr<cv::ml::StatModel>();
-		}
-
-		return model;
-	}
-
 	//FontDataGenerator --------------------------------------------------------------------
 	int FontDataGenerator::computePatchSizeEstimate(QString dataSetDir) {
 
@@ -660,23 +439,769 @@ namespace rdf {
 		return patchSize;
 	}
 
-	cv::Mat FontDataGenerator::drawTextPatches(QVector<QSharedPointer<TextPatch>> patches){
+	QVector<QFont> FontDataGenerator::generateFontStyles(){
+
+		QVector<QFont> fontStyleManager;
+
+		QFont fontStyle = QFont();
+
+		//regular
+		//fontStyle.fromString("Arial,30,-1,5,50,0,0,0,0,0");	//using pointSize instead of pixelSize
+		fontStyle.fromString("Arial,-1,30,5,50,0,0,0,0,0");
+		fontStyleManager << fontStyle;
+
+		//bold
+		fontStyle.fromString("Arial,-1,30,5,75,0,0,0,0,0");
+		fontStyleManager << fontStyle;
+
+		//bold + italic
+		fontStyle.fromString("Arial,-1,30,5,75,1,0,0,0,0");
+		fontStyleManager << fontStyle;
+
+		//italic
+		fontStyle.fromString("Arial,-1,30,5,50,1,0,0,0,0");
+		fontStyleManager << fontStyle;
+
+		return fontStyleManager;
+	}
+
+	QVector<QFont> FontDataGenerator::generateFonts(int fontCount, QStringList fontFamilies, QVector<QFont> fontStyles) {
+
+		if (fontFamilies.isEmpty())
+			fontFamilies.append({ "Arial" , "Franklin Gothic Medium" , "Times New Roman" , "Georgia" });
+
+		if (fontStyles.isEmpty())
+			fontStyles = generateFontStyles();
+
+		int maxFontNum = (int)fontFamilies.size()*fontStyles.size();
+
+		if (maxFontNum < fontCount) {
+			qWarning() << "Font generation process unable to create required number of distinct fonts.";
+			qInfo() << "Creating " << maxFontNum << " instead of " << fontCount;
+			fontCount = maxFontNum;
+		}
+
+		std::vector<int> fontIndices;
+		for (int i = 0; i < maxFontNum; ++i)
+			fontIndices.push_back(i);
+
+		//shuffle font indices for generation of random fonts
+		if (fontCount < maxFontNum)
+			std::random_shuffle(fontIndices.begin(), fontIndices.end());
+
+		QVector<QFont>  synthFonts;
+		for (int i = 0; i < fontCount; ++i) {
+			int idx = fontIndices[i];
+			int famInd = (int)floor(idx / fontStyles.size());
+			int styleInd = idx - (famInd * fontStyles.size());
+
+			QFont tmp = fontStyles[styleInd];
+			tmp.setFamily(fontFamilies[famInd]);
+			synthFonts << tmp;
+		}
+
+		return synthFonts;
+	}
+
+	LabelManager FontDataGenerator::generateFontLabelManager(QVector<QFont> fonts)  {
+
+		LabelManager labelManager = LabelManager();
+		QVector<QString> labelNames;
+		QVector<LabelInfo> fontLabels;
+
+		if (fonts.isEmpty()) {
+			qWarning() << "Missing fonts for creation of label manager";
+			return labelManager;
+		}
+
+		for (int i = 0; i < fonts.size(); i++) {
+			QString labelName = FontStyleClassification::fontToLabelName(fonts[i]);
+			LabelInfo label(i + 1, labelName);
+
+			labelNames << labelName;
+			labelManager.add(label);
+		}
+
+		return labelManager;
+	}
+
+	QVector<QSharedPointer<TextPatch>> FontDataGenerator::generateDirTextPatches(QString dirPath, int patchSize, QSharedPointer<LabelManager> lm) {
+
+		QFileInfoList fileInfoList = Utils::getImageList(dirPath);
+
+		QVector<QSharedPointer<TextPatch>> textPatches = QVector<QSharedPointer<TextPatch>>();
+
+		int i = 0;
+		int wordRegionCount = 0;
+		for (auto f : fileInfoList) {
+
+			QString imagePath = f.absoluteFilePath();
+			auto imagePatches = generateTextPatches(imagePath, patchSize, lm);
+
+			if (imagePatches.isEmpty()) {
+				qWarning() << "No text patches generated! Skipping image.";
+				continue;
+			}
+			i++;
+			textPatches << imagePatches;
+
+			//qDebug() << "loaded "<< imagePatches.size() << " text patches from image #" << i;
+		}
+
+		qDebug() << "Loaded " << textPatches.size() << " text patches from " << i << " images overall.";
+
+		return textPatches;
+	}
+
+	QVector<QSharedPointer<TextPatch>> FontDataGenerator::generateTextPatches(QString imagePath, int patchSize, QSharedPointer<LabelManager> lm) {
+
+		QVector<QSharedPointer<TextPatch>> textPatches = QVector<QSharedPointer<TextPatch>>();
+
+		QString xmlPath = rdf::PageXmlParser::imagePathToXmlPath(imagePath);
+
+		QImage qImg(imagePath);
+
+		if (qImg.isNull() || !QFileInfo(xmlPath).exists()) {
+			qWarning() << "Could NOT load image or xml for file: " << imagePath;
+			return textPatches;
+		}
+
+		cv::Mat imgCv = Image::qImage2Mat(qImg);
+
+		QVector<QSharedPointer<TextLine>> wordRegions = FontDataGenerator::loadRegions<TextLine>(imagePath, Region::type_word);
+
+		if (wordRegions.isEmpty()) {
+			qWarning() << "No word regions found, could not generate text patches for image: " << imagePath;
+			return textPatches;
+		}
+
+		textPatches << FontDataGenerator::generateTextPatches(wordRegions, imgCv, lm, patchSize);	//used for word regions from catalogue images
+
+		return textPatches;
+	}
+
+	QVector<QSharedPointer<TextPatch>> FontDataGenerator::generateTextPatches(QStringList textSamples, LabelManager labelManager) {
+
+		//TODO test parameters for size of text, size of text patches, size of text patch line height, etc.
+
+		if (textSamples.isEmpty()) {
+			qCritical() << "Found no text samples, could not compute text patches.";
+			return QVector<QSharedPointer<TextPatch>>();
+		}
+
+		if (labelManager.isEmpty()) {
+			qCritical() << "Failed to generate test patches.";
+			qWarning() << "Label manager is empty.";
+			return QVector<QSharedPointer<TextPatch>>();
+		}
+
+		//filter font style labels contained in label manager
+		auto labels_ = labelManager.labelInfos();
+		QVector<LabelInfo> fontStyleLabels;
+
+		for (LabelInfo l : labels_) {
+			if (l.name().startsWith("fsl"))
+				fontStyleLabels << l;
+		}
+
+		QVector<QSharedPointer<TextPatch>> textPatches;
+		for (auto l : fontStyleLabels) {
+
+			for (auto s : textSamples) {
+				QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(s, l);
+				//QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(s, l, 38);
+
+				if (!tp->isEmpty()) {
+					textPatches << tp;
+				}
+			}
+		}
+
+		qInfo() << "Computed " << textPatches.size() << " text patches.";
+
+		return textPatches;
+	}
+
+	QVector<QSharedPointer<TextPatch>> FontDataGenerator::generateTextPatches(QVector<QSharedPointer<TextLine>> wordRegions, cv::Mat img,
+		QSharedPointer<LabelManager> lm, int patchHeight) {
+
+		QVector<QSharedPointer<TextPatch>> textPatches = QVector<QSharedPointer<TextPatch>>();
+
+		//TODO enable generation of patches without labels
+		//TODO merge this function with adaptPatchHeight() in FSC class
+		//TODO improve reading in of labels (allow labels containing spaces)
+
+		if (wordRegions.isEmpty()) {
+			qWarning() << "No regions to convert here.";
+			return textPatches;
+		}
+
+		Rect imgRec = Rect(img);
+		for (QSharedPointer<TextLine> wr : wordRegions) {
+
+			//TODO add function for finding label in string (other class)
+			//TODO adapt to new font style label
+			//check if word region has a font style label
+			QString cs = wr->custom();
+			QStringList list = cs.split("\\b");
+			//qDebug() << list;
+
+			QString trLabelName;
+			for (auto s : list) {
+				if (s.contains("fsl")) {
+					trLabelName = s;
+					break;
+				}
+			}
+
+			//TODO consider processing of patch without valid font style label
+			if (trLabelName.isNull()) {
+				continue;
+			}
+
+			LabelInfo trLabel = lm->find(trLabelName);
+
+			if (trLabel.isNull()) {
+				//TODO id -> lm->size() = correct?
+				trLabel = LabelInfo(lm->size(), trLabelName);
+				lm->add(trLabel);
+			}
+
+			Rect tpRect = Rect::fromPoints(wr->polygon().toPoints());
+
+			//generate text patch
+			QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(img, tpRect, patchHeight);
+			if (tp->isEmpty()) {
+				qWarning() << "Failed to create valid text patch! Skipping region.";
+				continue;
+			}
+
+			tp->label()->setTrueLabel(trLabel);
+			tp->setPolygon(wr->polygon());
+			textPatches << tp;
+		}
+
+		//qDebug() << lm.toString();
+
+		return textPatches;
+	}
+
+	FeatureCollectionManager FontDataGenerator::computePatchFeatures(QVector<QSharedPointer<TextPatch>> textPatches, 
+		GaborFilterBank gfb, bool addLabels) {
+
+		qInfo() << "Computing features for text patches. This might take a while...";
+		cv::Mat tpFeatures = FontStyleClassification::computeGaborFeatures(textPatches, gfb);
+
+		//save feature collection manager
+		FeatureCollectionManager fcm;
+
+		if (addLabels)	//one collection per label -> order of feature vectors is changed
+			fcm = FontStyleClassification::generateFCM(textPatches, tpFeatures);
+		else			//single collection with unknown label -> order of feature vectors unchanged
+			fcm = FontStyleClassification::generateFCM(tpFeatures);
+
+		return fcm;
+	}
+
+	bool FontDataGenerator::generateDataSet(QStringList samples, QVector<QFont> fonts, GaborFilterBank gfb, 
+		QString outputFilePath, bool addLabels) {
+
+		//TODO pass gfb as input in/to this function
+		//TODO write gfb parameters to output file
+
+		Timer dt;
+
+		if (QFileInfo(outputFilePath).exists()) {
+			qWarning() << "Data set already exists. Delete existing files to generate new one:" << outputFilePath;
+			return false;
+		}
+
+		LabelManager labelManager = FontDataGenerator::generateFontLabelManager(fonts);
+
+		if (samples.isEmpty() || labelManager.isEmpty()) {
+			qCritical() << "Could not generate data set, missing input data.";
+			return false;
+		}
+
+		QVector<QSharedPointer<TextPatch>> textPatches = FontDataGenerator::generateTextPatches(samples, labelManager);
+		FeatureCollectionManager fcm = FontDataGenerator::computePatchFeatures(textPatches, gfb, addLabels);
+
+		//write data set to file
+		QJsonObject jo = fcm.toJson(outputFilePath);
+
+		QJsonArray ja = QJsonArray::fromStringList(samples);
+		jo.insert("wordSamples", ja);
+
+		Utils::writeJson(outputFilePath, jo);
+
+		qDebug() << "Generated data set file in " << dt;
+
+		return true;
+	}
+
+	//generates data set from image/xml files in specified folder
+	bool FontDataGenerator::generateDataSet(QString dataSetPath, GaborFilterBank gfb, int patchSize, QString outputFilePath, bool addLabels) {
+
+		Timer dt;
+
+		//generate train data set from image files
+		QVector<QSharedPointer<TextPatch>> textPatches = FontDataGenerator::generateDirTextPatches(dataSetPath, patchSize);
+
+		if (textPatches.isEmpty()) {
+			qCritical() << "Failed to load text patches from directory: " << dataSetPath;
+			return false;
+		}
+
+		auto fcm = FontDataGenerator::computePatchFeatures(textPatches, gfb, addLabels);
+
+		//write data set to file
+		if (outputFilePath.isEmpty())
+			outputFilePath = QFileInfo(dataSetPath, "FontStyleDataSet.txt").absoluteFilePath();
+
+		FontStyleDataSet fsd = FontStyleDataSet(fcm, patchSize, gfb);
 		
+		if(!fsd.write(outputFilePath)){
+			qCritical() << "Failed to write data set to path: " << outputFilePath;
+			return false;
+		}
+
+		qDebug() << "Generated data set file in " << dt;
+
+		return true;
+	}
+
+	bool FontDataGenerator::readDataSet(QString inputFilePath, FeatureCollectionManager& fcm, QStringList& samples) {
+
+		//read fcm
+		fcm = FeatureCollectionManager::read(inputFilePath);
+
+		//read samples
+		QJsonArray sampleJA = Utils::readJson(inputFilePath).value("wordSamples").toArray();
+
+		if (sampleJA.isEmpty() || fcm.isEmpty()) {
+			qCritical() << "Failed to load data set from: " << inputFilePath;
+			return false;
+		}
+
+		for (auto s : sampleJA)
+			samples << s.toString();
+
+		qInfo() << "Successfully loaded data set from: " << inputFilePath;
+		return true;
+	}
+
+	cv::Mat FontDataGenerator::drawTextPatches(QVector<QSharedPointer<TextPatch>> patches, bool drawPatchTexture){
+		
+		int maxWidth = 1500;
+		int maxHeight = 10000;
 		cv::Mat output = cv::Mat();
 
 		if(patches.isEmpty())
 			return output;
 
+		cv::Mat outputLine = cv::Mat();
 		for (auto p : patches) {
 			if (p->isEmpty())
 				continue;
 
+			cv::Mat patchImg;
+			if (drawPatchTexture)
+				patchImg = p->patchTexture();
+			else
+				patchImg = p->textPatchImg();
+			
 
+			if (outputLine.empty()) {
+				outputLine = patchImg.clone();
+				if (outputLine.cols > maxWidth) {
+					qWarning() << "Failed to create output image. Patch width bigger than 1500 pixels.";
+					return cv::Mat();
+				}
+			}
+			else {
+				
+				if (patchImg.rows != outputLine.rows) {
+					qWarning() << "Failed to create output image. Patches have varying heights.";
+					return cv::Mat();
+				}
+			
+				if (outputLine.cols + patchImg.cols > 1500) {
+
+					cv::copyMakeBorder(outputLine, outputLine, 0, 0, 0, maxWidth - outputLine.cols, cv::BORDER_CONSTANT, cv::Scalar(255));
+
+					if (output.empty())
+						output = outputLine.clone();
+					else {
+						cv::vconcat(output, outputLine, output);
+
+						if (outputLine.cols > maxWidth) {
+							qWarning() << "Failed to create output image. Patch width bigger than 1500 pixels.";
+							return cv::Mat();
+						}
+					}	
+
+					outputLine = patchImg.clone();
+				}
+				else {
+					cv::hconcat(outputLine, patchImg, outputLine);
+				}
+			}
+
+			if (output.rows > maxHeight) {
+				qWarning() << "Aborted generation of text patch images. Output image exceeds height of " << maxHeight << " pixels.";
+				return output;
+			}
+		}
+
+		//add last line
+		if (!outputLine.empty()) {
+			cv::copyMakeBorder(outputLine, outputLine, 0, 0, 0, maxWidth - outputLine.cols, cv::BORDER_CONSTANT, cv::Scalar(255));
+			cv::vconcat(output, outputLine, output);
 		}
 
 		return output;
 	}
-	
+
+	// FontStyleDataSet -------------------------------------------------------------------------------------
+
+	FontStyleDataSet::FontStyleDataSet() {
+		setGFB(GaborFilterBank());
+		setFCM(FeatureCollectionManager());
+	}
+
+	FontStyleDataSet::FontStyleDataSet(FeatureCollectionManager fcm, int patchHeight, GaborFilterBank gfb) {
+		setGFB(gfb);
+		setFCM(fcm);
+
+	}
+
+	bool FontStyleDataSet::isEmpty() const {
+		if (mGFB.isEmpty() || mFCM.isEmpty())
+			return true;
+
+		return false;
+	}
+
+	int FontStyleDataSet::patchHeight() const{
+		return mPatchHeight;
+	}
+
+	GaborFilterBank FontStyleDataSet::gaborFilterBank() const {
+		return mGFB;
+	}
+
+	FeatureCollectionManager FontStyleDataSet::featureCollectionManager() const {
+		return mFCM;
+	}
+
+	LabelManager FontStyleDataSet::labelManager() const {
+		return mLM;
+	}
+
+	void FontStyleDataSet::setPatchHeight(int patchHeight){
+		mPatchHeight = patchHeight;
+	}
+
+	void FontStyleDataSet::setGFB(GaborFilterBank gfb) {
+		mGFB = gfb;
+	}
+
+	void FontStyleDataSet::setFCM(FeatureCollectionManager & fcm) {
+		mFCM = fcm;
+		mLM = fcm.toLabelManager();
+	}
+
+	//TODO test read/write/json functions for font style data set
+	void FontStyleDataSet::toJson(QJsonObject & jo, const QString & filePath) const {
+		
+		QJsonObject jod;
+
+		QJsonArray ja = mFCM.toJson(filePath).value(FeatureCollection::jsonKey()).toArray();
+		jod.insert(FeatureCollection::jsonKey(), ja);
+
+		mGFB.toJson(jod);
+		jod.insert("patchHeight", mPatchHeight);
+
+		jo.insert(jsonKey(), jod);
+	}
+
+	bool FontStyleDataSet::write(const QString & filePath) const{
+
+		QJsonObject jo;
+		toJson(jo, filePath);
+
+		int64 bw = Utils::writeJson(filePath, jo);
+
+		return bw > 0;
+	}
+
+	FontStyleDataSet FontStyleDataSet::fromJson(const QJsonObject & jo, const QString & filePath) {
+		
+		jo.value(jsonKey()).toObject();
+		FeatureCollectionManager fcm = FeatureCollectionManager::fromJson(jo, filePath);
+		GaborFilterBank gfb = GaborFilterBank::fromJson(jo.value(GaborFilterBank::jsonKey()).toObject());
+		int patchHeight = jo.value("patchHeight").toInt();
+		FontStyleDataSet fsd = FontStyleDataSet(fcm, patchHeight, gfb);
+
+		if (fsd.isEmpty())
+			qCritical() << "Failed to load font style data set from Json.";
+
+		return fsd;
+	}
+
+	FontStyleDataSet FontStyleDataSet::read(const QString & filePath) {
+
+		FontStyleDataSet fsd;
+
+		QJsonObject jo = Utils::readJson(filePath).value(FontStyleDataSet::jsonKey()).toObject();
+		
+		if (jo.empty())
+			qCritical() << "Failed to load "<< jsonKey() << " JsonObject from file: " << filePath;
+		else
+			fsd = fromJson(jo, filePath);
+
+		return fsd;
+	}
+
+	QString FontStyleDataSet::jsonKey() {
+		return "FontStyleDataSet";
+	}
+
+	// FontStyleClassifier --------------------------------------------------------------------
+	FontStyleClassifier::FontStyleClassifier(FontStyleDataSet dataSet, const cv::Ptr<cv::ml::StatModel> model, int classifierMode) {
+		mModel = model;
+		mFCM = dataSet.featureCollectionManager();
+		mGFB = dataSet.gaborFilterBank();
+		mClassifierMode = (ClassifierMode)classifierMode;
+	}
+
+	bool FontStyleClassifier::isEmpty() const {
+		return mModel->empty() || mFCM.isEmpty();
+	}
+
+	bool FontStyleClassifier::isTrained() const {
+		return mModel->isTrained();
+	}
+
+	cv::Ptr<cv::ml::StatModel> FontStyleClassifier::model() const {
+		return mModel;
+	}
+
+	LabelManager FontStyleClassifier::manager() const {
+		return mFCM.toLabelManager();
+	}
+
+	GaborFilterBank FontStyleClassifier::gaborFilterBank() const{
+		return mGFB;
+	}
+
+	QVector<LabelInfo> FontStyleClassifier::classify(cv::Mat testFeat) {
+
+		//TODO compute output probability results for each class
+		//TODO test influence of normalization (test + training data)
+		//TODO consider using additional weights
+
+		if (!checkInput())
+			return QVector<LabelInfo>();
+
+		cv::Mat cFeatures = testFeat;
+		cFeatures.convertTo(cFeatures, CV_32FC1);
+
+		float rawLabel = 0;
+		QVector<LabelInfo> labelInfos;
+		LabelManager labelManager = mFCM.toLabelManager();
+
+		cv::Mat featStdDev;
+		QVector<cv::Mat> cCentroids;
+		if (mClassifierMode == ClassifierMode::classify_nn || mClassifierMode == ClassifierMode::classify_nn_wed) {
+			cCentroids = mFCM.collectionCentroids();
+			featStdDev = mFCM.featureSTD();
+		}
+
+		for (int rIdx = 0; rIdx < cFeatures.rows; rIdx++) {
+			cv::Mat cr = cFeatures.row(rIdx);
+
+			if (svm()) {
+				rawLabel = svm()->predict(cr);
+			}
+			else if (bayes()) {
+				rawLabel = bayes()->predict(cr);
+				//bayes()->predictProb(InputArray inputs, OutputArray outputs, OutputArray outputProbs, int flags = 0);
+			}
+			else {
+				if (mClassifierMode == ClassifierMode::classify_nn || mClassifierMode == ClassifierMode::classify_knn) {
+					rawLabel = kNearest()->predict(cr);
+				}
+				else if (mClassifierMode == ClassifierMode::classify_nn_wed) {
+
+					//compute weighted euclidean distance by normalizing features by their standard deviation
+					cv::divide(cr, featStdDev, cr);
+
+					rawLabel = kNearest()->predict(cr);
+				}
+				else {
+					qCritical() << "Unable to perform font style classification. Classifier mode is unknown.";
+					return QVector<LabelInfo>();
+				}
+			}
+
+			// get label
+			int labelId = qRound(rawLabel);
+			LabelInfo li = labelManager.find(labelId);
+			labelInfos << li;
+		}
+
+		return labelInfos;
+	}
+
+	cv::Ptr<cv::ml::SVM> FontStyleClassifier::svm() const {
+		return mModel.dynamicCast<cv::ml::SVM>();
+	}
+
+	cv::Ptr<cv::ml::NormalBayesClassifier> FontStyleClassifier::bayes() const {
+		return mModel.dynamicCast<cv::ml::NormalBayesClassifier>();
+	}
+
+	cv::Ptr<cv::ml::KNearest> FontStyleClassifier::kNearest() const {
+		return mModel.dynamicCast<cv::ml::KNearest>();
+	}
+
+	cv::Mat FontStyleClassifier::draw(const cv::Mat& img) const {
+
+		if (!checkInput())
+			return cv::Mat();
+
+		QImage qImg = Image::mat2QImage(img, true);
+		QPainter p(&qImg);
+
+		// draw legend
+		mFCM.toLabelManager().draw(p);
+
+		return Image::qImage2Mat(qImg);
+	}
+
+	bool FontStyleClassifier::checkInput() const {
+
+		if (!isEmpty() && !isTrained())
+			qCritical() << "I cannot classify, since the model is not trained";
+
+		return !isEmpty() && isTrained();
+	}
+
+	bool FontStyleClassifier::write(const QString & filePath) const {
+
+		if (mModel && !mModel->isTrained())
+			qWarning() << "Writing classifier that is NOT trained!";
+
+		// write classifier model
+		QJsonObject jo;
+		toJson(jo, filePath);
+		int64 bw = Utils::writeJson(filePath, jo);
+
+		return bw > 0;	// if we wrote more than 0 bytes, it's ok
+	}
+
+	void FontStyleClassifier::toJson(QJsonObject& jo, QString filePath) const {
+
+		if (!mModel) {
+			qWarning() << "cannot save FontStyleClassifier because statModel is NULL.";
+			return;
+		}
+
+		// write features
+		QJsonObject joc = mFCM.toJson(filePath);
+		jo.insert(FeatureCollection::jsonKey(), joc.value(FeatureCollection::jsonKey()));
+
+		cv::FileStorage fs(".xml", cv::FileStorage::WRITE | cv::FileStorage::MEMORY | cv::FileStorage::FORMAT_XML);
+		mModel->write(fs);
+#if CV_MAJOR_VERSION == 3 && CV_MINOR_VERSION == 1
+		fs << "format" << 3;	// fixes bug #4402
+#endif
+		std::string data = fs.releaseAndGetString();
+
+		QByteArray ba(data.c_str(), (int)data.length());
+		QString ba64Str = ba.toBase64();
+
+		jo.insert("ClassifierModel", ba64Str);
+		jo.insert("ClassifierMode", QJsonValue(mClassifierMode));
+		mGFB.toJson(jo);
+	}
+
+	QString FontStyleClassifier::jsonKey() const {
+		return "FontStyleClassifier";
+	}
+
+	QSharedPointer<FontStyleClassifier> FontStyleClassifier::read(const QString & filePath) {
+
+		Timer dt;
+
+		QJsonObject jo = Utils::readJson(filePath);
+
+		if (jo.isEmpty()) {
+			qCritical() << "Failed to load font style classifier from" << filePath;
+			return QSharedPointer<FontStyleClassifier>::create();
+		}
+
+		QSharedPointer<FontStyleClassifier> fsc = QSharedPointer<FontStyleClassifier>::create();
+		auto fcm = FeatureCollectionManager::read(filePath);
+		fsc->mFCM = fcm;
+
+		if (jo.contains("ClassifierMode"))
+			fsc->mClassifierMode = (ClassifierMode)jo.value("ClassifierMode").toInt();
+		else
+			fsc->mClassifierMode = (ClassifierMode)-1;
+
+		fsc->mModel = FontStyleClassifier::readStatModel(jo, fsc->mClassifierMode);
+
+		if (!fsc->mFCM.isEmpty() && !fsc->mModel->empty()) {
+			qInfo() << "Font style classifier loaded from" << filePath << "in" << dt;
+		}
+		else {
+			qCritical() << "Failed to load font style classifier from" << filePath;
+			return QSharedPointer<FontStyleClassifier>::create();
+		}
+
+		fsc->mGFB = GaborFilterBank::fromJson(jo.value(GaborFilterBank::jsonKey()).toObject());
+
+		return fsc;
+	}
+
+	cv::Ptr<cv::ml::StatModel> FontStyleClassifier::readStatModel(QJsonObject & jo, ClassifierMode mode) {
+
+		// decode data
+		QByteArray ba = jo.value("ClassifierModel").toVariant().toByteArray();
+		ba = QByteArray::fromBase64(ba);
+
+		if (!ba.length()) {
+			qCritical() << "Can not read font style classifier from file.";
+			return cv::Ptr<cv::ml::StatModel>();
+		}
+
+		// read model from memory
+		cv::String dataStr(ba.data(), ba.length());
+		cv::FileStorage fs(dataStr, cv::FileStorage::READ | cv::FileStorage::MEMORY | cv::FileStorage::FORMAT_XML);
+		cv::FileNode root = fs.root();
+
+		if (root.empty()) {
+			qCritical() << "Can not read font style classifier model from file";
+			return cv::Ptr<cv::ml::StatModel>();
+		}
+
+		cv::Ptr<cv::ml::StatModel> model;
+		if (mode == FontStyleClassifier::classify_bayes)
+			model = cv::Algorithm::read<cv::ml::NormalBayesClassifier>(root);
+		else if (mode == FontStyleClassifier::classify_svm)
+			model = cv::Algorithm::read<cv::ml::SVM>(root);
+		else if (mode == classify_knn || mode == classify_nn || mode == classify_nn_wed)
+			model = cv::Algorithm::read<cv::ml::KNearest>(root);
+		else {
+			qCritical() << "Can not read font style classifier from file. Classifier mode unknown.";
+			return cv::Ptr<cv::ml::StatModel>();
+		}
+
+		return model;
+	}
+
 	// FontStyleClassificationConfig --------------------------------------------------------------------
 	FontStyleClassificationConfig::FontStyleClassificationConfig() : ModuleConfig("Font Style Classification Module") {
 	}
@@ -763,11 +1288,15 @@ namespace rdf {
 		if (!checkInput())
 			return false;
 
+		mGfb = mClassifier->gaborFilterBank();
+		
+		if (mGfb.isEmpty()) {
+			qCritical() << "Gabor filter bank undefined, make sure classifier file contains parameter information!";
+			return false;
+		}
+
 		if (mProcessLines) {
 			cv::Mat img = mImg.clone();
-
-			if (mGfb.isEmpty())
-				mGfb = createGaborKernels();
 
 			//debug
 			QImage patchResults = Image::mat2QImage(img, true);
@@ -826,9 +1355,6 @@ namespace rdf {
 				qCritical() << "Failed to classify style of text lines.";
 		}
 		else {
-			if (mGfb.isEmpty())
-				mGfb = createGaborKernels();
-			
 			if (!processPatches())
 				return false;
 		}
@@ -1091,80 +1617,77 @@ namespace rdf {
 		//TODO include font size property in labelName
 		//TODO add additional property for flagging label as GT
 
-		QString labelName = "fsl_";
-		labelName += font.family() + "_";
+		QString labelName = "fsl[";
+		labelName += font.family() + ";";
 
 		if (font.bold())
-			labelName += "b_";
+			labelName += "b;";
 		else
-			labelName += "!b_";
+			labelName += "!b;";
 
 		if (font.italic())
-			labelName += "i";
+			labelName += "i;";
 		else
-			labelName += "!i";
+			labelName += "!i;";
+
+		//labelName += "s" + QString::number(font.pixelSize());
+		labelName += "s" + QString::number(font.pixelSize());
+
+		labelName += "]";
 
 		return labelName;
 	}
 
 	QFont FontStyleClassification::labelNameToFont(QString labelName){
 
-		QStringList lp = labelName.split("_");
-		if (lp.first() != "fsl" || lp.size()!= 4) {
+		int sIdx = labelName.indexOf("fsl[");
+
+		if (sIdx == -1) {
 			qWarning() << "Failed to create font from label name: " << labelName;
 			return QFont();
 		}
-		
+
+		sIdx += 4;
+		int eIdx = labelName.indexOf("]", sIdx);
+		QString labelAtt = labelName.mid(sIdx, (eIdx - sIdx));
+
+		QStringList lp = labelAtt.split(";");
+		if (lp.size()!= 4) {
+			qWarning() << "Failed to create font from label name: " << labelName;
+			return QFont();
+		}
+
 		QFont font;
-		font.setPixelSize(30);
-		font.setFamily(lp[1]);
-		
-		if(lp[2] == "b")
+
+		if(lp[1] == "b")
 			font.setBold(true);
 
-		if (lp[2] == "!b")
+		if (lp[1] == "!b")
 			font.setBold(false);
 
-		if (lp[3] == "i")
+		if (lp[2] == "i")
 			font.setItalic(true);
 
-		if (lp[3] == "!i")
+		if (lp[2] == "!i")
 			font.setItalic(false);
 
-		return font;
-	}
+		bool ok=false;
+		int fSize;
 
-	GaborFilterBank FontStyleClassification::createGaborKernels(QVector<double> theta, QVector<double> lambda, bool openCV) {
+		if (lp[3].at(0)=="s") {
+			QString fontSizeStr = lp[3].mid(1, -1);
+			fSize = fontSizeStr.toInt(&ok);
+		}
 
-		//QVector<double> lambda = { 2 * sqrt(2), 4 * sqrt(2), 8 * sqrt(2), 16 * sqrt(2), 32 * sqrt(2), 64 * sqrt(2) };		//frequency/wavelength
-		//QVector<double> mLambda = { 2 * sqrt(2), 4 * sqrt(2), 8 * sqrt(2), 16 * sqrt(2), 32 * sqrt(2) };					//frequency/wavelength
-		//QVector<double> mTheta = { 0 * DK_DEG2RAD, 45 * DK_DEG2RAD, 90 * DK_DEG2RAD, 135 * DK_DEG2RAD };					//orientation
-
-		if (lambda.isEmpty())
-			lambda = { 2, 4, 8, 16, 32 };	//frequency/wavelength
-			//lambda = { 4, 8, 16, 32};		//test if low frequency is needed
+		if (!ok) {
+			qWarning() << "Failed to create font from label name: " << labelName;
+			return QFont();
+		} 
 		
-		for (int i = 0; i < lambda.size(); i++)
-			lambda[i] *= sqrt(2);
+		font.setPixelSize(fSize);
+		font.setFamily(lp[0]);
 
-		if (theta.isEmpty())
-			theta = { 0, 45, 90, 135};						//orientation
-
-		for (int i = 0; i < theta.size(); i++)
-			theta[i] *= DK_DEG2RAD;
-
-		//qDebug() << "lambda = " << lambda;
-		//qDebug() << "theta = " << theta;
-
-		//constant parameters			
-		int ksize = 128;			//alternatives: 2^x e.g. 64, 256
-		double sigma = -1;			//dependent on lambda; alternatives: 1.0; 2.0;
-		double gamma = 1.0;			//alternatives: 0.5/1.0
-		double psi = 0.0;			//alternatives: CV_PI * 0.5 (for real and imaginary part of gabor kernel)
-
-		GaborFilterBank filterBank = GaborFiltering::createGaborFilterBank(lambda, theta, ksize, sigma, psi, gamma, openCV);
-
-		return filterBank;
+		return font;
 	}
 
 	cv::Mat FontStyleClassification::computeGaborFeatures(QVector<QSharedPointer<TextPatch>> patches, GaborFilterBank gfb, cv::ml::SampleTypes featureType){

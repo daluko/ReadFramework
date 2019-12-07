@@ -384,6 +384,22 @@ cv::Mat Utils::drawBarChart(const cv::Mat data) {
 	return chartImg;
 }
 
+// Returns QFileInfoList containig only image files 
+// (filtered by file extenstions) from the passed directory.
+QFileInfoList Utils::getImageList(QString dataDir, QStringList filters) {
+	QDir dir(dataDir);
+	if (!dir.exists()) {
+		qWarning() << "Could not find image files. Directory does not exist: " << dataDir;
+		return QFileInfoList();
+	}
+
+	//qInfo() << "Getting list of *.tif and *.jpg files in directory: " << dataDir;
+
+	QFileInfoList fileInfoList = dir.entryInfoList(filters, QDir::Files | QDir::NoDotAndDotDot);
+
+	return fileInfoList;
+}
+
 // Converter --------------------------------------------------------------------
 
 /// <summary>

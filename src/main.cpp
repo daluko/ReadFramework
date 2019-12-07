@@ -32,7 +32,7 @@
 
 
 #pragma warning(push, 0)	// no warnings from includes
-#include <QCoreApplication>
+#include <QGuiApplication>
 #include <QCommandLineParser>
 #include <QDebug>
 #include <QImage>
@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
 	QCoreApplication::setApplicationName("READ Framework");
 	rdf::Utils::instance().initFramework();
 
-	QCoreApplication app(argc, (char**)argv);	// enable headless
+	QGuiApplication app(argc, (char**)argv);	// enable headless
 
 	// CMD parser --------------------------------------------------------------------
 	QCommandLineParser parser;
@@ -279,7 +279,7 @@ int main(int argc, char** argv) {
 
 			if (testWSA) {	
 				//dirPath = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA/LA Results";
-				//dirPath = "F:/dev/da/data/catalogue/fsc_selection/1905_Venice_EI/LA Results";
+				dirPath = "F:/dev/da/data/catalogue/fsc_selection/1905_Venice_EI/LA Results";
 				//dirPath = "F:/dev/da/data/catalogue/fsc_selection/1907_Paris_SdA/LA Results";
 
 				if (!dirPath.isEmpty())
@@ -304,11 +304,6 @@ int main(int argc, char** argv) {
 			if (testFSC) {
 				rdf::FontStyleClassificationTest fct(dc);
 
-				QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA";
-				//QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Paris_SdA";
-				//QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1905_Venice_EI";
-				fct.testCatalogueRegions(dataDir);
-
 				//if (!dirPath.isEmpty())
 				//	fct.processDirectory(dirPath);
 				//else
@@ -316,14 +311,13 @@ int main(int argc, char** argv) {
 
 				if (!dc.fontDataPath().isEmpty()) {
 
-					//test text patch processing
-					//QString testPath = dc.fontDataPath() + "/fontDataTwain/";
-					//QString testPath = dc.fontDataPath() + "/sampleNumberTest/";			
+					//test text patch processing			
+					//QString testPath = dc.fontDataPath() + "/gabor param test/";
+					//qDebug() << testPath;
+					////fct.testSyntheticDataSet(testPath, 500);
+					//fct.testSyntheticDataSet(testPath);
 
-					//QString testPath = dc.fontDataPath() + "/fontDataFixedSize/";
-					//fct.testSyntheticDataSet(testPath, 500);
-
-					//test different amounts of sample 
+					//test limited sample count on text synthetic patches
 					//TODO write results of multiple runs in a single file for easier evaluation
 					//int maxSampleCount = 25;
 					//while(maxSampleCount <= 3600) {
@@ -331,14 +325,20 @@ int main(int argc, char** argv) {
 					//	maxSampleCount = maxSampleCount + 25;
 					//}
 
-				//	//test synthetic page processing
-				//	QString pageDataPath = dc.fontDataPath() + "syntheticPage/pageData.txt";
-				//	QString trainDataPath = dc.fontDataPath() + "syntheticPage/FontTrainData.txt";
-				//	
-				//	qDebug() << "synthPage input path 1: " << pageDataPath;
-				//	qDebug() << "synthPage input path 2: " << trainDataPath;
+					//test synthetic page processing
+					//QString pageDataPath = dc.fontDataPath() + "syntheticPage/pageData.txt";
+					//QString trainDataPath = dc.fontDataPath() + "syntheticPage/FontTrainData.txt";
+					//
+					//qDebug() << "synthPage input path 1: " << pageDataPath;
+					//qDebug() << "synthPage input path 2: " << trainDataPath;
 
-				//	fct.testSyntheticPage(pageDataPath, trainDataPath);
+					//fct.testSyntheticPage(pageDataPath, trainDataPath);
+
+					//test word regions of catalogue data 
+					QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA";
+					//QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Paris_SdA";
+					//QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1905_Venice_EI";
+					fct.testCatalogueRegions(dataDir);
 				}
 				else {
 					qWarning() << "Can't test font style classification with synthetic data.";

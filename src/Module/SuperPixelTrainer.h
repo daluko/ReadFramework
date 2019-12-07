@@ -105,6 +105,7 @@ public:
 
 	QJsonObject toJson(const QString & filePath) const;
 	void write(const QString& filePath) const;
+	static FeatureCollectionManager fromJson(const QJsonObject & jo, const QString & filePath);
 	static FeatureCollectionManager read(const QString& filePath);
 	
 	void add(const FeatureCollection& collection);
@@ -113,6 +114,7 @@ public:
 
 	QVector<FeatureCollection> collection() const;
 	QVector<cv::Mat> collectionCentroids() const;
+	QVector<cv::Mat> collectionSTDs() const;
 	cv::Mat featureSTD() const;
 
 	int numFeatures() const;

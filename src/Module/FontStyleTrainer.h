@@ -79,7 +79,7 @@ protected:
 class DllCoreExport FontStyleTrainer : public Module {
 
 public:
-	FontStyleTrainer(FeatureCollectionManager& fcm);
+	FontStyleTrainer(FontStyleDataSet dataSet);
 
 	bool isEmpty() const override;
 	bool compute() override;
@@ -94,6 +94,8 @@ public:
 
 private:
 	FeatureCollectionManager mFeatureManager;
+	GaborFilterBank mGFB;
+	int mPatchHeight = -1;
 
 	// results
 	cv::Ptr<cv::ml::StatModel> mModel;

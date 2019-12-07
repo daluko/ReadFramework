@@ -36,6 +36,7 @@
 #include <QSharedPointer>
 #include <QSettings>
 #include <QTime>
+#include <QFileInfo>
 
 #include <opencv2/core.hpp>
 #pragma warning(pop)
@@ -89,6 +90,7 @@ public:
 	static int64 writeJson(const QString& filePath, const QJsonObject& jo);
 	static void initDefaultFramework();
 	static cv::Mat drawBarChart(const cv::Mat data);
+	static QFileInfoList getImageList(QString dataDir, QStringList filters = { "*.tif" , "*.jpg" });
 
 	// little number thingies
 	template<typename num>

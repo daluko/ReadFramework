@@ -41,7 +41,6 @@
 #pragma warning(push, 0)	// no warnings from includes
 // Qt Includes
 #include <QTextDocument>
-#include <QFileInfo>
 #pragma warning(pop)
 
 // Qt/CV defines
@@ -61,7 +60,6 @@ public:
 	void testParameterSettings(const QString dirPath = QString());
 	void testFontHeightRatio();
 
-
 protected:
 	DebugConfig mConfig;
 	QSharedPointer<WhiteSpaceAnalysisConfig> mWsaConfig;
@@ -80,39 +78,25 @@ public:
 	void testSyntheticDataSet(QString filePath, int maxSampleCount = -1);
 	void testSyntheticPage(QString filePath, QString trainDataPath);
 	void testCatalogueRegions(QString dirPath);
+	bool patchesToXML(QVector<QSharedPointer<TextPatch>> textPatches, QString imagePath);
 
 protected:
-	QFileInfoList getImageList(QString dataDir);
 
 	QStringList loadTextSamples(QString filePath);
 	QVector<QSharedPointer<TextLine>> loadTextLines(QString imagePath);
 	
-	QVector< QSharedPointer<TextPatch>> generateDirTextPatches(QString folderPath, int patchSize = 75, QSharedPointer<LabelManager> lm = QSharedPointer<LabelManager>::create());
-	QVector< QSharedPointer<TextPatch>> generateTextPatches(QString imagePath, int patchSize = 75, QSharedPointer<LabelManager> lm = QSharedPointer<LabelManager>::create());
 	QVector<QSharedPointer<TextPatch>> regionsToTextPatches(QVector<QSharedPointer<TextRegion>> wordRegions, LabelManager lm,  cv::Mat img);
-
-	bool readDataSet(QString inputFilePath, FeatureCollectionManager & fcm, QStringList & samples) const;
-	void reduceSampleCount(FeatureCollectionManager & fcm, int sampleCount) const;
 
 	QStringList loadWordSamples(QString filePath, int minWordLength = 4, bool removeDuplicates = true);
 	QString readTextFromFile(QString filePath);
 	QVector<QStringList> splitSampleSet(QStringList samplesSet, double ratio = 0.8);
+	void reduceSampleCount(FeatureCollectionManager & fcm, int sampleCount) const;
+	GaborFilterBank generateGFB();
 	
 	bool generateSnytheticTestPage(QString filePath, QString outputFilePath, QVector<QFont> synthPageFonts);
 	bool generateGroundTruthData(QTextDocument& doc, QString filePath);
-	bool generateDataSet(QStringList sample, QVector<QFont> fonts, QString outputFilePath, bool addLabels = true);
-	bool generateDataSet(QString dataSetPath, int patchSize, QString outputFilePath = QString(), bool addLabels = true);
 
-	QSharedPointer<FontStyleClassifier> trainFontStyleClassifier(QString trainDir, int patchSize, QString classifierFilePath = QString(), bool saveToFile = true);
-	LabelManager generateFontLabelManager(QVector<QFont> fonts);
-	FeatureCollectionManager generatePatchFeatures(QVector<QSharedPointer<TextPatch>> textPatches, bool addLabels = true);
-
-	QVector<QSharedPointer<TextPatch>> generateTextPatches(QStringList textSamples, LabelManager labelManager);
-	QVector<QSharedPointer<TextPatch>> generateTextPatches(QVector<QSharedPointer<TextLine>> wordRegions, cv::Mat img, 
-		QSharedPointer<LabelManager> manager = QSharedPointer<LabelManager>::create(), int patchHeight = 50);
-	
-	QVector<QFont> generateFontStyles() const;
-	QVector<QFont> generateFonts(int fontCount = 4, QStringList fonts = QStringList(), QVector<QFont> fontStyles = QVector<QFont>()) const;
+	QSharedPointer<FontStyleClassifier> trainFontStyleClassifier(QString trainDir, GaborFilterBank gfb, int patchSize, QString classifierFilePath = QString(), bool saveToFile = true);
 
 	void evalSyntheticDataResults(const QVector<QSharedPointer<TextPatch>>& textPatches, 
 		const LabelManager labelManager, QString outputDir = QString()) const;

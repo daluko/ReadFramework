@@ -333,7 +333,7 @@ bool WhiteSpaceAnalysis::compute() {
 	// TEXT BLOCK FORMATION: compute text blocks formed by previously detected text lines
 	Timer dt4;
 
-	//use text line hypotheses as input if no WSS results are availabel
+	//use text line hypotheses as input if no WSS results are available
 	if (mWSTextLines.isEmpty())
 			mWSTextLines = mTextLineHypotheses;
 
@@ -745,6 +745,7 @@ QVector<QSharedPointer<TextRegion>> WhiteSpaceAnalysis::textLineRegions() const{
 		return mTextLineRegions;
 
 	for (auto tr : textRegions) {
+		tr->setId("cvl-" + tr->id().remove("{").remove("}"));	//avoid errors when using as input for aletheia eval tool
 		mTextLineRegions << qSharedPointerCast<TextRegion>(tr);
 	}
 	
@@ -753,6 +754,19 @@ QVector<QSharedPointer<TextRegion>> WhiteSpaceAnalysis::textLineRegions() const{
 	//}
 
 	return mTextLineRegions;
+}
+
+QVector<QSharedPointer<TextLine>> WhiteSpaceAnalysis::textLineHypotheses() const{
+
+	QVector<QSharedPointer<TextLine>> lineHypos;
+
+	for (auto tl : mTextLineHypotheses) {
+		auto tlr = tl->toTextLine();
+		tlr->setId("cvl-" + tl->id().remove("{").remove("}"));	//avoid errors when using as input for aletheia eval tool
+		lineHypos << tlr;
+	}	
+
+	return lineHypos;
 }
 
 QSharedPointer<Region> WhiteSpaceAnalysis::textBlockRegions() const {

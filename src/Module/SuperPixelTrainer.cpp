@@ -565,6 +565,27 @@ QJsonObject FeatureCollectionManager::toJson(const QString & filePath) const {
 	return jo;
 }
 
+FeatureCollectionManager FeatureCollectionManager::fromJson(const QJsonObject & jo, const QString & filePath){
+
+	FeatureCollectionManager manager;
+
+	// parse the feature collections
+	QJsonArray labels = jo.value(FeatureCollection::jsonKey()).toArray();
+	if (labels.isEmpty()) {
+		qCritical() << "cannot locate" << FeatureCollection::jsonKey();
+		return manager;
+	}
+
+	// parse labels
+	for (const QJsonValue& cLabel : labels) {
+		QJsonObject co = cLabel.toObject();
+		manager.add(FeatureCollection::read(co, filePath));
+	}
+
+	return manager;
+
+}
+
 void FeatureCollectionManager::write(const QString & filePath) const {
 
 	QJsonArray ja;
@@ -618,8 +639,7 @@ QVector<cv::Mat> FeatureCollectionManager::collectionCentroids() const {
 
 		//compute centroid for each collection
 		for (int i = 0; i < desc.size().width; ++i) {
-			cv::Scalar mean;
-			meanStdDev(desc.col(i), mean, cv::noArray());
+			cv::Scalar mean = cv::mean(desc.col(i));
 			centroid.push_back<double>(mean[0]);
 		}
 
@@ -629,6 +649,29 @@ QVector<cv::Mat> FeatureCollectionManager::collectionCentroids() const {
 	}
 
 	return cCentroids;
+}
+
+QVector<cv::Mat> FeatureCollectionManager::collectionSTDs() const {
+
+	QVector<cv::Mat> cSTDs;
+
+	for (auto c : collection()) {
+		cv::Mat desc = c.descriptors();
+		cv::Mat cSTD;
+
+		//compute centroid for each collection
+		for (int i = 0; i < desc.size().width; ++i) {
+			cv::Scalar mean, std;
+			meanStdDev(desc.col(i), mean, std,cv::noArray());
+			cSTD.push_back<double>(std[0]);
+		}
+
+		cSTD.convertTo(cSTD, CV_32FC1);
+		cv::transpose(cSTD, cSTD);
+		cSTDs << cSTD;
+	}
+
+	return cSTDs;
 }
 
 cv::Mat FeatureCollectionManager::featureSTD() const {
