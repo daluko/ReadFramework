@@ -85,7 +85,7 @@ namespace rdf {
 	protected:
 		int mTextureSize = 128;
 		
-		double mMinLineNumber = 3.0;
+		double mMinLineNumber = 2.0;
 		double mMaxPatchHeight = floor(mTextureSize / mMinLineNumber);
 
 		//input

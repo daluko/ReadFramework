@@ -57,7 +57,6 @@
 #include <QRandomGenerator>
 #pragma warning(pop)
 
-
 namespace rdf {
 
 //Text Height Estimation Test ------------------------------------------------------------------------------
@@ -579,7 +578,6 @@ void FontStyleClassificationTest::testSyntheticDataSet(QString fontDataDir, Gabo
 
 	//TODO store data sets (+ text patches) in a single file only
 	//TODO make sure textureSize is adapted to training and test samples when loading them from file
-
 	Timer dt;
 
 	//param definitions
@@ -598,8 +596,7 @@ void FontStyleClassificationTest::testSyntheticDataSet(QString fontDataDir, Gabo
 	else {
 		runIdentifier += "; texSize=" + QString::number(textureSize);
 		pathAttribute = runIdentifier;
-	}
-		
+	}	
 
 	outputDir = QFileInfo(fontDataDir + QDir::separator() + "FontStyleEvaluationResults_" + pathAttribute + QDir::separator()).absoluteFilePath();
 	if (!QDir().mkpath(outputDir)) {

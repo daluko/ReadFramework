@@ -102,7 +102,6 @@ namespace rdf {
 		mLabel->setTrueLabel(label);
 		generateTextImage(text, font, cropText);
 		
-		cv::Mat debug = mTextPatch.clone();
 		if (textureSize > 0)
 			setTextureSize(textureSize);
 
