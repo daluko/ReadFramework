@@ -66,25 +66,27 @@ namespace rdf {
 		TextPatch();
 		TextPatch(cv::Mat tpImg, int fixedPatchSize = -1, int textureSize = -1, const QString& id = QString());
 		TextPatch(cv::Mat textImg, Rect tpRect, int fixedPatchSize = -1, int textureSize = -1, const QString& id = QString());
-		TextPatch(QString text, const LabelInfo label, int fixedPatchSize = -1, int textureSize = -1, const QString & id = QString());
+		TextPatch(QString text, const LabelInfo label, int fixedPatchSize = -1, int textureSize = -1,
+			bool cropPatch = false,  const QString & id = QString());
 
 		bool isEmpty() const;
-		int textureSize() const;
-		int textureLineHeight() const;
 
-		void setTextureSize(int numLayers);
-		void setTextureLineHeight(int lineHeight);
+		int textureSize() const;
+		void setTextureSize(int texSize);
 
 		QSharedPointer<PixelLabel> label() const;
 		cv::Mat patchTexture() const;
 		cv::Mat textPatchImg() const;
+		int maxPatchHeight() const;
 
 		void setPolygon(const Polygon& polygon);
 		Polygon polygon() const;
 
 	protected:
 		int mTextureSize = 128;
-		int mTextureLineHeight = 32;
+		
+		double mMinLineNumber = 3.0;
+		double mMaxPatchHeight = floor(mTextureSize / mMinLineNumber);
 
 		//input
 		cv::Mat mTextPatch;
@@ -102,29 +104,29 @@ namespace rdf {
 
 		void adaptPatchHeight(int patchHeight);
 		void adaptPatchHeight(cv::Mat img, Rect tpRect, int patchHeight);
-		void adaptTextureLineHeight(int textureSize, int textPatchSize);
 	};
 
 		class DllCoreExport FontDataGenerator{
 
 	public:
 		static int computePatchSizeEstimate(QString dataSetDir);
+		static int computePatchSizeEstimate(QStringList samples, QVector<QFont> fonts);
 
 		static QVector<QFont> generateFontStyles();
 		static QVector<QFont> generateFonts(int fontCount = 4, QStringList fonts = QStringList(), QVector<QFont> fontStyles = QVector<QFont>());
 		static LabelManager generateFontLabelManager(QVector<QFont> fonts);
 
-		static QVector<QSharedPointer<TextPatch>> generateDirTextPatches(QString dirPath, int patchHeight = 75, QSharedPointer<LabelManager> lm = QSharedPointer<LabelManager>::create());
-		static QVector<QSharedPointer<TextPatch>> generateTextPatches(QString imagePath, int patchHeight = 75, QSharedPointer<LabelManager> lm = QSharedPointer<LabelManager>::create());	
-		static QVector<QSharedPointer<TextPatch>> generateTextPatches(QStringList textSamples, LabelManager labelManager);
+		static QVector<QSharedPointer<TextPatch>> generateDirTextPatches(QString dirPath, int patchHeight = 50, int textureSize = -1, QSharedPointer<LabelManager> lm = QSharedPointer<LabelManager>::create());
+		static QVector<QSharedPointer<TextPatch>> generateTextPatches(QString imagePath, int patchHeight = 50, QSharedPointer<LabelManager> lm = QSharedPointer<LabelManager>::create(), int textureSize = -1);
+		static QVector<QSharedPointer<TextPatch>> generateTextPatches(QStringList textSamples, LabelManager labelManager, int patchHeight = -1, int textureSize = -1);
 		static QVector<QSharedPointer<TextPatch>> generateTextPatches(QVector<QSharedPointer<TextLine>> wordRegions, cv::Mat img, 
-			QSharedPointer<LabelManager> manager = QSharedPointer<LabelManager>::create(), int patchHeight = 50);
+			QSharedPointer<LabelManager> manager = QSharedPointer<LabelManager>::create(), int patchHeight = 50, int textureSize = -1);
 
 		static FeatureCollectionManager computePatchFeatures(QVector<QSharedPointer<TextPatch>> textPatches, GaborFilterBank gfb = GaborFilterBank(), bool addLabels = true);
 
 		static bool readDataSet(QString inputFilePath, FeatureCollectionManager & fcm, QStringList & samples);
-		static bool generateDataSet(QStringList sample, QVector<QFont> fonts, GaborFilterBank gfb, QString outputFilePath, bool addLabels = true);
-		static bool generateDataSet(QString dataSetPath, GaborFilterBank gfb, int patchSize, QString outputFilePath = QString(), bool addLabels = true);
+		static bool generateDataSet(QStringList sample, QVector<QFont> fonts, GaborFilterBank gfb, QString outputFilePath, int patchHeight = -1, int textureSize = -1, bool addLabels = true);
+		static bool generateDataSet(QString dataSetPath, GaborFilterBank gfb, int patchSize, int textureSize = -1, QString outputFilePath = QString(), bool addLabels = true);
 
 		template <typename T>
 		static QVector< QSharedPointer<T>> loadRegions(QString imagePath, Region::Type type) {

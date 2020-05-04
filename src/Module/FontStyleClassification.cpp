@@ -1,5 +1,3 @@
-#include "FontStyleClassification.h"
-#include "FontStyleClassification.h"
 /*******************************************************************************************************
 ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ.
 
@@ -32,23 +30,21 @@ related links:
 [4] http://nomacs.org
 *******************************************************************************************************/
 
-#include "FontStyleClassification.h"
-
 #include "Image.h"
 #include "Utils.h"
 #include "Elements.h"
 #include "ElementsHelper.h"
 #include "WhiteSpaceAnalysis.h"
+#include "FontStyleClassification.h"
 #include "ImageProcessor.h"
 #include "PageParser.h"
 #include "DebugDavid.h"
 
 #pragma warning(push, 0)	// no warnings from includes
+#include "opencv2/imgproc.hpp"
 #include <QDir>
 #include <QFileInfo>
 #include <QPainter>
-#include "opencv2/imgproc.hpp"
-
 #include <QJsonObject>		// needed for LabelInfo
 #include <QJsonDocument>	// needed for LabelInfo
 #include <QJsonArray>		// needed for LabelInfo
@@ -56,7 +52,6 @@ related links:
 
 namespace rdf {
 	// TextPatch --------------------------------------------------------------------
-	//TODO test new text patch generation for errors
 	TextPatch::TextPatch() {
 		mTextPatch = cv::Mat();
 		mLabel->setTrueLabel(LabelInfo(1, "unknown_font"));
@@ -65,6 +60,9 @@ namespace rdf {
 	TextPatch::TextPatch(cv::Mat tpImg, int fixedPatchSize, int textureSize, const QString & id) : BaseElement(id) {
 
 		mTextPatch = tpImg.clone();
+		
+		if (textureSize > 0)
+			setTextureSize(textureSize);	
 
 		if (fixedPatchSize != -1 && fixedPatchSize < 1) {
 			qDebug() << "Patch size parameter invalid. Patch size won't be modified.";
@@ -73,9 +71,6 @@ namespace rdf {
 
 		if (fixedPatchSize != -1)
 			adaptPatchHeight(fixedPatchSize);
-
-		if (textureSize != -1)
-			adaptTextureLineHeight(textureSize, fixedPatchSize);
 
 		if (!generatePatchTexture())
 			qWarning() << "Failed to generate texture from text patch.";
@@ -87,12 +82,12 @@ namespace rdf {
 		const QString & id) : BaseElement(id) {
 
 		mTextPatch = textImg.clone();
+		
+		if (textureSize > 0)
+			setTextureSize(textureSize);
 
 		if (fixedPatchSize!=-1)
 			adaptPatchHeight(textImg, tpRect, fixedPatchSize);
-
-		if (textureSize != -1)
-			adaptTextureLineHeight(textureSize, fixedPatchSize);
 
 		if (!generatePatchTexture())
 			qWarning() << "Failed to generate texture from text patch.";
@@ -101,17 +96,18 @@ namespace rdf {
 	}
 
 	TextPatch::TextPatch(QString text, const LabelInfo label, int fixedPatchSize,
-		int textureSize, const QString & id) : BaseElement(id){
+		int textureSize, bool cropText ,const QString & id) : BaseElement(id){
 
 		QFont font = FontStyleClassification::labelNameToFont(label.name());
 		mLabel->setTrueLabel(label);
-		generateTextImage(text, font);
+		generateTextImage(text, font, cropText);
+		
+		cv::Mat debug = mTextPatch.clone();
+		if (textureSize > 0)
+			setTextureSize(textureSize);
 
 		if(fixedPatchSize != -1)
 			adaptPatchHeight(fixedPatchSize);
-
-		if(textureSize != -1)
-			adaptTextureLineHeight(textureSize, fixedPatchSize);
 
 		if(!generatePatchTexture())
 			qWarning() << "Failed to generate texture from text patch.";
@@ -128,113 +124,70 @@ namespace rdf {
 		return mTextureSize;
 	}
 
-	int TextPatch::textureLineHeight() const {
-		return mTextureLineHeight;
-	}
-
 	void TextPatch::setTextureSize(int textureSize) {
 		mTextureSize = textureSize;
-	}
-
-	void TextPatch::setTextureLineHeight(int textureLineHeight) {
-		mTextureLineHeight = textureLineHeight;
+		mMaxPatchHeight = floor(textureSize / mMinLineNumber);
 	}
 
 	bool TextPatch::generatePatchTexture() {
-
-		//TODO test influence of updated texture generation
 
 		if (mTextPatch.empty()) {
 			qWarning() << "Couldn't create patch texture! Text patch is empty";
 			mPatchTexture = cv::Mat();
 			return false;
 		}
+		
+		cv::Mat textPatch = mTextPatch;
 
-		if (mTextureLineHeight > mTextureSize) {
-			qWarning() << "Couldn't create patch texture! texture line height > patch size";
-			mPatchTexture = cv::Mat();
-			return false;
-		}
-
-		//get text input image and resize + replicate it to fill an image patch of size sz
-		double sf = mTextureLineHeight / (double)mTextPatch.size().height;
-		cv::Mat patchScaled = mTextPatch.clone();
-		if (sf*mTextPatch.size().height < 1 || sf * mTextPatch.size().width < 1) {
-			mPatchTexture = cv::Mat();
-			qWarning() << "Couldn't create patch texture! Scaling text patch results in size < 1 pixel.";
-			return false;
-		}
+		//rescaling text patch image to fit at least mMinLineNumber lines of text patches into texture image
+		if (mTextPatch.rows > mMaxPatchHeight) {
 			
-		resize(mTextPatch, patchScaled, cv::Size(), sf, sf, cv::INTER_LINEAR); //TODO test different interpolation modes
+			double sf = mMaxPatchHeight / mTextPatch.rows;
 
-		//reimplementationSTART
-		cv::Mat texture = patchScaled.clone();
-		double lineNum = ceil((double)mTextureSize / (double)mTextureLineHeight);
+			if (sf*mTextPatch.size().height < 1 || sf * mTextPatch.size().width < 1) {
+				mPatchTexture = cv::Mat();
+				qWarning() << "Couldn't create patch texture! Scaling text patch results in size < 1 pixel.";
+				return false;
+			}
+			
+			resize(mTextPatch, textPatch, cv::Size(), sf, sf, cv::INTER_LINEAR); //TODO test different interpolation modes
+			//cv::Mat textPatch1, textPatch2;
+			//resize(mTextPatch, textPatch1, cv::Size(), sf, sf, cv::INTER_CUBIC);
+			//resize(mTextPatch, textPatch2, cv::Size(), sf, sf, cv::INTER_LANCZOS4);
+		}
+		
+		cv::Mat texture = textPatch;
 
-		while (texture.size().width < mTextureSize*lineNum) {
-			cv::hconcat(texture, patchScaled, texture);
+		//get text input image and replicate it to fill an image patch of size mTextureSize
+		double lineNum = floor((double)mTextureSize / (double)texture.rows);
+
+		while (texture.cols < mTextureSize*lineNum) {
+			cv::hconcat(texture, textPatch, texture);
 		}
 
 		int i = 0;
-		cv::Mat mPatchTexture_ = cv::Mat();
+		mPatchTexture = cv::Mat();
+		int pad = (int) floor((mTextureSize - (texture.rows*lineNum)) / lineNum);
+		int hPad = (int)floor((double)pad / 2.0);
+		int tPad = (pad % 2 == 0) ? hPad : hPad + 1;
+
 		while (i < lineNum) {
-			int start = i* mTextureSize;
-			int end = (i+1) * mTextureSize;
+			int start = i * mTextureSize;
+			int end = (i + 1) * mTextureSize;
 			cv::Mat textureLine = texture(cv::Range::all(), cv::Range(start, end));
-			
-			if (mPatchTexture_.empty())
-				mPatchTexture_ = textureLine.clone();
+
+			//add blank border to text lines
+			copyMakeBorder(textureLine, textureLine, hPad, tPad, 0, 0, cv::BORDER_CONSTANT, cv::Scalar(255, 255, 255, 255));
+
+			if (mPatchTexture.empty())
+				mPatchTexture = textureLine.clone();
 			else
-				cv::vconcat(mPatchTexture_, textureLine, mPatchTexture_);
+				cv::vconcat(mPatchTexture, textureLine, mPatchTexture);
 			i++;
 		}
-		
-		mPatchTexture_ = mPatchTexture_(cv::Range(0, mTextureSize), cv::Range(0, mTextureSize));
-		mPatchTexture = mPatchTexture_.clone();
 
-		//reimplementationEND
-
-		//if (patchScaled.size().width > mTextureSize) {
-
-		//	cv::Mat firstPatchLine = patchScaled(cv::Range::all(), cv::Range(0, mTextureSize));
-		//	mPatchTexture = firstPatchLine.clone();
-
-		//	cv::Mat tmpImg = patchScaled(cv::Range::all(), cv::Range(mTextureSize, patchScaled.size().width));
-		//	while (tmpImg.size().width > mTextureSize) {
-		//		cv::Mat patchLine = tmpImg(cv::Range::all(), cv::Range(0, mTextureSize));
-		//		cv::vconcat(mPatchTexture, patchLine, mPatchTexture);
-		//		tmpImg = tmpImg(cv::Range::all(), cv::Range(mTextureSize, tmpImg.size().width));
-		//	}
-
-		//	if (!tmpImg.empty()) {
-		//		cv::hconcat(tmpImg, firstPatchLine, tmpImg);
-		//		tmpImg = tmpImg(cv::Range::all(), cv::Range(0, mTextureSize));
-		//		cv::vconcat(mPatchTexture, tmpImg, mPatchTexture);
-		//	}
-
-		//	if (mPatchTexture.size().height > mTextureSize) {
-		//		qWarning() << "Could not fit text into text patch. Cropping image according to patch size. Some text information might be lost.";
-		//	}
-
-		//	while (mPatchTexture.size().height < mTextureSize) {
-		//		cv::vconcat(mPatchTexture, mPatchTexture, mPatchTexture);
-		//	}
-		//}
-		//else {
-		//	cv::Mat textPatchLine = patchScaled.clone();
-
-		//	while (textPatchLine.size().width < mTextureSize) {
-		//		cv::hconcat(textPatchLine, patchScaled, textPatchLine);
-		//	}
-
-		//	textPatchLine = textPatchLine(cv::Range::all(), cv::Range(0, mTextureSize));
-		//	mPatchTexture = textPatchLine.clone();
-		//	while (mPatchTexture.size().height < mTextureSize) {
-		//		cv::vconcat(mPatchTexture, textPatchLine, mPatchTexture);
-		//	}
-		//}
-
-		//mPatchTexture = mPatchTexture(cv::Range(0, mTextureSize), cv::Range(0, mTextureSize));
+		//pad bottom of texture with white border
+		copyMakeBorder(mPatchTexture, mPatchTexture, 0, mTextureSize- mPatchTexture.rows, 0, 0, cv::BORDER_CONSTANT, cv::Scalar(255,255,255,255));
 
 		return true;
 	}
@@ -242,7 +195,7 @@ namespace rdf {
 	bool TextPatch::generateTextImage(QString text, QFont font, bool cropImg) {
 
 		if (text.isEmpty()) {
-			qWarning() << "Could not generate text patch image. No input text found.";
+			qWarning() << "Could not generate text image. No input text found.";
 			mTextPatch = cv::Mat();
 			return false;
 		}
@@ -283,7 +236,7 @@ namespace rdf {
 
 		//adapt text patch height according to patchHeight parameter
 		cv::Mat textPatch;
-		Rect imgRec = Rect(img);
+		Rect imgRect = Rect(img);
 
 		int padding = patchHeight - (int)tpRect.height();
 		if (tpRect.height() < patchHeight) {
@@ -297,24 +250,24 @@ namespace rdf {
 			tpRect.move(Vector2D(0, -tPad));
 			tpRect.setSize(tpRect.size() + Vector2D(0, hPad + tPad));
 
-			if (!imgRec.contains(tpRect)) //ensure crop rect is within image boundaries
-				tpRect = imgRec.intersected(tpRect);
+			if (!imgRect.contains(tpRect)) //ensure crop rect is within image boundaries
+				tpRect = imgRect.intersected(tpRect);
 
 			textPatch = img(tpRect.toCvRect());
 			padding = patchHeight - textPatch.size().height; //update padding size
 
 			//TODO consider filling with white /average background color
 			if (padding > 0) { //replicate border to fill patch area
-				hPad = floor((double)padding / 2.0);
+				hPad = (int)floor((double)padding / 2.0);
 				tPad = (padding % 2 == 0) ? hPad : hPad + 1;
-				copyMakeBorder(textPatch, textPatch, tPad, hPad, 0, 0, cv::BORDER_REPLICATE);
+
+				if(tpRect==imgRect)
+					copyMakeBorder(textPatch, textPatch, tPad, hPad, 0, 0, cv::BORDER_CONSTANT, cv::Scalar(255,255,255,255));
+				else
+					copyMakeBorder(textPatch, textPatch, tPad, hPad, 0, 0, cv::BORDER_REPLICATE);
 			}
 		}
 		else if (tpRect.height() > patchHeight) {
-
-			//basic
-			//tpRect.setSize(Vector2D(tpRect.width(), patchHeight));
-			//textPatch = img(tpRect.toCvRect());
 
 			cv::Mat vPP;
 			textPatch = img(tpRect.toCvRect());
@@ -339,14 +292,6 @@ namespace rdf {
 		mTextPatch = textPatch.clone();
 	}
 
-	void TextPatch::adaptTextureLineHeight(int textureSize, int textPatchSize){
-		setTextureSize(textureSize);
-		int x =  qRound((double)textureSize / (double)textPatchSize);
-		int lineHeight = qRound((double)textureSize / (double)x);
-		setTextureLineHeight(lineHeight);
-		qDebug() << "Adapting mTextureLineHeight: " <<"x = " << x << ", mTextureLineHeight = " << lineHeight ;
-	}
-
 	QSharedPointer<PixelLabel> TextPatch::label() const {
 		return mLabel;
 	}
@@ -357,6 +302,10 @@ namespace rdf {
 
 	cv::Mat TextPatch::textPatchImg() const{
 		return mTextPatch;
+	}
+
+	int TextPatch::maxPatchHeight() const{
+		return mMaxPatchHeight;
 	}
 
 	void TextPatch::setPolygon(const Polygon & polygon) {
@@ -414,29 +363,35 @@ namespace rdf {
 		}
 
 		patchSize = qRound(Algorithms::statMoment(heights, 0.95));
-		int hMax = qRound(Algorithms::statMoment(heights, 1));
-		int hMin = qRound(Algorithms::statMoment(heights, 0));
-
-		//QList<int> heights_;
-		//for (auto lr : lineRegions) {
-		//	Rect lrr = Rect::fromPoints(lr->polygon().toPoints());
-		//	int lrh = qRound(lrr.height());
-		//	heights_ << lrh;
-		//}
-
-		//int patchSize_ = qRound(Algorithms::statMoment(heights_, 0.9));
-		//int hMax_ = qRound(Algorithms::statMoment(heights_, 1));
-		//int hMin_ = qRound(Algorithms::statMoment(heights_, 0));
-
-		////qDebug() << heights;
-		//qDebug() << "patchSize = " << patchSize << "; hMax " << hMax << "; hMin = " << hMin;
-		//qDebug() << "patchSize_ = " << patchSize_ << "; hMax_ " << hMax_ << "; hMin_ = " << hMin_;
-
-		//alternative pse values
-		//patchSize = patchSize_; 
-		//patchSize = hMax;
 
 		return patchSize;
+	}
+
+	int FontDataGenerator::computePatchSizeEstimate(QStringList samples, QVector<QFont> fonts){
+
+		if (fonts.empty() || samples.empty()) {
+			qCritical() << "Could not compute patch size estimate. Make sure to correctely pass font information and text samples.";
+			qWarning() << "No fixed patch size will be used! Height of text patch will be unmodified.";
+			return -1;
+		}
+
+		LabelManager labelManager = FontDataGenerator::generateFontLabelManager(fonts);
+		auto patches = FontDataGenerator::generateTextPatches(samples, labelManager);
+
+		if (fonts.empty() || samples.empty()) {
+			qCritical() << "Failed to compute text patches for patch size estimation!";
+			qWarning() << "No fixed patch size will be used! Height of text patch will be unmodified.";
+			return -1;
+		}
+
+		QList<int> heights;
+		for (auto p : patches)
+			heights << p->textPatchImg().rows;
+
+		int patchHeightEstimate = qRound(Algorithms::statMoment(heights, 0.95));
+		qInfo() << "Patch height estimate for synthetic data set = " << QString::number(patchHeightEstimate);
+
+		return patchHeightEstimate;
 	}
 
 	QVector<QFont> FontDataGenerator::generateFontStyles(){
@@ -525,18 +480,17 @@ namespace rdf {
 		return labelManager;
 	}
 
-	QVector<QSharedPointer<TextPatch>> FontDataGenerator::generateDirTextPatches(QString dirPath, int patchSize, QSharedPointer<LabelManager> lm) {
+	QVector<QSharedPointer<TextPatch>> FontDataGenerator::generateDirTextPatches(QString dirPath, int patchHeight, int textureSize, QSharedPointer<LabelManager> lm) {
 
 		QFileInfoList fileInfoList = Utils::getImageList(dirPath);
 
 		QVector<QSharedPointer<TextPatch>> textPatches = QVector<QSharedPointer<TextPatch>>();
 
 		int i = 0;
-		int wordRegionCount = 0;
 		for (auto f : fileInfoList) {
 
 			QString imagePath = f.absoluteFilePath();
-			auto imagePatches = generateTextPatches(imagePath, patchSize, lm);
+			auto imagePatches = generateTextPatches(imagePath, patchHeight, lm, textureSize);
 
 			if (imagePatches.isEmpty()) {
 				qWarning() << "No text patches generated! Skipping image.";
@@ -553,7 +507,7 @@ namespace rdf {
 		return textPatches;
 	}
 
-	QVector<QSharedPointer<TextPatch>> FontDataGenerator::generateTextPatches(QString imagePath, int patchSize, QSharedPointer<LabelManager> lm) {
+	QVector<QSharedPointer<TextPatch>> FontDataGenerator::generateTextPatches(QString imagePath, int patchHeight, QSharedPointer<LabelManager> lm, int textureSize) {
 
 		QVector<QSharedPointer<TextPatch>> textPatches = QVector<QSharedPointer<TextPatch>>();
 
@@ -575,14 +529,12 @@ namespace rdf {
 			return textPatches;
 		}
 
-		textPatches << FontDataGenerator::generateTextPatches(wordRegions, imgCv, lm, patchSize);	//used for word regions from catalogue images
+		textPatches << FontDataGenerator::generateTextPatches(wordRegions, imgCv, lm, patchHeight, textureSize);	//used for word regions from catalogue images
 
 		return textPatches;
 	}
 
-	QVector<QSharedPointer<TextPatch>> FontDataGenerator::generateTextPatches(QStringList textSamples, LabelManager labelManager) {
-
-		//TODO test parameters for size of text, size of text patches, size of text patch line height, etc.
+	QVector<QSharedPointer<TextPatch>> FontDataGenerator::generateTextPatches(QStringList textSamples, LabelManager labelManager, int patchHeight, int textureSize) {
 
 		if (textSamples.isEmpty()) {
 			qCritical() << "Found no text samples, could not compute text patches.";
@@ -608,8 +560,7 @@ namespace rdf {
 		for (auto l : fontStyleLabels) {
 
 			for (auto s : textSamples) {
-				QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(s, l);
-				//QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(s, l, 38);
+				QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(s, l, patchHeight, textureSize);
 
 				if (!tp->isEmpty()) {
 					textPatches << tp;
@@ -623,7 +574,7 @@ namespace rdf {
 	}
 
 	QVector<QSharedPointer<TextPatch>> FontDataGenerator::generateTextPatches(QVector<QSharedPointer<TextLine>> wordRegions, cv::Mat img,
-		QSharedPointer<LabelManager> lm, int patchHeight) {
+		QSharedPointer<LabelManager> lm, int patchHeight, int textureSize) {
 
 		QVector<QSharedPointer<TextPatch>> textPatches = QVector<QSharedPointer<TextPatch>>();
 
@@ -662,7 +613,6 @@ namespace rdf {
 			LabelInfo trLabel = lm->find(trLabelName);
 
 			if (trLabel.isNull()) {
-				//TODO id -> lm->size() = correct?
 				trLabel = LabelInfo(lm->size(), trLabelName);
 				lm->add(trLabel);
 			}
@@ -670,7 +620,7 @@ namespace rdf {
 			Rect tpRect = Rect::fromPoints(wr->polygon().toPoints());
 
 			//generate text patch
-			QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(img, tpRect, patchHeight);
+			QSharedPointer<TextPatch> tp = QSharedPointer<TextPatch>::create(img, tpRect, patchHeight, textureSize);
 			if (tp->isEmpty()) {
 				qWarning() << "Failed to create valid text patch! Skipping region.";
 				continue;
@@ -680,8 +630,6 @@ namespace rdf {
 			tp->setPolygon(wr->polygon());
 			textPatches << tp;
 		}
-
-		//qDebug() << lm.toString();
 
 		return textPatches;
 	}
@@ -704,9 +652,8 @@ namespace rdf {
 	}
 
 	bool FontDataGenerator::generateDataSet(QStringList samples, QVector<QFont> fonts, GaborFilterBank gfb, 
-		QString outputFilePath, bool addLabels) {
+		QString outputFilePath, int patchHeight, int textureSize, bool addLabels) {
 
-		//TODO pass gfb as input in/to this function
 		//TODO write gfb parameters to output file
 
 		Timer dt;
@@ -723,7 +670,7 @@ namespace rdf {
 			return false;
 		}
 
-		QVector<QSharedPointer<TextPatch>> textPatches = FontDataGenerator::generateTextPatches(samples, labelManager);
+		QVector<QSharedPointer<TextPatch>> textPatches = FontDataGenerator::generateTextPatches(samples, labelManager, patchHeight, textureSize);
 		FeatureCollectionManager fcm = FontDataGenerator::computePatchFeatures(textPatches, gfb, addLabels);
 
 		//write data set to file
@@ -740,12 +687,16 @@ namespace rdf {
 	}
 
 	//generates data set from image/xml files in specified folder
-	bool FontDataGenerator::generateDataSet(QString dataSetPath, GaborFilterBank gfb, int patchSize, QString outputFilePath, bool addLabels) {
+	bool FontDataGenerator::generateDataSet(QString dataSetPath, GaborFilterBank gfb, int patchHeight, int textureSize, QString outputFilePath, bool addLabels) {
 
 		Timer dt;
 
 		//generate train data set from image files
-		QVector<QSharedPointer<TextPatch>> textPatches = FontDataGenerator::generateDirTextPatches(dataSetPath, patchSize);
+		QVector<QSharedPointer<TextPatch>> textPatches = FontDataGenerator::generateDirTextPatches(dataSetPath, patchHeight, textureSize);
+
+		//debug images
+		//cv::Mat debugPatches = FontDataGenerator::drawTextPatches(textPatches);
+		//cv::Mat debugPatchTextures = FontDataGenerator::drawTextPatches(textPatches, true);
 
 		if (textPatches.isEmpty()) {
 			qCritical() << "Failed to load text patches from directory: " << dataSetPath;
@@ -758,7 +709,7 @@ namespace rdf {
 		if (outputFilePath.isEmpty())
 			outputFilePath = QFileInfo(dataSetPath, "FontStyleDataSet.txt").absoluteFilePath();
 
-		FontStyleDataSet fsd = FontStyleDataSet(fcm, patchSize, gfb);
+		FontStyleDataSet fsd = FontStyleDataSet(fcm, patchHeight, gfb);
 		
 		if(!fsd.write(outputFilePath)){
 			qCritical() << "Failed to write data set to path: " << outputFilePath;
@@ -872,7 +823,7 @@ namespace rdf {
 	FontStyleDataSet::FontStyleDataSet(FeatureCollectionManager fcm, int patchHeight, GaborFilterBank gfb) {
 		setGFB(gfb);
 		setFCM(fcm);
-
+		setPatchHeight(patchHeight);
 	}
 
 	bool FontStyleDataSet::isEmpty() const {
@@ -998,7 +949,6 @@ namespace rdf {
 	QVector<LabelInfo> FontStyleClassifier::classify(cv::Mat testFeat) {
 
 		//TODO compute output probability results for each class
-		//TODO test influence of normalization (test + training data)
 		//TODO consider using additional weights
 
 		if (!checkInput())
@@ -1036,8 +986,11 @@ namespace rdf {
 
 					//compute weighted euclidean distance by normalizing features by their standard deviation
 					cv::divide(cr, featStdDev, cr);
-
 					rawLabel = kNearest()->predict(cr);
+
+					//TODO compute and save detailed responses
+					//cv::Mat results, responses, dists;
+					//rawLabel = kNearest()->findNearest(cr, kNearest()->getDefaultK(), results, responses, dists);
 				}
 				else {
 					qCritical() << "Unable to perform font style classification. Classifier mode is unknown.";
@@ -1299,8 +1252,8 @@ namespace rdf {
 			cv::Mat img = mImg.clone();
 
 			//debug
-			QImage patchResults = Image::mat2QImage(img, true);
-			QPainter painter(&patchResults);
+			//QImage patchResults = Image::mat2QImage(img, true);
+			//QPainter painter(&patchResults);
 
 			//rotate text lines according to baseline orientation and crop its image
 			for (auto tl : mTextLines) {
@@ -1374,8 +1327,8 @@ namespace rdf {
 		//						little difference between gap clusters
 		//						very large gaps that need to be removed
 		//						difference in line height (ascenders, descender, font size change)
-		//use connected component information to improve gap detection
-		//	strengthen regions representing one connected component
+		// use connected component information to improve gap detection
+		// strengthen regions representing one connected component
 
 		//convert input image to gray scale
 		cv::Mat lineImg_ = IP::grayscale(lineImg);
@@ -1435,7 +1388,7 @@ namespace rdf {
 		std::vector<cv::Point2f> centers, data;
 
 		for (auto ws : whiteSpaces)
-			data.push_back(cv::Point2f(ws.size(), 0));
+			data.push_back(cv::Point2f((float)ws.size(), 0.0f));
 
 		cv::kmeans(data, 2, labels, cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 10, 1.0), 3, cv::KMEANS_RANDOM_CENTERS, centers);
 
@@ -1630,7 +1583,6 @@ namespace rdf {
 		else
 			labelName += "!i;";
 
-		//labelName += "s" + QString::number(font.pixelSize());
 		labelName += "s" + QString::number(font.pixelSize());
 
 		labelName += "]";
@@ -1672,7 +1624,7 @@ namespace rdf {
 			font.setItalic(false);
 
 		bool ok=false;
-		int fSize;
+		int fSize = 30;
 
 		if (lp[3].at(0)=="s") {
 			QString fontSizeStr = lp[3].mid(1, -1);
@@ -1780,7 +1732,7 @@ namespace rdf {
 			if (poly.isEmpty())
 				continue;
 			
-			cv::Mat polyImg(bbox.height(), bbox.width(), CV_8UC1, cv::Scalar(0));
+			cv::Mat polyImg((int) bbox.height(), (int) bbox.width(), CV_8UC1, cv::Scalar(0));
 			cv::fillConvexPoly(polyImg, poly.toCvPoints(), cv::Scalar(tp->label()->predicted().id()), cv::LINE_8, 0);
 			cv::Mat mask = polyImg != 0;
 			polyImg.copyTo(predlabelMap, mask);
@@ -1870,8 +1822,14 @@ namespace rdf {
 
 				painter.setBrush(trueLabelColor);
 				painter.setPen(trueLabelColor);
-
 				painter.drawPolygon(patches[i]->polygon().polygon());
+				
+				//trueLabelColor.setAlpha(255);
+				//QPen pen = QPen(trueLabelColor);
+				//pen.setWidth(5);
+				//painter.setPen(pen);
+				//Rect r = Rect::fromPoints(patches[i]->polygon().toPoints());
+				//painter.drawRect(r.toQRect());
 			}
 
 			cv::Mat outputImgCV = Image::qImage2Mat(outputImg);

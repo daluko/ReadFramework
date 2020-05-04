@@ -57,14 +57,11 @@ class DllCoreExport GaborFilterBank {
 
 public:
 	GaborFilterBank();
-	GaborFilterBank(QVector<double> lambda, QVector<double> theta, int kernelSize);
-
-	void setLambda(QVector<double> lambda);
-	void setTheta(QVector<double> theta);
-	void setKernels(QVector<cv::Mat> kernels);
+	GaborFilterBank(QVector<double> lambda, QVector<double> theta, int kernelSize, double sigmaMultiplier = -1);
 
 	QVector<double> lambda() const;
 	QVector<double> theta() const;
+	double sigmaMultiplier() const;
 	QVector<cv::Mat> kernels() const;
 	int kernelSize() const;
 
@@ -81,7 +78,15 @@ private:
 	QVector<cv::Mat> mKernels;
 	QVector<double> mLambda;
 	QVector<double> mTheta;
+
 	int mKernelSize = 128;
+	double mSigmaMultiplier = -1;
+
+	void setLambda(QVector<double> lambda);
+	void setTheta(QVector<double> theta);
+	void setSigmaMultiplier(double sigma);
+	void setKernelSize(int kernelSize);
+	void setKernels(QVector<cv::Mat> kernels);
 };
 
 /// <summary>

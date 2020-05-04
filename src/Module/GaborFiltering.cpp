@@ -1,4 +1,5 @@
 #include "GaborFiltering.h"
+#include "GaborFiltering.h"
 /*******************************************************************************************************
  ReadFramework is the basis for modules developed at CVL/TU Wien for the EU project READ.
 
@@ -64,8 +65,8 @@ cv::Mat GaborFiltering::createGaborKernel(int kSize, double lambda, double theta
 			double he = val1 * Ve;
 			double ho = val1 * Vo;
 
-			int y_ = (int) y + kh;
-			int x_ = (int) x + kh;
+			int y_ = (int) y + (int) kh;
+			int x_ = (int) x + (int) kh;
 
 			hek.at<float>(y_, x_) = (float)he;
 			hok.at<float>(y_, x_) = (float)ho;
@@ -78,20 +79,21 @@ cv::Mat GaborFiltering::createGaborKernel(int kSize, double lambda, double theta
 }
 
 QVector<cv::Mat> GaborFiltering::createGaborKernels(QVector<double> lambda, QVector<double> theta,
-	int kSize, double sigma, double psi, double gamma, bool openCV) {
+	int kSize, double sigmaMultiplier, double psi, double gamma, bool openCV) {
 
-	QVector<cv::Mat> kernels;
+	QVector<cv::Mat> kernels = QVector<cv::Mat>();
 
 	for (int l = 0; l < lambda.length(); ++l) {
 		for (int t = 0; t < theta.length(); ++t) {
 			
 			cv::Mat kernel;
-
-			double sigma_;
-			if (sigma == -1)
-				sigma_ = lambda[l]; //sigma_ = 1.1*lambda[l];
+			
+			double sigma_; //note that by default sigma is chosen as the inverse of the frequency (=wavelength(lambda))
+			if (sigmaMultiplier == -1) {
+				sigma_ = lambda[l];
+			}
 			else
-				sigma_ = sigma;
+				sigma_ = lambda[l]/ sigmaMultiplier; //sigma_ = 1/f*sigmaMultiplier
 
 			//qDebug() << "lambda = " << lambda[l] << ", theta = " << theta[t] << ", sigma = " << sigma_;
 
@@ -112,12 +114,11 @@ QVector<cv::Mat> GaborFiltering::createGaborKernels(QVector<double> lambda, QVec
 		}
 	}
 
+
 	return kernels;	
 }
 
 cv::Mat GaborFiltering::extractGaborFeatures(cv::Mat img_in, GaborFilterBank filterBank) {
-
-	//TODO check if normalization is needed
 	
 	//convert input matrix for processing
 	cv::Mat img;
@@ -165,28 +166,21 @@ cv::Mat GaborFiltering::extractGaborFeatures(cv::Mat img_in, GaborFilterBank fil
 
 GaborFilterBank::GaborFilterBank(){
 	
-	mLambda = { 2, 4, 8, 16, 32 };
-
-	for (int i = 0; i < mLambda.size(); i++)
-		mLambda[i] *= sqrt(2);
-		
-	mTheta = { 0, 45, 90, 135 };
-
-	for (int i = 0; i < mTheta.size(); i++)
-		mTheta[i] *= DK_DEG2RAD;
-
+	mLambda = QVector<double>();
+	mTheta = QVector<double>();
 	mKernels = GaborFiltering::createGaborKernels(mLambda, mTheta, mKernelSize);
 }
 
-GaborFilterBank::GaborFilterBank(QVector<double> lambda, QVector<double> theta, int kernelSize){
-	mLambda = lambda;
-	mKernelSize = kernelSize;
-	mTheta = theta;
+GaborFilterBank::GaborFilterBank(QVector<double> lambda, QVector<double> theta, int kernelSize, double sigmaMultiplier){
+	setLambda(lambda);
+	setKernelSize(kernelSize);
+	setTheta(theta);
+	setSigmaMultiplier(sigmaMultiplier);
 
 	for (int i = 0; i < mTheta.size(); i++)
 		mTheta[i] *= DK_DEG2RAD;
 
-	mKernels = GaborFiltering::createGaborKernels(mLambda, mTheta, mKernelSize);
+	mKernels = GaborFiltering::createGaborKernels(mLambda, mTheta, mKernelSize, sigmaMultiplier);
 }
 
 void GaborFilterBank::setLambda(QVector<double> lambda){
@@ -195,6 +189,14 @@ void GaborFilterBank::setLambda(QVector<double> lambda){
 
 void GaborFilterBank::setTheta(QVector<double> theta){
 	mTheta = theta;
+}
+
+void GaborFilterBank::setSigmaMultiplier(double sigmaMultiplier){
+	mSigmaMultiplier = sigmaMultiplier;
+}
+
+void GaborFilterBank::setKernelSize(int kernelSize){
+	mKernelSize = kernelSize;
 }
 
 void GaborFilterBank::setKernels(QVector<cv::Mat> kernels) {
@@ -207,6 +209,10 @@ QVector<double> GaborFilterBank::lambda() const{
 
 QVector<double> GaborFilterBank::theta() const{
 	return mTheta;
+}
+
+double GaborFilterBank::sigmaMultiplier() const{
+	return mSigmaMultiplier;
 }
 
 QVector<cv::Mat> GaborFilterBank::kernels() const {
@@ -242,14 +248,12 @@ QVector<cv::Mat> GaborFilterBank::draw(){
 			cv::Mat kernel_planes[2];
 			cv::split(kernel, kernel_planes);
 			kernel = kernel_planes[0];		//visualize real part of kernel only
-			//kernel = kernel_planes[1];	//real part!?
 
 			// visualize kernels in spatial domain
 			cv::Mat kernel_norm = kernel.clone();
 			normalize(kernel_norm, kernel_norm, 0, 1, CV_MINMAX);
 
 			if (kernelRow.empty()) {
-				//cv::Mat img = cv::Mat::ones(kernel_norm.size().height, 100, CV_32F);
 				QImage qImg = QImage(200, kernel_norm.size().height, QImage::Format_Grayscale8);
 				qImg.fill(QColor(255,255,255));
 				QPainter painter(&qImg);
@@ -261,7 +265,6 @@ QVector<cv::Mat> GaborFilterBank::draw(){
 				
 				//insert kernel image
 				cv::hconcat(kernelRow, kernel_norm, kernelRow);
-				//kernelRow = kernel_norm;
 			}
 			else {
 				cv::hconcat(kernelRow, cv::Mat::ones(kernelRow.size().height, 5, CV_32F), kernelRow);
@@ -281,10 +284,14 @@ QVector<cv::Mat> GaborFilterBank::draw(){
 			WSAHelper::fftShift(kernelDFT);						// shift 0 frequency to center of image
 			normalize(kernelDFT, kernelDFT, 0, 1, CV_MINMAX);
 
-			if (filterBankFR.empty())
+			if (filterBankFR.empty()) {
 				filterBankFR = kernelDFT.clone();
-			else
-				filterBankFR += kernelDFT;
+			}
+			else {
+				cv::Mat mask = kernelDFT > filterBankFR;
+				kernelDFT.copyTo(filterBankFR, mask);
+			}
+				
 
 			if (kernelDFTRow.empty()) {
 				kernelDFTRow = kernelDFT;
@@ -353,12 +360,13 @@ QString GaborFilterBank::toString(){
 	gfb_params += "} \n theta = { ";
 
 	for (auto t : mTheta)
-		gfb_params += QString::number(t) + "; ";
+		gfb_params += QString::number(t/DK_DEG2RAD) + "; ";
 
 	gfb_params.chop(2);
 	gfb_params += "}";
 
 	gfb_params += " \n kernelSize = " + QString::number(mKernelSize) + "; ";
+	gfb_params += " \n sigmaMultiplier = " + QString::number(mSigmaMultiplier) + "; ";
 
 	return gfb_params;
 }
@@ -366,7 +374,9 @@ QString GaborFilterBank::toString(){
 void GaborFilterBank::toJson(QJsonObject & jo) const{
 
 	QJsonObject joc;
-	joc.insert("textureSize", QJsonValue(mKernelSize));
+	
+	joc.insert("kernelSize", QJsonValue(mKernelSize));
+	joc.insert("sigmaMultiplier", QJsonValue(mSigmaMultiplier));
 
 	QJsonArray ja;
 	for (double t : mTheta)
@@ -384,6 +394,7 @@ void GaborFilterBank::toJson(QJsonObject & jo) const{
 
 GaborFilterBank GaborFilterBank::fromJson(QJsonObject & jo){
 	int kernelSize = jo.value("textureSize").toInt(128);
+	double sigmaMultiplier = jo.value("sigmaMultiplier").toDouble(-1);
 
 	QVector<double> theta;
 	for (const QJsonValue& jv : jo.value("theta").toArray()) {
@@ -399,7 +410,7 @@ GaborFilterBank GaborFilterBank::fromJson(QJsonObject & jo){
 			lambda << l;
 	}
 
-	GaborFilterBank gfb = GaborFilterBank(lambda, theta, kernelSize);
+	GaborFilterBank gfb = GaborFilterBank(lambda, theta, kernelSize, sigmaMultiplier);
 
 	return gfb;
 }

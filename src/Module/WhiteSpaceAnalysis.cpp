@@ -893,7 +893,7 @@ cv::Mat WhiteSpaceAnalysis::drawWhiteSpaces(const cv::Mat & img) {
 cv::Mat WhiteSpaceAnalysis::drawFilteredPixels(const cv::Mat & img, QColor fpCol, QColor bpCol, QColor opCol){
 	
 	//QImage qImg(img.size().width, img.size().height, QImage::Format_ARGB32);	//blank image
-	QImage qImg = Image::mat2QImage(mImg, true);
+	QImage qImg = Image::mat2QImage(img, true);
 	QPainter painter(&qImg);
 
 	//draw pixels deleted due to size contstraints

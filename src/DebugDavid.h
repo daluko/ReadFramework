@@ -75,11 +75,17 @@ public:
 
 	void run();
 	void processDirectory(const QString dirPath);
-	void testSyntheticDataSet(QString filePath, int maxSampleCount = -1);
+	void testSyntheticDataSet(QString filePath, GaborFilterBank gfb = GaborFilterBank(), QVector<QFont> fonts = QVector<QFont>(), 
+		QString runIdentifier = QString(), int maxSampleCount = -1, FontStyleClassifier::ClassifierMode cm = FontStyleClassifier::classify_bayes, int k = 5);
 	void testSyntheticPage(QString filePath, QString trainDataPath);
-	void testCatalogueRegions(QString dirPath);
+	void testCatalogueRegions(QString dirPath, GaborFilterBank gfb = GaborFilterBank(), QString runIdentifier = QString(), 
+		FontStyleClassifier::ClassifierMode cm = FontStyleClassifier::classify_bayes, int k = 5);
 	bool patchesToXML(QVector<QSharedPointer<TextPatch>> textPatches, QString imagePath);
 
+	static QVector<QVector<QFont>> generateTestFontStyleSets();
+	static QVector<GaborFilterBank> generateTestGaborFilterBanks();
+	void runTestSuite(QString synthDataSetPath, QString catalogueDataSetPath);
+	void drawDebugImages(); //thesis images
 protected:
 
 	QStringList loadTextSamples(QString filePath);
@@ -87,7 +93,7 @@ protected:
 	
 	QVector<QSharedPointer<TextPatch>> regionsToTextPatches(QVector<QSharedPointer<TextRegion>> wordRegions, LabelManager lm,  cv::Mat img);
 
-	QStringList loadWordSamples(QString filePath, int minWordLength = 4, bool removeDuplicates = true);
+	QStringList loadWordSamples(QString filePath, int minWordLength = 0, bool removeDuplicates = true);
 	QString readTextFromFile(QString filePath);
 	QVector<QStringList> splitSampleSet(QStringList samplesSet, double ratio = 0.8);
 	void reduceSampleCount(FeatureCollectionManager & fcm, int sampleCount) const;
@@ -96,13 +102,15 @@ protected:
 	bool generateSnytheticTestPage(QString filePath, QString outputFilePath, QVector<QFont> synthPageFonts);
 	bool generateGroundTruthData(QTextDocument& doc, QString filePath);
 
-	QSharedPointer<FontStyleClassifier> trainFontStyleClassifier(QString trainDir, GaborFilterBank gfb, int patchSize, QString classifierFilePath = QString(), bool saveToFile = true);
+	QSharedPointer<FontStyleClassifier> trainFontStyleClassifier(QString trainDir, GaborFilterBank gfb, int patchSize, int textureSize,
+		FontStyleClassifier::ClassifierMode cm = FontStyleClassifier::classify_bayes, int k = 5, QString outputDir = QString(), bool saveToFile = true);
 
-	void evalSyntheticDataResults(const QVector<QSharedPointer<TextPatch>>& textPatches, 
-		const LabelManager labelManager, QString outputDir = QString()) const;
+	double evalTextPatchResults(const QVector<QSharedPointer<TextPatch>>& textPatches, 
+		const LabelManager labelManager, QString outputDir = QString(), QString identifier = QString()) const;
 
 	double computePrecision(const QVector<QSharedPointer<TextPatch>>& textPatches) const;
-	void writeEvalResults(QString evalSummary, QString outputDir) const;
+	void writeEvalResults(QString evalSummary, QString outputDir, QString identifier = QString()) const;
+	void appendOverallPerformance(double performance, QString outputFilePath, QString runIdentifier = QString(), QString additionalInfo = QString()) const;
 
 	DebugConfig mConfig;
 };

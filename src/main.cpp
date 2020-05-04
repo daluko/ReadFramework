@@ -250,10 +250,6 @@ int main(int argc, char** argv) {
 			qDebug() << "loading david's debug code";
 
 			QString dirPath;
-			//dirPath = "F:/dev/da/data/HBR2013/test/tr";
-			//dirPath = "E:/data/test/HBR13_test";
-			//dirPath = "F:/dev/da/data/HBR2013/eval/train";
-			dirPath = "F:/dev/da/data/HBR2013/eval/test";
 
 			bool testTHE = false;
 			bool testWSA = false;
@@ -278,8 +274,11 @@ int main(int argc, char** argv) {
 			}
 
 			if (testWSA) {	
-				//dirPath = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA/LA Results";
-				dirPath = "F:/dev/da/data/catalogue/fsc_selection/1905_Venice_EI/LA Results";
+				//dirPath = "F:/dev/da/data/HBR2013/eval/train";
+				//dirPath = "F:/dev/da/data/HBR2013/eval/test";
+
+				dirPath = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA/LA Results";
+				//dirPath = "F:/dev/da/data/catalogue/fsc_selection/1905_Venice_EI/LA Results";
 				//dirPath = "F:/dev/da/data/catalogue/fsc_selection/1907_Paris_SdA/LA Results";
 
 				if (!dirPath.isEmpty())
@@ -302,47 +301,90 @@ int main(int argc, char** argv) {
 			}
 
 			if (testFSC) {
-				rdf::FontStyleClassificationTest fct(dc);
-
-				//if (!dirPath.isEmpty())
-				//	fct.processDirectory(dirPath);
-				//else
-				//	fct.run();
 
 				if (!dc.fontDataPath().isEmpty()) {
 
-					//test text patch processing			
-					//QString testPath = dc.fontDataPath() + "/gabor param test/";
-					//qDebug() << testPath;
-					////fct.testSyntheticDataSet(testPath, 500);
-					//fct.testSyntheticDataSet(testPath);
+					bool testSyntheticPatches = false;
+					bool testSyntheticPages = false;
+					bool testCataloguePatches = false;
+					bool testCataloguePages = false;
+					bool runtestSuite = true;
 
-					//test limited sample count on text synthetic patches
-					//TODO write results of multiple runs in a single file for easier evaluation
-					//int maxSampleCount = 25;
-					//while(maxSampleCount <= 3600) {
-					//	fct.testSyntheticDataSet(testPath, maxSampleCount);
-					//	maxSampleCount = maxSampleCount + 25;
-					//}
+					//run test suite with different data sets, fonts and params
+					rdf::FontStyleClassificationTest fsct(dc);
 
-					//test synthetic page processing
-					//QString pageDataPath = dc.fontDataPath() + "syntheticPage/pageData.txt";
-					//QString trainDataPath = dc.fontDataPath() + "syntheticPage/FontTrainData.txt";
-					//
-					//qDebug() << "synthPage input path 1: " << pageDataPath;
-					//qDebug() << "synthPage input path 2: " << trainDataPath;
+					if (runtestSuite) {
 
-					//fct.testSyntheticPage(pageDataPath, trainDataPath);
+						//fsct.drawDebugImages();
 
-					//test word regions of catalogue data 
-					QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA";
-					//QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Paris_SdA";
-					//QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1905_Venice_EI";
-					fct.testCatalogueRegions(dataDir);
+						QString syntheticDataSetPath = dc.fontDataPath() + "/gabor param test/";
+						QString catalogueDataSetPath = "";
+
+						fsct.runTestSuite(syntheticDataSetPath, catalogueDataSetPath);
+					}
+
+					//test synthetic text patch processing			
+					if (testSyntheticPatches) {				
+						QString testPath = dc.fontDataPath() + "/gabor param test/";
+						qDebug() << testPath;
+
+						bool testLimitedSampleCount = false;
+
+						if (!testLimitedSampleCount) {
+							fsct.testSyntheticDataSet(testPath, rdf::GaborFilterBank());
+						}
+						else{
+							//test limited sample count on text synthetic patches
+							int maxSampleCount = 2500;
+							int sampleCount = 1100;
+							int stepSize = 100;
+
+							//initialization run (used for generating full data set in adavance)
+							//fsct.testSyntheticDataSet(testPath, rdf::GaborFilterBank(), QVector<QFont>(), "test_sample_count_" + QString::number(maxSampleCount), maxSampleCount);										
+							//TODO copy data set from previous folder to all following or look in previous folder for data sets when testing other params
+
+							//QVector<QVector<QFont>> fontSets = fsct.generateTestFontStyleSets();
+							QVector<QVector<QFont>> fontSets;
+							fontSets << QVector<QFont>();
+
+							while (sampleCount <= maxSampleCount) {
+								for (int i = 0; i < fontSets.size(); ++i) {
+									//fsct.testSyntheticDataSet(testPath, rdf::GaborFilterBank(), fontSets[i], "fontSet_" + QString::number(i) + "_test_sample_count_" + QString::number(sampleCount), sampleCount);
+									fsct.testSyntheticDataSet(testPath, rdf::GaborFilterBank(), fontSets[i],"test_sample_count_" + QString::number(sampleCount), sampleCount);
+								}
+								sampleCount = sampleCount + stepSize;
+							}
+						}
+					}
+
+					if (testSyntheticPages) {
+						//test synthetic page processing
+						QString pageDataPath = dc.fontDataPath() + "syntheticPage/pageData.txt";
+						QString trainDataPath = dc.fontDataPath() + "syntheticPage/FontTrainData.txt";
+
+						fsct.testSyntheticPage(pageDataPath, trainDataPath);
+					}
+
+					if (testCataloguePatches) {
+						//test word regions of catalogue data 
+						QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Brussels_EGBA";
+						//QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1907_Paris_SdA";
+						//QString dataDir = "F:/dev/da/data/catalogue/fsc_selection/1905_Venice_EI";
+
+						fsct.testCatalogueRegions(dataDir);
+					}
+
+					if (testCataloguePages) {
+						//TODO solve line segmentation for catalogue images
+						if (!dirPath.isEmpty())
+							fsct.processDirectory(dirPath);
+						else
+							fsct.run();
+					}
 				}
 				else {
-					qWarning() << "Can't test font style classification with synthetic data.";
-					qInfo() << "Use -w option to specify path to .txt file containing text samples (words).";
+					qWarning() << "Can't test font style classification without font style data.";
+					qInfo() << "Use -w option to specify directory containing training/test data (text for synthetic, images+xml for scanned input data).";
 				}
 			}
 		}

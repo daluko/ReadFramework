@@ -188,12 +188,11 @@ QSharedPointer<FontStyleTrainerConfig> FontStyleTrainer::config() const {
 
 cv::Mat FontStyleTrainer::draw(const cv::Mat & img) const {
 
-	// draw mser blobs
 	Timer dtf;
 	QImage qImg = Image::mat2QImage(img, true);
 
 	QPainter p(&qImg);
-	// TODO: draw something
+	// TODO: draw something useful
 
 	return Image::qImage2Mat(qImg);
 }
@@ -205,7 +204,7 @@ QString FontStyleTrainer::toString() const {
 bool FontStyleTrainer::write(const QString & filePath) const {
 
 	if (mModel && !mModel->isTrained())
-		qWarning() << "writing classifier that is NOT trained!";
+		qWarning() << "Writing classifier that is NOT trained to file!";
 
 	return classifier()->write(filePath);
 }
